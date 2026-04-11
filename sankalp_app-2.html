@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Nunito',system-ui,sans-serif}
+body{background:#d4d4d4;display:flex;justify-content:center;padding:20px;min-height:100vh}
+.app{background:#f5f5f5;width:390px;border-radius:24px;overflow:hidden;border:1px solid #ddd;min-height:780px;display:flex;flex-direction:column;position:relative;box-shadow:0 8px 32px rgba(0,0,0,0.18)}
+.statusbar{background:#FC8019;padding:8px 18px 6px;display:flex;justify-content:space-between}
+.statusbar span{color:#fff;font-size:11px;font-weight:600}
+.screen{display:none;flex-direction:column;flex:1;overflow:hidden}
+.screen.active{display:flex}
+
+/* HOME */
+.home-header{background:#FC8019;padding:14px 18px 20px}
+.shop-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.shop-name{color:#fff;font-size:22px;font-weight:800}
+.shop-sub{color:rgba(255,255,255,0.8);font-size:11px;margin-top:2px}
+.notif-btn{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;border:none}
+.collection-card{background:#fff;border-radius:18px;padding:16px 18px}
+.coll-label{font-size:12px;color:#999;margin-bottom:2px;font-weight:600}
+.coll-value{font-size:42px;font-weight:800;color:#222;letter-spacing:-2px;line-height:1}
+.coll-sub{font-size:12px;color:#FC8019;margin-top:6px;font-weight:700}
+.home-body{padding:14px;flex:1;overflow-y:auto}
+.pay-btn-big{width:100%;padding:18px;background:#FC8019;color:#fff;border:none;border-radius:16px;font-size:16px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:14px;box-shadow:0 4px 12px rgba(252,128,25,0.35)}
+.today-list-title{font-size:13px;font-weight:700;color:#222;margin-bottom:10px}
+.sale-pill{background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;border:0.5px solid #eee;cursor:pointer}
+.sale-pill .sname{font-size:13px;color:#333;font-weight:700}
+.sale-pill .scust{font-size:11px;color:#FC8019;font-weight:600;margin-top:1px}
+.sale-pill .stime{font-size:11px;color:#aaa;margin-top:1px}
+.sale-pill .samt{font-size:15px;font-weight:800;color:#27500A}
+
+/* NAV */
+.bnav{background:#fff;display:flex;border-top:0.5px solid #eee;padding-bottom:4px;flex-shrink:0}
+.bni{flex:1;padding:10px 4px 6px;text-align:center;cursor:pointer;border:none;background:transparent}
+.bni .bicon{font-size:20px;display:block}
+.bni .blabel{font-size:10px;color:#aaa;margin-top:2px;font-weight:600}
+.bni.active .blabel{color:#FC8019}
+
+/* BILL */
+.bill-header{background:#FC8019;padding:12px 14px 14px;flex-shrink:0}
+.bill-header-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.back-btn{background:rgba(255,255,255,0.2);border:none;width:32px;height:32px;border-radius:50%;color:#fff;font-size:18px;cursor:pointer;flex-shrink:0}
+.htitle{color:#fff;font-size:16px;font-weight:800}
+.hsub{color:rgba(255,255,255,0.8);font-size:11px;margin-top:1px}
+.customer-name-row{display:flex;align-items:center;gap:8px}
+.cust-input{flex:1;padding:8px 12px;border-radius:10px;border:none;background:rgba(255,255,255,0.25);color:#fff;font-size:13px;font-weight:600;outline:none}
+.cust-input::placeholder{color:rgba(255,255,255,0.65)}
+.pause-btn{background:rgba(255,255,255,0.2);border:none;padding:8px 12px;border-radius:10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+.hold-tabs{display:flex;gap:6px;padding:8px 14px;background:#fff3e8;overflow-x:auto;flex-shrink:0}
+.hold-tab{padding:5px 12px;border-radius:20px;border:1.5px solid #FC8019;background:#fff;color:#FC8019;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.hold-tab.active-tab{background:#FC8019;color:#fff}
+.hold-tab-add{padding:5px 12px;border-radius:20px;border:1.5px dashed #FC8019;background:transparent;color:#FC8019;font-size:16px;cursor:pointer;flex-shrink:0}
+.bill-total-bar{background:#fff;padding:10px 18px;border-bottom:0.5px solid #eee;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.btl{font-size:12px;color:#999;font-weight:600}
+.btv{font-size:28px;font-weight:800;color:#FC8019;letter-spacing:-0.5px}
+.bill-items-area{flex:1;overflow-y:auto;padding:10px 14px;background:#f5f5f5}
+.bill-item-row{background:#fff;border-radius:10px;padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;border:0.5px solid #eee}
+.bi-name{font-size:13px;color:#222;font-weight:600}
+.bi-price{font-size:13px;color:#FC8019;font-weight:700}
+.bi-remove{background:none;border:none;color:#ccc;font-size:20px;cursor:pointer;padding:0 4px}
+.empty-bill{text-align:center;padding:40px 20px;color:#bbb;font-size:13px}
+.numpad-panel{background:#fff;border-top:0.5px solid #eee;padding:10px 14px 12px;flex-shrink:0}
+.np-input-row{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+.np-input-row input{flex:1;padding:9px 12px;border-radius:10px;border:1px solid #eee;background:#fafafa;color:#222;font-size:13px;outline:none;font-weight:600}
+.np-input-row input:focus{border-color:#FC8019}
+.np-display{padding:9px 14px;background:#fafafa;border:1px solid #eee;border-radius:10px;font-size:18px;font-weight:800;color:#222;min-width:80px;text-align:center}
+.np-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
+.np-key{padding:12px;background:#f5f5f5;border:none;border-radius:10px;font-size:18px;font-weight:700;color:#222;cursor:pointer;transition:background 0.1s}
+.np-key:active{background:#ffe0c8}
+.np-key.orange{background:#FC8019;color:#fff}
+.np-key.gray{background:#eee;color:#555}
+.btn-row{display:flex;gap:8px;margin-bottom:8px}
+.btn-outline{flex:1;padding:10px 8px;background:#fff;color:#FC8019;border:1.5px solid #FC8019;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer}
+.btn-fill{flex:1;padding:10px 8px;background:#FC8019;color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer}
+.collect-btn{width:100%;padding:13px;background:#FC8019;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(252,128,25,0.3)}
+.collect-btn:disabled{background:#ccc;cursor:not-allowed;box-shadow:none}
+
+/* PICKER */
+.cat-picker{display:none;position:absolute;bottom:0;left:0;right:0;background:#fff;border-radius:16px 16px 0 0;padding:16px 14px 20px;border-top:0.5px solid #eee;z-index:100;max-height:65%;overflow-y:auto}
+
+/* CATALOGUE */
+.cat-header{background:#FC8019;padding:14px 18px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.cat-body{flex:1;overflow-y:auto;padding:14px;background:#f5f5f5}
+.prod-card{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;border:0.5px solid #eee}
+.pname{font-size:14px;font-weight:700;color:#222}
+.pprice{font-size:13px;color:#FC8019;margin-top:2px;font-weight:600}
+.psales{font-size:11px;color:#aaa;margin-top:2px}
+.use-btn{padding:7px 14px;background:#FC8019;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px}
+.del-btn{padding:7px 10px;background:#FCEBEB;color:#A32D2D;border:none;border-radius:8px;font-size:12px;cursor:pointer;font-weight:600}
+.add-prod-card{background:#fff;border-radius:12px;padding:14px;border:0.5px solid #eee;margin-top:4px}
+.add-prod-title{font-size:13px;font-weight:700;color:#222;margin-bottom:10px}
+.ap-input{width:100%;padding:9px 12px;border-radius:8px;border:1px solid #eee;background:#fafafa;color:#222;font-size:13px;outline:none;margin-bottom:8px;font-weight:600}
+.ap-input:focus{border-color:#FC8019}
+.save-btn{width:100%;padding:11px;background:#FC8019;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer}
+.success-pill{font-size:12px;color:#27500A;background:#EAF3DE;padding:6px 12px;border-radius:8px;text-align:center;display:none;margin-top:8px;font-weight:600}
+
+/* ANALYTICS */
+.analytics-header{background:#FC8019;padding:14px 18px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.analytics-body{flex:1;overflow-y:auto;padding:14px;background:#f5f5f5}
+.analytics-card{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;border:0.5px solid #eee}
+.analytics-card-title{font-size:13px;font-weight:700;color:#333;margin-bottom:12px}
+.bar-item{margin-bottom:10px}
+.bar-label{display:flex;justify-content:space-between;margin-bottom:4px}
+.bar-label span{font-size:12px;color:#555;font-weight:600}
+.bar-label .bamt{font-size:12px;color:#FC8019;font-weight:700}
+.bar-track{height:8px;background:#f0f0f0;border-radius:10px;overflow:hidden}
+.bar-fill{height:100%;border-radius:10px;background:linear-gradient(90deg,#FC8019,#ff9a45);transition:width 0.5s ease}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.stat-cell{background:#fff;border-radius:12px;padding:12px;border:0.5px solid #eee;text-align:center}
+.stat-cell .sl{font-size:11px;color:#999;font-weight:600;margin-bottom:4px}
+.stat-cell .sv{font-size:20px;font-weight:800;color:#222}
+.stat-cell .sv.orange{color:#FC8019}
+.stat-cell .sv.green{color:#27500A}
+.day-bar-wrap{display:flex;align-items:flex-end;gap:6px;height:80px;margin-top:8px}
+.day-bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.day-bar{width:100%;background:linear-gradient(180deg,#FC8019,#ff9a45);border-radius:4px 4px 0 0;min-height:4px;transition:height 0.4s ease}
+.day-bar-label{font-size:9px;color:#aaa;font-weight:600}
+.trend-badge{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.trend-up{background:#EAF3DE;color:#27500A}
+.trend-dn{background:#FCEBEB;color:#A32D2D}
+
+/* SUPPLIERS */
+.sup-header{background:#FC8019;padding:14px 18px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.sup-body{flex:1;overflow-y:auto;padding:14px;background:#f5f5f5}
+.sup-box{background:#fff;border-radius:14px;padding:14px;border:0.5px solid #eee;margin-bottom:12px}
+.sup-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px}
+.sup-name{font-size:15px;font-weight:800;color:#222}
+.sup-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px}
+.sup-badge.pending{background:#FFF3E8;color:#FC8019}
+.sup-badge.paid{background:#EAF3DE;color:#27500A}
+.sup-cat{font-size:12px;color:#999;margin-bottom:12px;font-weight:600}
+.sup-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.sup-cell{background:#f9f9f9;border-radius:8px;padding:10px;text-align:center}
+.sup-cell .sl{font-size:10px;color:#999;font-weight:600}
+.sup-cell .sv{font-size:14px;font-weight:800;color:#222}
+.prog-wrap{height:5px;background:#f0f0f0;border-radius:10px;margin-bottom:10px;overflow:hidden}
+.prog-fill{height:100%;border-radius:10px;background:#FC8019}
+.pay-outline{width:100%;padding:10px;background:transparent;border:1.5px solid #FC8019;color:#FC8019;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer}
+.add-sup-card{background:#fff;border-radius:12px;padding:14px;border:0.5px solid #eee;margin-top:4px}
+.add-sup-title{font-size:13px;font-weight:700;color:#222;margin-bottom:10px}
+
+/* TOAST */
+.toast{position:absolute;top:16px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;opacity:0;transition:opacity 0.2s;pointer-events:none;white-space:nowrap;z-index:999;font-weight:600}
+.toast.show{opacity:1}
+
+/* MODAL OVERLAY */
+.modal-overlay{display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:200;align-items:flex-end}
+.modal-overlay.show{display:flex}
+.modal-box{background:#fff;border-radius:20px 20px 0 0;padding:20px 18px 28px;width:100%}
+.modal-title{font-size:16px;font-weight:800;color:#222;margin-bottom:16px}
+.modal-input{width:100%;padding:12px 14px;border-radius:10px;border:1.5px solid #eee;background:#fafafa;font-size:15px;font-weight:600;outline:none;margin-bottom:12px}
+.modal-input:focus{border-color:#FC8019}
+.modal-btn{width:100%;padding:14px;background:#FC8019;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer}
+.modal-cancel{width:100%;padding:10px;background:transparent;color:#999;border:none;font-size:13px;font-weight:600;cursor:pointer;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="toast" id="toast"></div>
+
+<!-- NEW CUSTOMER MODAL -->
+<div class="modal-overlay" id="new-cust-modal">
+  <div class="modal-box">
+    <div class="modal-title">New Customer · కొత్త కస్టమర్</div>
+    <input class="modal-input" id="modal-cust-name" placeholder="Customer name (optional)" autocomplete="off" />
+    <button class="modal-btn" onclick="startNewSession()">Start Bill →</button>
+    <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- ===== HOME ===== -->
+<div class="screen active" id="s-home">
+  <div class="statusbar"><span id="st-time-home">11:38</span><span>Sankalp</span><span>5G 72%</span></div>
+  <div class="home-header">
+    <div class="shop-row">
+      <div><div class="shop-name">Sankalp 🏪</div><div class="shop-sub">వ్యాపారం · Your business, your way</div></div>
+      <button class="notif-btn">🔔</button>
+    </div>
+    <div class="collection-card">
+      <div class="coll-label">Today's collection · నేటి వసూలు</div>
+      <div class="coll-value" id="home-total">₹0</div>
+      <div class="coll-sub" id="home-sub">No sales yet today</div>
+    </div>
+  </div>
+  <div class="home-body">
+    <button class="pay-btn-big" onclick="openNewBillModal()"><span style="font-size:22px">⚡</span> New Bill · కొత్త బిల్లు</button>
+    <div class="today-list-title">Today's bills · నేటి బిల్లులు</div>
+    <div id="home-sale-list"><div style="text-align:center;padding:30px 20px;color:#bbb;font-size:13px">No sales yet · ఇంకా అమ్మకాలు లేవు</div></div>
+  </div>
+  <div class="bnav">
+    <button class="bni active" id="nav-home" onclick="navTo('home')"><span class="bicon">🏠</span><div class="blabel" style="color:#FC8019">Home</div></button>
+    <button class="bni" id="nav-bill" onclick="navTo('bill')"><span class="bicon">⚡</span><div class="blabel">Bill</div></button>
+    <button class="bni" id="nav-catalogue" onclick="navTo('catalogue')"><span class="bicon">🏷️</span><div class="blabel">Products</div></button>
+    <button class="bni" id="nav-analytics" onclick="navTo('analytics')"><span class="bicon">📊</span><div class="blabel">Analytics</div></button>
+    <button class="bni" id="nav-suppliers" onclick="navTo('suppliers')"><span class="bicon">🤝</span><div class="blabel">Suppliers</div></button>
+  </div>
+</div>
+
+<!-- ===== BILL ===== -->
+<div class="screen" id="s-bill">
+  <div class="statusbar"><span>11:38</span><span>Sankalp</span><span>5G 72%</span></div>
+  <div class="bill-header">
+    <div class="bill-header-top">
+      <button class="back-btn" onclick="navTo('home')">←</button>
+      <div style="flex:1"><div class="htitle">Live Bill · లైవ్ బిల్లు</div><div class="hsub">Add items · collect when done</div></div>
+      <button class="pause-btn" onclick="openNewBillModal()">+ New</button>
+    </div>
+    <div class="customer-name-row">
+      <span style="font-size:18px">👤</span>
+      <div id="active-cust-name" style="color:#fff;font-size:14px;font-weight:700;flex:1">Customer</div>
+    </div>
+  </div>
+  <!-- Hold Tabs -->
+  <div class="hold-tabs" id="hold-tabs"></div>
+  <div class="bill-total-bar">
+    <div class="btl">Running total · మొత్తం</div>
+    <div class="btv" id="bill-total">₹0</div>
+  </div>
+  <div class="bill-items-area" id="bill-items">
+    <div class="empty-bill">No items yet<br><span style="font-size:11px">Use numpad or pick from catalogue</span></div>
+  </div>
+  <div class="numpad-panel">
+    <div class="np-input-row">
+      <input id="np-item-name" placeholder="Item name (optional)" autocomplete="off" />
+      <div class="np-display" id="np-display">0</div>
+    </div>
+    <div class="np-grid">
+      <button class="np-key" onclick="npKey('1')">1</button><button class="np-key" onclick="npKey('2')">2</button><button class="np-key" onclick="npKey('3')">3</button>
+      <button class="np-key" onclick="npKey('4')">4</button><button class="np-key" onclick="npKey('5')">5</button><button class="np-key" onclick="npKey('6')">6</button>
+      <button class="np-key" onclick="npKey('7')">7</button><button class="np-key" onclick="npKey('8')">8</button><button class="np-key" onclick="npKey('9')">9</button>
+      <button class="np-key gray" onclick="npKey('.')">.</button><button class="np-key" onclick="npKey('0')">0</button><button class="np-key gray" onclick="npKey('del')">⌫</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn-outline" onclick="openPicker()">📋 From catalogue</button>
+      <button class="btn-fill" onclick="npAdd()">+ Add item</button>
+    </div>
+    <button class="collect-btn" id="collect-btn" onclick="collectBill()" disabled>Collect · వసూలు చేయి</button>
+  </div>
+  <!-- Bill screen nav -->
+  <div class="bnav">
+    <button class="bni" id="bnav-home" onclick="navTo('home')"><span class="bicon">🏠</span><div class="blabel">Home</div></button>
+    <button class="bni active" id="bnav-bill" onclick="navTo('bill')"><span class="bicon">⚡</span><div class="blabel" style="color:#FC8019">Bill</div></button>
+    <button class="bni" id="bnav-catalogue" onclick="navTo('catalogue')"><span class="bicon">🏷️</span><div class="blabel">Products</div></button>
+    <button class="bni" id="bnav-analytics" onclick="navTo('analytics')"><span class="bicon">📊</span><div class="blabel">Analytics</div></button>
+    <button class="bni" id="bnav-suppliers" onclick="navTo('suppliers')"><span class="bicon">🤝</span><div class="blabel">Suppliers</div></button>
+  </div>
+</div>
+
+<!-- CATALOGUE PICKER OVERLAY -->
+<div class="cat-picker" id="cat-picker">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <span style="font-size:15px;font-weight:800;color:#222">Pick product · ఉత్పత్తి ఎంచుకో</span>
+    <button onclick="closePicker()" style="background:none;border:none;font-size:24px;color:#aaa;cursor:pointer">×</button>
+  </div>
+  <div id="picker-list"></div>
+</div>
+
+<!-- ===== CATALOGUE ===== -->
+<div class="screen" id="s-catalogue">
+  <div class="statusbar"><span>11:38</span><span>Sankalp</span><span>5G 72%</span></div>
+  <div class="cat-header">
+    <button class="back-btn" onclick="navTo('home')">←</button>
+    <div><div class="htitle">Product Catalogue · కాటలాగ్</div><div class="hsub">Add & manage your items</div></div>
+  </div>
+  <div class="cat-body">
+    <div id="prod-list"></div>
+    <div class="add-prod-card">
+      <div class="add-prod-title">➕ Add new product · కొత్త ఉత్పత్తి</div>
+      <input class="ap-input" id="new-pname" placeholder="Product name · పేరు" autocomplete="off"/>
+      <input class="ap-input" id="new-pprice" type="number" placeholder="Price ₹" />
+      <button class="save-btn" onclick="addProduct()">Save · సేవ్ చేయి</button>
+      <div class="success-pill" id="prod-success">Saved! · సేవ్ అయింది ✓</div>
+    </div>
+  </div>
+  <div class="bnav">
+    <button class="bni" onclick="navTo('home')"><span class="bicon">🏠</span><div class="blabel">Home</div></button>
+    <button class="bni" onclick="navTo('bill')"><span class="bicon">⚡</span><div class="blabel">Bill</div></button>
+    <button class="bni active" onclick="navTo('catalogue')"><span class="bicon">🏷️</span><div class="blabel" style="color:#FC8019">Products</div></button>
+    <button class="bni" onclick="navTo('analytics')"><span class="bicon">📊</span><div class="blabel">Analytics</div></button>
+    <button class="bni" onclick="navTo('suppliers')"><span class="bicon">🤝</span><div class="blabel">Suppliers</div></button>
+  </div>
+</div>
+
+<!-- ===== ANALYTICS ===== -->
+<div class="screen" id="s-analytics">
+  <div class="statusbar"><span>11:38</span><span>Sankalp</span><span>5G 72%</span></div>
+  <div class="analytics-header">
+    <button class="back-btn" onclick="navTo('home')">←</button>
+    <div><div class="htitle">Analytics · విశ్లేషణలు</div><div class="hsub">Product sales & revenue insights</div></div>
+  </div>
+  <div class="analytics-body" id="analytics-body">
+    <!-- rendered by JS -->
+  </div>
+  <div class="bnav">
+    <button class="bni" onclick="navTo('home')"><span class="bicon">🏠</span><div class="blabel">Home</div></button>
+    <button class="bni" onclick="navTo('bill')"><span class="bicon">⚡</span><div class="blabel">Bill</div></button>
+    <button class="bni" onclick="navTo('catalogue')"><span class="bicon">🏷️</span><div class="blabel">Products</div></button>
+    <button class="bni active" onclick="navTo('analytics')"><span class="bicon">📊</span><div class="blabel" style="color:#FC8019">Analytics</div></button>
+    <button class="bni" onclick="navTo('suppliers')"><span class="bicon">🤝</span><div class="blabel">Suppliers</div></button>
+  </div>
+</div>
+
+<!-- ===== SUPPLIERS ===== -->
+<div class="screen" id="s-suppliers">
+  <div class="statusbar"><span>11:38</span><span>Sankalp</span><span>5G 72%</span></div>
+  <div class="sup-header">
+    <button class="back-btn" onclick="navTo('home')">←</button>
+    <div><div class="htitle">Suppliers · సప్లయర్లు</div><div class="hsub">Manage your vendors</div></div>
+  </div>
+  <div class="sup-body" id="sup-body">
+    <!-- rendered by JS -->
+  </div>
+  <div class="bnav">
+    <button class="bni" onclick="navTo('home')"><span class="bicon">🏠</span><div class="blabel">Home</div></button>
+    <button class="bni" onclick="navTo('bill')"><span class="bicon">⚡</span><div class="blabel">Bill</div></button>
+    <button class="bni" onclick="navTo('catalogue')"><span class="bicon">🏷️</span><div class="blabel">Products</div></button>
+    <button class="bni" onclick="navTo('analytics')"><span class="bicon">📊</span><div class="blabel">Analytics</div></button>
+    <button class="bni active" onclick="navTo('suppliers')"><span class="bicon">🤝</span><div class="blabel" style="color:#FC8019">Suppliers</div></button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// DATA
+// ============================================================
+let products = [
+  {id:1,name:"Puri plate",price:20,sales:0},
+  {id:2,name:"Masala puri",price:25,sales:0},
+  {id:3,name:"Tamarind water",price:10,sales:0},
+  {id:4,name:"Special plate",price:40,sales:0}
+];
+
+let suppliers = [
+  {id:1,name:"Raju Wholesale",category:"Puri & dry goods",total:8500,paid:6000},
+  {id:2,name:"Venkat Fresh Mart",category:"Vegetables & onions",total:3200,paid:3200},
+  {id:3,name:"Sri Lakshmi Traders",category:"Masala & spices",total:4500,paid:2000},
+  {id:4,name:"Hari Oil Suppliers",category:"Cooking oil & ghee",total:6000,paid:6000}
+];
+
+let salesLog = [];
+let todayTotal = 0;
+
+// ============================================================
+// MULTI-SESSION (pause/hold) BILL SYSTEM
+// ============================================================
+// Each session: {id, customerName, items, npVal}
+let sessions = [];
+let activeSessionId = null;
+let sessionCounter = 0;
+let npVal = "0";
+
+function createSession(name) {
+  const id = ++sessionCounter;
+  sessions.push({id, customerName: name || 'Customer', items: [], npVal: "0"});
+  return id;
+}
+
+function switchSession(id) {
+  // Save current state to active session before switching
+  if (activeSessionId !== null) {
+    const cur = sessions.find(s => s.id === activeSessionId);
+    if (cur) cur.npVal = npVal;
+  }
+  activeSessionId = id;
+  const s = sessions.find(s => s.id === id);
+  npVal = s ? s.npVal : "0";
+  renderHoldTabs();
+  renderBill();
+  document.getElementById('np-display').textContent = npVal;
+  document.getElementById('active-cust-name').textContent = s ? s.customerName : 'Customer';
+}
+
+function getActiveSession() {
+  return sessions.find(s => s.id === activeSessionId) || null;
+}
+
+function getBillItems() {
+  const s = getActiveSession();
+  return s ? s.items : [];
+}
+
+function openNewBillModal() {
+  document.getElementById('modal-cust-name').value = '';
+  document.getElementById('new-cust-modal').classList.add('show');
+  setTimeout(() => document.getElementById('modal-cust-name').focus(), 150);
+}
+function closeModal() {
+  document.getElementById('new-cust-modal').classList.remove('show');
+}
+function startNewSession() {
+  const name = document.getElementById('modal-cust-name').value.trim() || 'Customer';
+  closeModal();
+  // Save current npVal
+  if (activeSessionId !== null) {
+    const cur = getActiveSession();
+    if (cur) cur.npVal = npVal;
+  }
+  const id = createSession(name);
+  switchSession(id);
+  navTo('bill');
+}
+
+function renderHoldTabs() {
+  const el = document.getElementById('hold-tabs');
+  if (!sessions.length) { el.innerHTML = ''; return; }
+  el.innerHTML = sessions.map(s => {
+    const total = s.items.reduce((a,x) => a + x.price, 0);
+    const isActive = s.id === activeSessionId;
+    return `<button class="hold-tab ${isActive ? 'active-tab' : ''}" onclick="switchSession(${s.id})">
+      ${s.customerName}${total > 0 ? ' ₹'+total : ''}
+    </button>`;
+  }).join('') + `<button class="hold-tab-add" onclick="openNewBillModal()">＋</button>`;
+}
+
+// ============================================================
+// NUMPAD
+// ============================================================
+function npKey(k) {
+  if (k === 'del') { npVal = npVal.length > 1 ? npVal.slice(0,-1) : "0"; }
+  else if (k === '.') { if (!npVal.includes('.')) npVal += '.'; }
+  else { npVal = npVal === "0" ? k : npVal + k; }
+  document.getElementById('np-display').textContent = npVal;
+}
+function npAdd() {
+  const s = getActiveSession();
+  if (!s) { showToast('Start a bill first'); return; }
+  const amt = parseFloat(npVal);
+  if (!amt || amt <= 0) { showToast('Enter amount first'); return; }
+  const name = document.getElementById('np-item-name').value.trim() || "Item";
+  s.items.push({name, price: amt, productId: null});
+  document.getElementById('np-item-name').value = '';
+  npVal = "0"; document.getElementById('np-display').textContent = '0';
+  renderBill();
+}
+
+// ============================================================
+// BILL RENDERING
+// ============================================================
+function renderBill() {
+  const s = getActiveSession();
+  const items = s ? s.items : [];
+  const total = items.reduce((a,x) => a + x.price, 0);
+  document.getElementById('bill-total').textContent = '₹' + total.toLocaleString('en-IN');
+  document.getElementById('active-cust-name').textContent = s ? s.customerName : '—';
+  const area = document.getElementById('bill-items');
+  if (!items.length) {
+    area.innerHTML = '<div class="empty-bill">No items yet<br><span style="font-size:11px">Use numpad or pick from catalogue</span></div>';
+    document.getElementById('collect-btn').disabled = true;
+    return;
+  }
+  area.innerHTML = items.map((x,i) =>
+    `<div class="bill-item-row">
+      <div class="bi-name">${x.name}</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="bi-price">₹${x.price.toLocaleString('en-IN')}</span>
+        <button class="bi-remove" onclick="removeBillItem(${i})">×</button>
+      </div>
+    </div>`
+  ).join('');
+  document.getElementById('collect-btn').disabled = false;
+}
+
+function removeBillItem(i) {
+  const s = getActiveSession();
+  if (!s) return;
+  s.items.splice(i, 1);
+  renderBill();
+}
+
+// ============================================================
+// COLLECT
+// ============================================================
+function collectBill() {
+  const s = getActiveSession();
+  if (!s) return;
+  const items = s.items;
+  const total = items.reduce((a,x) => a + x.price, 0);
+  if (!total) return;
+  todayTotal += total;
+  const now = new Date();
+  const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+
+  // Track product sales
+  items.forEach(item => {
+    if (item.productId) {
+      const p = products.find(x => x.id === item.productId);
+      if (p) p.sales = (p.sales || 0) + 1;
+    }
+  });
+
+  salesLog.unshift({
+    total, time: timeStr,
+    items: items.length,
+    customerName: s.customerName,
+    billNum: salesLog.length + 1
+  });
+
+  // Remove session
+  sessions = sessions.filter(x => x.id !== s.id);
+  document.getElementById('home-total').textContent = '₹' + todayTotal.toLocaleString('en-IN');
+  document.getElementById('home-sub').textContent = salesLog.length + ' bill' + (salesLog.length !== 1 ? 's' : '') + ' today';
+  showToast('₹' + total.toLocaleString('en-IN') + ' collected! ✓');
+
+  // Switch to another session or clear
+  if (sessions.length) {
+    switchSession(sessions[0].id);
+  } else {
+    activeSessionId = null;
+    npVal = "0";
+    document.getElementById('np-display').textContent = '0';
+    renderHoldTabs();
+    renderBill();
+  }
+  setTimeout(() => navTo('home'), 1200);
+}
+
+// ============================================================
+// CATALOGUE PICKER
+// ============================================================
+function openPicker() {
+  const list = document.getElementById('picker-list');
+  if (!products.length) {
+    list.innerHTML = '<div style="text-align:center;color:#bbb;padding:20px;font-size:13px">No products yet.</div>';
+  } else {
+    list.innerHTML = products.map(p =>
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#fafafa;border-radius:10px;margin-bottom:8px;border:0.5px solid #eee">
+        <div><div style="font-size:14px;font-weight:700;color:#222">${p.name}</div><div style="font-size:12px;color:#FC8019;margin-top:2px;font-weight:600">₹${p.price}</div></div>
+        <button onclick="addFromCat(${p.id})" style="padding:8px 16px;background:#FC8019;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">+ Add</button>
+      </div>`
+    ).join('');
+  }
+  document.getElementById('cat-picker').style.display = 'block';
+}
+function closePicker() { document.getElementById('cat-picker').style.display = 'none'; }
+function addFromCat(id) {
+  const s = getActiveSession();
+  if (!s) { showToast('Start a bill first'); closePicker(); return; }
+  const p = products.find(x => x.id === id);
+  if (!p) return;
+  s.items.push({name: p.name, price: p.price, productId: p.id});
+  renderBill();
+  showToast(p.name + ' added!');
+}
+
+// ============================================================
+// CATALOGUE SCREEN
+// ============================================================
+function renderProducts() {
+  const el = document.getElementById('prod-list');
+  if (!products.length) { el.innerHTML = '<div style="text-align:center;padding:20px;color:#bbb;font-size:13px">No products yet</div>'; return; }
+  el.innerHTML = products.map(p =>
+    `<div class="prod-card">
+      <div>
+        <div class="pname">${p.name}</div>
+        <div class="pprice">₹${p.price}</div>
+        <div class="psales">Sold ${p.sales || 0} times today</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="del-btn" onclick="delProduct(${p.id})">Del</button>
+        <button class="use-btn" onclick="quickAddToBill(${p.id})">+ Bill</button>
+      </div>
+    </div>`
+  ).join('');
+}
+function quickAddToBill(id) {
+  const p = products.find(x => x.id === id);
+  if (!p) return;
+  // Create session if none
+  if (!getActiveSession()) {
+    const sid = createSession('Customer');
+    switchSession(sid);
+  }
+  const s = getActiveSession();
+  s.items.push({name: p.name, price: p.price, productId: p.id});
+  renderBill();
+  showToast(p.name + ' added to bill!');
+  navTo('bill');
+}
+function delProduct(id) { products = products.filter(x => x.id !== id); renderProducts(); showToast('Product removed'); }
+function addProduct() {
+  const name = document.getElementById('new-pname').value.trim();
+  const price = parseFloat(document.getElementById('new-pprice').value);
+  if (!name || !price || price <= 0) { showToast('Enter name and price'); return; }
+  products.push({id: Date.now(), name, price, sales: 0});
+  document.getElementById('new-pname').value = '';
+  document.getElementById('new-pprice').value = '';
+  renderProducts();
+  const s = document.getElementById('prod-success');
+  s.style.display = 'block';
+  setTimeout(() => s.style.display = 'none', 2000);
+}
+
+// ============================================================
+// ANALYTICS
+// ============================================================
+function renderAnalytics() {
+  const body = document.getElementById('analytics-body');
+  const totalBills = salesLog.length;
+  const avgBill = totalBills ? Math.round(todayTotal / totalBills) : 0;
+
+  // Product stats
+  const prodStats = products.map(p => ({name: p.name, sales: p.sales || 0, revenue: (p.sales || 0) * p.price}));
+  prodStats.sort((a,b) => b.revenue - a.revenue);
+  const maxRev = prodStats.length ? Math.max(...prodStats.map(x => x.revenue), 1) : 1;
+  const maxSales = prodStats.length ? Math.max(...prodStats.map(x => x.sales), 1) : 1;
+
+  // Fake weekly data for demo
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const weekVals = [320,450,280,510,390,620,todayTotal||180];
+  const maxW = Math.max(...weekVals);
+
+  body.innerHTML = `
+    <!-- Summary Cards -->
+    <div class="stat-grid">
+      <div class="stat-cell"><div class="sl">Today's Revenue</div><div class="sv orange">₹${todayTotal.toLocaleString('en-IN')}</div></div>
+      <div class="stat-cell"><div class="sl">Bills Today</div><div class="sv">${totalBills}</div></div>
+      <div class="stat-cell"><div class="sl">Avg Bill</div><div class="sv orange">₹${avgBill.toLocaleString('en-IN')}</div></div>
+      <div class="stat-cell"><div class="sl">Products</div><div class="sv green">${products.length}</div></div>
+    </div>
+
+    <!-- Weekly trend -->
+    <div class="analytics-card">
+      <div class="analytics-card-title">📅 Weekly Sales Trend</div>
+      <div class="day-bar-wrap">
+        ${days.map((d,i) => {
+          const h = Math.round((weekVals[i]/maxW)*70);
+          const isToday = i === 6;
+          return `<div class="day-bar-col">
+            <div class="day-bar" style="height:${h}px;${isToday ? 'background:linear-gradient(180deg,#27500A,#5a9e1a);' : ''}"></div>
+            <div class="day-bar-label" style="${isToday ? 'color:#FC8019;font-weight:800;' : ''}">${d}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:#aaa;text-align:right">₹ sales per day</div>
+    </div>
+
+    <!-- Product Revenue -->
+    <div class="analytics-card">
+      <div class="analytics-card-title">💰 Product Revenue · ఉత్పత్తి ఆదాయం</div>
+      ${prodStats.length ? prodStats.map(p => `
+        <div class="bar-item">
+          <div class="bar-label"><span>${p.name}</span><span class="bamt">₹${p.revenue.toLocaleString('en-IN')}</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:${Math.round((p.revenue/maxRev)*100)}%"></div></div>
+        </div>
+      `).join('') : '<div style="color:#bbb;font-size:13px;text-align:center;padding:10px">Sell items to see data</div>'}
+    </div>
+
+    <!-- Product Sales Count -->
+    <div class="analytics-card">
+      <div class="analytics-card-title">🔢 Units Sold · అమ్మిన మొత్తం</div>
+      ${prodStats.length ? prodStats.map(p => `
+        <div class="bar-item">
+          <div class="bar-label"><span>${p.name}</span><span class="bamt">${p.sales} sold</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:${Math.round((p.sales/maxSales)*100)}%;background:linear-gradient(90deg,#27500A,#5a9e1a)"></div></div>
+        </div>
+      `).join('') : '<div style="color:#bbb;font-size:13px;text-align:center;padding:10px">Sell items to see data</div>'}
+    </div>
+
+    <!-- Top product badge -->
+    ${prodStats.length && prodStats[0].sales > 0 ? `
+    <div class="analytics-card" style="background:linear-gradient(135deg,#FFF3E8,#fff);border-color:#FC8019">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:32px">🏆</span>
+        <div>
+          <div style="font-size:12px;color:#FC8019;font-weight:700">Best Seller Today</div>
+          <div style="font-size:16px;font-weight:800;color:#222">${prodStats[0].name}</div>
+          <div style="font-size:12px;color:#aaa;margin-top:2px">${prodStats[0].sales} sold · ₹${prodStats[0].revenue} revenue</div>
+        </div>
+      </div>
+    </div>` : ''}
+  `;
+}
+
+// ============================================================
+// SUPPLIERS
+// ============================================================
+function renderSuppliers() {
+  const body = document.getElementById('sup-body');
+  body.innerHTML = suppliers.map(sup => {
+    const pending = sup.total - sup.paid;
+    const pct = Math.round((sup.paid / sup.total) * 100);
+    const isPaid = pending === 0;
+    return `
+      <div class="sup-box" style="${isPaid ? 'border-color:#c0dd97' : ''}">
+        <div class="sup-top">
+          <div class="sup-name">${sup.name}</div>
+          <span class="sup-badge ${isPaid ? 'paid' : 'pending'}">${isPaid ? 'Paid ✓' : 'Pending'}</span>
+        </div>
+        <div class="sup-cat">${sup.category}</div>
+        <div class="sup-grid">
+          <div class="sup-cell"><div class="sl">Total</div><div class="sv">₹${sup.total.toLocaleString('en-IN')}</div></div>
+          <div class="sup-cell"><div class="sl">Paid</div><div class="sv" style="color:#27500A">₹${sup.paid.toLocaleString('en-IN')}</div></div>
+          <div class="sup-cell"><div class="sl">Pending</div><div class="sv" style="color:${isPaid ? '#27500A' : '#C0392B'}">₹${pending.toLocaleString('en-IN')}</div></div>
+        </div>
+        <div class="prog-wrap"><div class="prog-fill" style="width:${pct}%;${isPaid ? 'background:#3B6D11' : ''}"></div></div>
+        ${isPaid
+          ? `<div style="font-size:12px;color:#27500A;font-weight:700">Fully paid · పూర్తిగా చెల్లించారు ✓</div>`
+          : `<button class="pay-outline" onclick="paySupplier(${sup.id})">Pay ₹${pending.toLocaleString('en-IN')} · చెల్లించు</button>`
+        }
+      </div>`;
+  }).join('') +
+  `<div class="add-sup-card">
+    <div class="add-sup-title">➕ Add Supplier · సప్లయర్ జోడించు</div>
+    <input class="ap-input" id="new-sname" placeholder="Supplier name" autocomplete="off"/>
+    <input class="ap-input" id="new-scat" placeholder="Category (e.g. Vegetables)" autocomplete="off"/>
+    <input class="ap-input" id="new-stotal" type="number" placeholder="Total amount ₹"/>
+    <button class="save-btn" onclick="addSupplier()">Add Supplier</button>
+  </div>`;
+}
+function paySupplier(id) {
+  const s = suppliers.find(x => x.id === id);
+  if (!s) return;
+  s.paid = s.total;
+  renderSuppliers();
+  showToast('Payment marked complete ✓');
+}
+function addSupplier() {
+  const name = document.getElementById('new-sname').value.trim();
+  const cat = document.getElementById('new-scat').value.trim();
+  const total = parseFloat(document.getElementById('new-stotal').value);
+  if (!name || !cat || !total || total <= 0) { showToast('Fill all fields'); return; }
+  suppliers.push({id: Date.now(), name, category: cat, total, paid: 0});
+  document.getElementById('new-sname').value = '';
+  document.getElementById('new-scat').value = '';
+  document.getElementById('new-stotal').value = '';
+  renderSuppliers();
+  showToast('Supplier added! ✓');
+}
+
+// ============================================================
+// HOME LIST
+// ============================================================
+function renderHomeList() {
+  const el = document.getElementById('home-sale-list');
+  if (!salesLog.length) {
+    el.innerHTML = '<div style="text-align:center;padding:30px 20px;color:#bbb;font-size:13px">No sales yet · ఇంకా అమ్మకాలు లేవు</div>';
+    return;
+  }
+  el.innerHTML = salesLog.map((s,i) =>
+    `<div class="sale-pill">
+      <div>
+        <div class="sname">Bill #${salesLog.length - i}</div>
+        <div class="scust">👤 ${s.customerName}</div>
+        <div class="stime">${s.items} item${s.items !== 1 ? 's' : ''} · ${s.time}</div>
+      </div>
+      <div class="samt">+₹${s.total.toLocaleString('en-IN')}</div>
+    </div>`
+  ).join('');
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function navTo(n) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.bni').forEach(b => { b.classList.remove('active'); b.querySelector('.blabel').style.color = '#aaa'; });
+  document.getElementById('s-'+n).classList.add('active');
+  closePicker();
+  if (n === 'catalogue') renderProducts();
+  if (n === 'home') renderHomeList();
+  if (n === 'analytics') renderAnalytics();
+  if (n === 'suppliers') renderSuppliers();
+  if (n === 'bill') { renderHoldTabs(); renderBill(); }
+  // Highlight active nav in current screen
+  document.querySelectorAll('#s-'+n+' .bni').forEach(b => {
+    if (b.onclick && b.onclick.toString().includes("'"+n+"'")) {
+      b.classList.add('active');
+      b.querySelector('.blabel').style.color = '#FC8019';
+    }
+  });
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ============================================================
+// CLOCK
+// ============================================================
+function updateClock() {
+  const now = new Date();
+  const t = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+  document.querySelectorAll('.statusbar span:first-child').forEach(el => el.textContent = t);
+}
+updateClock();
+setInterval(updateClock, 30000);
+
+// ============================================================
+// INIT
+// ============================================================
+renderProducts();
+renderHomeList();
+renderSuppliers();
+</script>
+</body>
+</html>
