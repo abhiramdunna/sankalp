@@ -4,17 +4,16 @@ import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Easing,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Easing,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -29,12 +28,6 @@ export default function Login() {
   const [authMode, setAuthMode] = useState<'signup' | 'login' | null>(null);
   const [loadingTitle, setLoadingTitle] = useState('Signing in with Google...');
   const [loadingSub, setLoadingSub] = useState('Please wait a moment');
-  const [debugLogs, setDebugLogs] = useState<string[]>([]);
-
-  const log = (msg: string) => {
-    console.log('[LOGIN DEBUG]', msg);
-    setDebugLogs(prev => [...prev, `${new Date().toISOString().slice(11, 23)} ${msg}`]);
-  };
 
   const redirectUri = AuthSession.makeRedirectUri();
 
@@ -45,63 +38,38 @@ export default function Login() {
     redirectUri: Platform.OS === 'web' ? 'http://localhost:8081' : redirectUri,
   });
 
-  // Log every response change from useAuthRequest (for native only)
-  useEffect(() => {
-    if (response && Platform.OS !== 'web') {
-      log(`useAuthRequest response.type: ${response.type}`);
-      log(`response JSON: ${JSON.stringify(response)}`);
-    }
-  }, [response]);
 
-  useEffect(() => {
-    log(`Platform: ${Platform.OS}`);
-    log(`Redirect URI: ${redirectUri}`);
-    log(`ANDROID_CLIENT_ID: ${process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ? 'SET ✓' : '❌ MISSING'}`);
-    log(`IOS_CLIENT_ID: ${process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ? 'SET ✓' : '❌ MISSING'}`);
-    log(`WEB_CLIENT_ID: ${process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ? 'SET ✓' : '❌ MISSING'}`);
-    log(`SUPABASE_URL: ${process.env.EXPO_PUBLIC_SUPABASE_URL ? 'SET ✓' : '❌ MISSING'}`);
-    log(`SUPABASE_KEY: ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ? 'SET ✓' : '❌ MISSING'}`);
-  }, []);
 
   // Listen for Supabase session changes (for web OAuth redirect back)
   useEffect(() => {
     if (Platform.OS === 'web') {
-      log('WEB: Setting up session listener...');
       try {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-          log(`WEB: Auth event "${event}" - session: ${session ? 'EXISTS' : 'null'}`);
-          
           if (session) {
-            log('WEB: User session detected, checking onboarding status...');
-            
             try {
               // Wait for profile to be created
-              await new Promise(r => setTimeout(r, 800));
+              await new Promise(r => setTimeout(r, 200));
               
-              const { data: profile, error: profileError } = await supabase
+              const { data: profile } = await supabase
                 .from('profiles')
                 .select('business_name, city')
                 .eq('id', session.user.id)
                 .maybeSingle();
 
-              log(`WEB: Profile query - ${profile ? 'HAS DATA' : 'EMPTY'} | error: ${profileError?.message ?? 'none'}`);
-
               if (profile?.business_name && profile?.city) {
-                log('WEB: ✅ Redirecting to Dashboard');
-                router.replace('/(tabs)/dashboard');
+                router.replace('/(tabs)/home');
               } else {
-                log('WEB: ✅ Redirecting to Onboarding');
                 router.replace('/onboarding');
               }
             } catch (err) {
-              log(`WEB: Profile check error: ${err instanceof Error ? err.message : String(err)}`);
+              console.error('Profile check error:', err);
             }
           }
         });
 
         return () => subscription?.unsubscribe();
       } catch (err) {
-        log(`WEB: Session listener setup error: ${err instanceof Error ? err.message : String(err)}`);
+        console.error('Session listener setup error:', err);
       }
     }
   }, []);
@@ -113,7 +81,6 @@ export default function Login() {
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (session) {
-            log('Existing session detected, redirecting...');
             const { data: profile } = await supabase
               .from('profiles')
               .select('business_name, city')
@@ -121,13 +88,13 @@ export default function Login() {
               .maybeSingle();
 
             if (profile?.business_name && profile?.city) {
-              router.replace('/(tabs)/dashboard');
+              router.replace('/(tabs)/home');
             } else {
               router.replace('/onboarding');
             }
           }
         } catch (err) {
-          log(`Existing session check error: ${err instanceof Error ? err.message : String(err)}`);
+          console.error('Existing session check error:', err);
         }
       };
       
@@ -163,10 +130,6 @@ export default function Login() {
 
   const handleLogin = async (mode: AuthMode) => {
     if (isLoading) return;
-    setDebugLogs([]);
-    log(`--- handleLogin: ${mode} ---`);
-    log(`Platform: ${Platform.OS}`);
-    log(`request ready: ${!!request}`);
 
     setLoadingTitle(mode === 'signup' ? 'Creating your account...' : 'Signing in...');
     setLoadingSub('Please wait...');
@@ -176,7 +139,6 @@ export default function Login() {
     if (Platform.OS === 'web') {
       // For WEB: Use Supabase's OAuth flow (handles ID token properly)
       try {
-        log('WEB: Initiating OAuth with Supabase...');
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
@@ -189,23 +151,15 @@ export default function Login() {
         });
 
         if (error) {
-          log(`WEB: OAuth error object: ${JSON.stringify(error)}`);
           throw new Error(error.message || 'OAuth initialization failed');
         }
-
-        log(`WEB: OAuth response - URL exists: ${!!data?.url}, should redirect now`);
         
         // If we got a URL, redirect to it (Supabase sometimes doesn't auto-redirect on web)
         if (data?.url) {
-          log(`WEB: Redirecting to OAuth provider...`);
           window.location.href = data.url;
-        } else {
-          log(`WEB: No URL returned from OAuth`);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        log(`❌ WEB OAuth error: ${msg}`);
-        log(`Error type: ${typeof err}, full error: ${JSON.stringify(err)}`);
         setIsLoading(false);
         setAuthMode(null);
         Alert.alert('Sign-In Error', msg);
@@ -220,12 +174,9 @@ export default function Login() {
       }
 
       try {
-        log('NATIVE: Calling promptAsync...');
         const authResult = await promptAsync();
-        log(`NATIVE: promptAsync returned type: "${authResult.type}"`);
 
         if (authResult.type !== 'success') {
-          log(`NATIVE: Not success. type="${authResult.type}"`);
           setIsLoading(false);
           setAuthMode(null);
           return;
@@ -234,7 +185,6 @@ export default function Login() {
         await processAuthResponse(authResult, mode);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        log(`❌ NATIVE handleLogin error: ${msg}`);
         setIsLoading(false);
         setAuthMode(null);
         Alert.alert('Sign-In Error', msg);
@@ -244,76 +194,59 @@ export default function Login() {
 
   const processAuthResponse = async (authResult: any, mode: AuthMode) => {
     try {
-      log(`Step 1: Logging auth objects...`);
-      try {
-        log(`authentication obj: ${JSON.stringify(authResult.authentication)}`);
-      } catch (e) {
-        log(`authentication obj: [circular or unparseable]`);
-      }
-      log(`Step 2: Extracting idToken...`);
-      
       const idToken =
         authResult.authentication?.idToken ??
         (authResult as any).params?.id_token;
 
-      log(`Step 3: idToken value = ${idToken ? '✓ FOUND' : '❌ NOT FOUND'}`);
       if (!idToken) {
         throw new Error('No idToken found in authResult.authentication.idToken or authResult.params.id_token');
       }
 
-      log('Step 4: Calling Supabase signInWithIdToken...');
       const authData = await signInWithGoogleIdToken(idToken, mode);
-      log(`Step 5: Supabase auth: SUCCESS ✓ (session: ${authData?.session ? 'yes' : 'no'})`);
 
-      log('Step 6: Getting current user...');
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      log(`Step 7: user id: ${user?.id ?? 'NULL'} | error: ${userError?.message ?? 'none'}`);
 
       if (!user) throw new Error('No user returned from Supabase after auth.');
 
-      log('Step 8: Waiting 600ms for DB sync...');
-      await new Promise(r => setTimeout(r, 600));
+      // Wait for profile to be created in database
+      await new Promise(r => setTimeout(r, 200));
 
-      log('Step 9: Querying profiles table...');
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile } = await supabase
         .from('profiles')
         .select('business_name, city')
         .eq('id', user.id)
         .maybeSingle();
 
-      log(`Step 10: profile: ${profile ? JSON.stringify(profile) : 'null'} | error: ${profileError?.message ?? 'none'}`);
-
       if (profile?.business_name && profile?.city) {
-        log(`Step 11a: ✅ REDIRECT → Dashboard`);
         setIsLoading(false);
         setAuthMode(null);
-        router.replace('/(tabs)/dashboard');
+        router.replace('/(tabs)/home');
       } else {
-        log(`Step 11b: ✅ REDIRECT → Onboarding`);
         setIsLoading(false);
         setAuthMode(null);
         router.replace('/onboarding');
       }
     } catch (err) {
-      log(`❌ PROCESS AUTH ERROR: ${err instanceof Error ? err.message : String(err)}`);
-      log(`Error stack: ${err instanceof Error ? err.stack : 'N/A'}`);
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error('Auth error:', errorMsg);
       setIsLoading(false);
       setAuthMode(null);
-      Alert.alert('Sign-In Error', err instanceof Error ? err.message : 'Unknown error');
+      
+      // Handle user already exists error
+      if (errorMsg === 'USER_ALREADY_EXISTS') {
+        await supabase.auth.signOut();
+        Alert.alert(
+          'User Already Exists',
+          'This email is already registered. Please click "Login" to sign in to your existing account.',
+          [{ text: 'OK', onPress: () => {} }]
+        );
+      } else {
+        Alert.alert('Sign-In Error', errorMsg);
+      }
     }
   };
 
-  const DebugPanel = () =>
-    debugLogs.length > 0 ? (
-      <View style={styles.debugBox}>
-        <Text style={styles.debugTitle}>🔍 Debug Log (share this when asking for help)</Text>
-        <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled>
-          {debugLogs.map((l, i) => (
-            <Text key={i} style={styles.debugLine}>{l}</Text>
-          ))}
-        </ScrollView>
-      </View>
-    ) : null;
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -369,7 +302,6 @@ export default function Login() {
               </Pressable>
 
               <Text style={styles.terms}>By continuing, you agree to our Terms of Service and Privacy Policy</Text>
-              <DebugPanel />
             </Animated.View>
           </>
         ) : (
@@ -378,7 +310,6 @@ export default function Login() {
             <Text style={styles.loadingTitle}>{loadingTitle}</Text>
             <Text style={styles.loadingSub}>{loadingSub}</Text>
             <ActivityIndicator size="large" color="#f97316" style={styles.loadingIndicator} />
-            <DebugPanel />
           </View>
         )}
       </KeyboardAvoidingView>
@@ -413,7 +344,4 @@ const styles = StyleSheet.create({
   loadingTitle: { fontSize: 34, fontWeight: '900', color: '#111827', textAlign: 'center' },
   loadingSub: { fontSize: 20, color: '#adb2ba', fontWeight: '700', marginBottom: 12 },
   loadingIndicator: { marginTop: 8, transform: [{ scale: 1.2 }] },
-  debugBox: { marginTop: 14, backgroundColor: '#0f172a', borderRadius: 10, padding: 10 },
-  debugTitle: { color: '#facc15', fontWeight: '800', fontSize: 11, marginBottom: 6 },
-  debugLine: { color: '#86efac', fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', lineHeight: 15 },
 });

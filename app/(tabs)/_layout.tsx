@@ -1,50 +1,52 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-export default function TabsLayout() {
+export default function RootLayout() {
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: '#f97316',
-        tabBarInactiveTintColor: '#9ca3af',
-      }}
-    >
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          title: 'Dashboard',
-          tabBarIcon: ({ color, size }) => <Ionicons name="grid" size={size} color={color} />,
+    <SafeAreaProvider>
+      <StatusBar style="dark" />
+      <Stack
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: '#FC8019',
+          },
+          headerTintColor: '#fff',
+          headerTitleStyle: {
+            fontWeight: 'bold',
+          },
+          headerTitleAlign: 'center',
         }}
-      />
-      <Tabs.Screen
-        name="bill"
-        options={{
-          title: 'Bill',
-          tabBarIcon: ({ color, size }) => <Ionicons name="flash" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="products"
-        options={{
-          title: 'Products',
-          tabBarIcon: ({ color, size }) => <Ionicons name="pricetags" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="analytics"
-        options={{
-          title: 'Analytics',
-          tabBarIcon: ({ color, size }) => <Ionicons name="bar-chart" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="suppliers"
-        options={{
-          title: 'Suppliers',
-          tabBarIcon: ({ color, size }) => <Ionicons name="hand-left" size={size} color={color} />,
-        }}
-      />
-    </Tabs>
+      >
+        <Stack.Screen 
+          name="home" 
+          options={{ 
+            headerShown: false,
+            title: 'Home'
+          }} 
+        />
+        <Stack.Screen 
+          name="products" 
+          options={{ 
+            title: 'Products',
+            headerShown: true,
+          }} 
+        />
+        <Stack.Screen 
+          name="analytics" 
+          options={{ 
+            title: 'Analytics',
+            headerShown: true,
+          }} 
+        />
+        <Stack.Screen 
+          name="suppliers" 
+          options={{ 
+            title: 'Suppliers',
+            headerShown: true,
+          }} 
+        />
+      </Stack>
+    </SafeAreaProvider>
   );
 }
