@@ -394,9 +394,6 @@ export default function SuppliersScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
         <View>
           <Text style={styles.headerTitle}>Suppliers</Text>
           <Text style={styles.headerSub}>Manage vendor bills & payments</Text>

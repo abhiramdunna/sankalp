@@ -7,6 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "sankalpapp",
     "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },

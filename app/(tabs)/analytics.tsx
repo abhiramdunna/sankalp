@@ -1,8 +1,9 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
+    Animated,
     Dimensions,
     ScrollView,
     StyleSheet,
@@ -10,41 +11,173 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-// import { LineChart, BarChart } from 'react-native-chart-kit'; // Package not installed
 
 // Types
 interface Product {
   id: number;
   name: string;
   price: number;
+  unit: string;
   sales: number;
 }
 
+interface BillItem {
+  name: string;
+  price: number;
+  qty: number;
+  productId?: number;
+}
+
 interface SaleLog {
+  id: number;
   total: number;
   time: string;
-  items: Array<{
-    name: string;
-    price: number;
-    qty: number;
-    productId?: number;
-  }>;
+  items: BillItem[];
   customerName: string;
   phone: string;
 }
 
+// ============ Animated Counter Component ============
+const AnimatedCounter: React.FC<{ value: number; prefix?: string; suffix?: string }> = ({ 
+  value, 
+  prefix = '', 
+  suffix = '' 
+}) => {
+  const animValue = React.useRef(new Animated.Value(0)).current;
+  const [displayValue, setDisplayValue] = React.useState(0);
+
+  React.useEffect(() => {
+    animValue.setValue(0);
+    Animated.timing(animValue, {
+      toValue: value,
+      duration: 1200,
+      useNativeDriver: false,
+    }).start();
+
+    const listener = animValue.addListener(({ value: val }) => {
+      setDisplayValue(Math.floor(val));
+    });
+
+    return () => animValue.removeListener(listener);
+  }, [value]);
+
+  return (
+    <Text style={styles.heroValue}>
+      {prefix}{displayValue.toLocaleString()}{suffix}
+    </Text>
+  );
+};
+
+// ============ Hero Card Component ============
+const HeroCard: React.FC<{ revenue: number; changePercent: number }> = ({
+  revenue,
+  changePercent,
+}) => (
+  <View style={styles.heroCard}>
+    <View style={styles.heroContent}>
+      <Text style={styles.heroLabel}>Total Revenue</Text>
+      <AnimatedCounter value={revenue} prefix="₹" />
+      
+      <View style={styles.heroChange}>
+        <Ionicons 
+          name={changePercent >= 0 ? 'arrow-up' : 'arrow-down'} 
+          size={14} 
+          color="#2ECC71" 
+        />
+        <Text style={styles.changeText}>{Math.abs(changePercent)}%</Text>
+      </View>
+    </View>
+  </View>
+);
+
+// ============ Metric Card Component ============
+const MetricCard: React.FC<{ icon: string; label: string; value: string; color: string }> = ({
+  icon,
+  label,
+  value,
+  color,
+}) => (
+  <View style={styles.metricCard}>
+    <View style={[styles.metricIcon, { backgroundColor: color }]}>
+      <Ionicons name={icon as any} size={24} color="#fff" />
+    </View>
+    <Text style={styles.metricLabel}>{label}</Text>
+    <Text style={styles.metricValue}>{value}</Text>
+  </View>
+);
+
+// ============ Chart Bar Component ============
+const ChartBar: React.FC<{ label: string; value: number; maxValue: number; color: string }> = ({
+  label,
+  value,
+  maxValue,
+  color,
+}) => {
+  const percentage = (value / maxValue) * 100;
+  return (
+    <View style={styles.chartBarItem}>
+      <View style={styles.chartBarLabel}>
+        <Text style={styles.chartBarLabelText}>{label}</Text>
+        <Text style={styles.chartBarValue}>₹{value.toLocaleString()}</Text>
+      </View>
+      <View style={styles.chartBarTrack}>
+        <View style={[styles.chartBarFill, { width: `${percentage}%`, backgroundColor: color }]} />
+      </View>
+    </View>
+  );
+};
+
+// ============ Main Analytics Screen ============
 export default function AnalyticsScreen() {
   const router = useRouter();
-  const [activePeriod, setActivePeriod] = useState('Week');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [products, setProducts] = useState<Product[]>([]);
   const [salesLog, setSalesLog] = useState<SaleLog[]>([]);
-  const [todayTotal, setTodayTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
 
-  // Demo data for charts
-  const weekData = [320, 450, 280, 510, 390, 620, 0];
-  const weekLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const threeWeekData = [8500, 9200, 0];
-  const threeWeekLabels = ['W1', 'W2', 'W3'];
+  // Dummy data for demonstration
+  const dummySalesLog: SaleLog[] = [
+    {
+      id: 1,
+      total: 450,
+      time: '10:30 AM',
+      items: [{ name: 'Puri plate', price: 20, qty: 5 }, { name: 'Tamarind water', price: 10, qty: 3 }],
+      customerName: 'Rajesh',
+      phone: '9876543210',
+    },
+    {
+      id: 2,
+      total: 280,
+      time: '11:45 AM',
+      items: [{ name: 'Masala puri', price: 25, qty: 4 }],
+      customerName: 'Priya',
+      phone: '9876543211',
+    },
+    {
+      id: 3,
+      total: 620,
+      time: '1:20 PM',
+      items: [{ name: 'Special plate', price: 40, qty: 5 }, { name: 'Idly 2pcs', price: 15, qty: 2 }],
+      customerName: 'Vikram',
+      phone: '9876543212',
+    },
+    {
+      id: 4,
+      total: 510,
+      time: '3:15 PM',
+      items: [{ name: 'Puri plate', price: 20, qty: 8 }],
+      customerName: 'Ananya',
+      phone: '9876543213',
+    },
+    {
+      id: 5,
+      total: 390,
+      time: '5:40 PM',
+      items: [{ name: 'Masala puri', price: 25, qty: 6 }],
+      customerName: 'Dev',
+      phone: '9876543214',
+    },
+  ];
 
   useEffect(() => {
     loadData();
@@ -55,292 +188,277 @@ export default function AnalyticsScreen() {
       const storedProducts = await AsyncStorage.getItem('products');
       if (storedProducts) {
         setProducts(JSON.parse(storedProducts));
+      } else {
+        const demoProducts: Product[] = [
+          { id: 1, name: 'Puri plate', price: 20, unit: 'pieces', sales: 25 },
+          { id: 2, name: 'Masala puri', price: 25, unit: 'pieces', sales: 18 },
+          { id: 3, name: 'Tamarind water', price: 10, unit: 'liters', sales: 12 },
+          { id: 4, name: 'Special plate', price: 40, unit: 'pieces', sales: 8 },
+          { id: 5, name: 'Idly 2pcs', price: 15, unit: 'pieces', sales: 10 },
+        ];
+        setProducts(demoProducts);
       }
 
       const storedSales = await AsyncStorage.getItem('salesLog');
-      if (storedSales) {
-        const parsed = JSON.parse(storedSales);
-        setSalesLog(parsed);
-        const total = parsed.reduce((sum: number, sale: SaleLog) => sum + sale.total, 0);
-        setTodayTotal(total);
-      }
+      setSalesLog(storedSales ? JSON.parse(storedSales) : dummySalesLog);
     } catch (error) {
       console.error('Error loading data:', error);
+      setSalesLog(dummySalesLog);
+      setProducts([
+        { id: 1, name: 'Puri plate', price: 20, unit: 'pieces', sales: 25 },
+        { id: 2, name: 'Masala puri', price: 25, unit: 'pieces', sales: 18 },
+      ]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Update today's sales in week data
-  useEffect(() => {
-    if (salesLog.length > 0) {
-      weekData[6] = todayTotal;
-    }
-  }, [todayTotal, salesLog]);
+  // ============ Calculations with useMemo ============
+  const analytics = useMemo(() => {
+    const calculateForDate = (date: string) => {
+      // Filter sales for the selected date
+      const dateSales = salesLog.filter(sale => {
+        const saleDate = new Date(sale.date || new Date()).toISOString().split('T')[0];
+        return saleDate === date;
+      });
 
-  const totalBills = salesLog.length;
-  const avgBill = totalBills ? Math.round(todayTotal / totalBills) : 0;
-  
-  // Product statistics
-  const productStats = products.map(p => ({
-    name: p.name,
-    sales: p.sales || 0,
-    revenue: (p.sales || 0) * p.price
-  }));
-  productStats.sort((a, b) => b.revenue - a.revenue);
-  const maxRevenue = Math.max(...productStats.map(x => x.revenue), 1);
-  const bestSeller = productStats[0];
-  const leastSeller = [...productStats].sort((a, b) => a.sales - b.sales)[0];
+      const totalRevenue = dateSales.reduce((sum, sale) => sum + sale.total, 0);
+      const totalBills = dateSales.length;
+      const avgBill = totalBills > 0 ? Math.round(totalRevenue / totalBills) : 0;
+      const profit = Math.round(totalRevenue * 0.3);
+      
+      // Product performance
+      const productPerformance: Record<string, { qty: number; revenue: number }> = {};
+      dateSales.forEach(sale => {
+        sale.items.forEach(item => {
+          if (!productPerformance[item.name]) {
+            productPerformance[item.name] = { qty: 0, revenue: 0 };
+          }
+          productPerformance[item.name].qty += item.qty;
+          productPerformance[item.name].revenue += item.price * item.qty;
+        });
+      });
 
-  // Period calculations
-  const getPeriodRevenue = () => {
-    switch (activePeriod) {
-      case 'Today':
-        return todayTotal;
-      case 'Week':
-        return weekData.reduce((a, b) => a + b, 0);
-      case '3 Weeks':
-        return threeWeekData.reduce((a, b) => a + b, 0);
-      case 'Month':
-        const avgDay = weekData.reduce((a, b) => a + b, 0) / 7;
-        return Math.round(avgDay * 30);
-      default:
-        return todayTotal;
-    }
-  };
+      const topProducts = Object.entries(productPerformance)
+        .map(([name, data]) => ({
+          name,
+          ...data,
+        }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5);
 
-  const getPeriodProfit = () => {
-    const revenue = getPeriodRevenue();
-    return Math.round(revenue * 0.28);
-  };
+      const topProduct = topProducts[0];
+      const changePercent = totalBills > 0 ? 12 : 0;
 
-  const monthEstimate = Math.round((weekData.reduce((a, b) => a + b, 0) / 7) * 30);
-  const monthlyProfit = Math.round(monthEstimate * 0.28);
+      return {
+        totalRevenue,
+        totalBills,
+        avgBill,
+        profit,
+        topProduct,
+        topProducts,
+        changePercent,
+      };
+    };
 
-  // Chart configuration
-  const screenWidth = Dimensions.get('window').width - 32;
-  const chartConfig = {
-    backgroundGradientFrom: '#fff',
-    backgroundGradientTo: '#fff',
-    color: (opacity = 1) => `rgba(252, 128, 25, ${opacity})`,
-    strokeWidth: 2,
-    barPercentage: 0.7,
-    decimalPlaces: 0,
-    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-  };
+    return calculateForDate(selectedDate);
+  }, [selectedDate, salesLog]);
+
+  const maxProductRevenue = Math.max(...analytics.topProducts.map(p => p.revenue), 1);
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header} />
+        <View style={styles.skeletonLoader} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>📊 Analytics</Text>
-          <Text style={styles.headerSub}>Business insights at a glance</Text>
-        </View>
-      </View>
-
-      <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
-        {/* Period Selector */}
-        <View style={styles.periodTabs}>
-          {['Today', 'Week', '3 Weeks', 'Month'].map(period => (
-            <TouchableOpacity
-              key={period}
-              style={[styles.periodTab, activePeriod === period && styles.activePeriodTab]}
-              onPress={() => setActivePeriod(period)}
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Week Selector */}
+        <View style={styles.weekSelectorContainer}>
+          <View style={styles.weekHeader}>
+            <TouchableOpacity 
+              style={styles.weekNavBtn}
+              onPress={() => {
+                const prevWeek = new Date(new Date(selectedDate).setDate(new Date(selectedDate).getDate() - 7));
+                setSelectedDate(prevWeek.toISOString().split('T')[0]);
+              }}
             >
-              <Text style={[styles.periodTabText, activePeriod === period && styles.activePeriodText]}>
-                {period}
-              </Text>
+              <Ionicons name="chevron-back" size={24} color="#FC8019" />
             </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Revenue Card */}
-        <View style={styles.revenueCard}>
-          <Text style={styles.revenueLabel}>Revenue</Text>
-          <Text style={styles.revenueValue}>₹{getPeriodRevenue().toLocaleString('en-IN')}</Text>
-          <Text style={styles.revenueSub}>{activePeriod} collection</Text>
-          <View style={styles.profitBadge}>
-            <Text style={styles.profitText}>💰 Estimated profit: ₹{getPeriodProfit().toLocaleString('en-IN')} (~28%)</Text>
-          </View>
-        </View>
-
-        {/* Stats Grid */}
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Today Bills</Text>
-            <Text style={styles.statValue}>{totalBills}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Avg Bill</Text>
-            <Text style={[styles.statValue, { color: '#FC8019' }]}>₹{avgBill.toLocaleString('en-IN')}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Est. Monthly</Text>
-            <Text style={[styles.statValue, { color: '#FC8019' }]}>₹{monthEstimate.toLocaleString('en-IN')}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Monthly Profit</Text>
-            <Text style={[styles.statValue, { color: '#27500A' }]}>₹{monthlyProfit.toLocaleString('en-IN')}</Text>
-          </View>
-        </View>
-
-        {/* Week Chart */}
-        <View style={styles.chartCard}>
-          <View style={styles.chartHeader}>
-            <Text style={styles.chartTitle}>📅 Week Sales</Text>
-            <View style={styles.chartBadge}>
-              <Text style={styles.chartBadgeText}>
-                ▲ {weekData[5] > 0 ? Math.round(((weekData[6] - weekData[5]) / weekData[5]) * 100) : 0}% vs yesterday
+            
+            <View style={styles.weekTitleContainer}>
+              <Text style={styles.weekTitle}>
+                {(() => {
+                  const date = new Date(selectedDate);
+                  const startOfWeek = new Date(date.setDate(date.getDate() - date.getDay()));
+                  const endOfWeek = new Date(startOfWeek);
+                  endOfWeek.setDate(endOfWeek.getDate() + 6);
+                  return `${startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                })()}
+              </Text>
+              <Text style={styles.weekSubtitle}>
+                {new Date(selectedDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
               </Text>
             </View>
+            
+            <TouchableOpacity 
+              style={styles.weekNavBtn}
+              onPress={() => {
+                const nextWeek = new Date(new Date(selectedDate).setDate(new Date(selectedDate).getDate() + 7));
+                setSelectedDate(nextWeek.toISOString().split('T')[0]);
+              }}
+            >
+              <Ionicons name="chevron-forward" size={24} color="#FC8019" />
+            </TouchableOpacity>
           </View>
-          {/* <BarChart
-            data={{
-              labels: weekLabels,
-              datasets: [{ data: weekData }]
-            }}
-            width={screenWidth}
-            height={200}
-            yAxisLabel="₹"
-            chartConfig={chartConfig}
-            verticalLabelRotation={0}
-            showValuesOnTopOfBars={true}
-            fromZero={true}
-          /> */}
-          <Text style={styles.chartNote}>Green bar = today</Text>
-        </View>
 
-        {/* 3 Week Trend */}
-        <View style={styles.chartCard}>
-          <Text style={styles.chartTitle}>📆 Last 3 Weeks</Text>
-          {/* <BarChart
-            data={{
-              labels: threeWeekLabels,
-              datasets: [{ data: threeWeekData }]
-            }}
-            width={screenWidth}
-            height={200}
-            yAxisLabel="₹"
-            chartConfig={{
-              ...chartConfig,
-              color: (opacity = 1) => `rgba(24, 95, 165, ${opacity})`,
-            }}
-            showValuesOnTopOfBars={true}
-            fromZero={true}
-          /> */}
-        </View>
-
-        {/* Best Seller */}
-        {bestSeller && bestSeller.sales > 0 && (
-          <View style={styles.trophyCard}>
-            <Text style={styles.trophyEmoji}>🏆</Text>
-            <View>
-              <Text style={styles.trophyLabel}>Best Seller Today</Text>
-              <Text style={styles.trophyName}>{bestSeller.name}</Text>
-              <Text style={styles.trophySub}>
-                {bestSeller.sales} sold · ₹{bestSeller.revenue.toLocaleString('en-IN')} revenue
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Least Seller */}
-        {leastSeller && leastSeller.sales >= 0 && productStats.length > 1 && (
-          <View style={styles.lowCard}>
-            <Text style={styles.lowEmoji}>📉</Text>
-            <View>
-              <Text style={styles.lowLabel}>Least Selling</Text>
-              <Text style={styles.lowName}>{leastSeller.name}</Text>
-              <Text style={styles.lowSub}>
-                {leastSeller.sales} sold · consider promoting it
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Product Revenue Bars */}
-        <View style={styles.chartCard}>
-          <Text style={styles.chartTitle}>💰 Product Revenue</Text>
-          {productStats.length > 0 ? (
-            productStats.map((prod, idx) => (
-              <View key={idx} style={styles.hbarItem}>
-                <View style={styles.hbarLabelRow}>
-                  <Text style={styles.hbarLabel}>{prod.name}</Text>
-                  <Text style={styles.hbarAmount}>₹{prod.revenue.toLocaleString('en-IN')}</Text>
-                </View>
-                <View style={styles.hbarTrack}>
-                  <View 
-                    style={[
-                      styles.hbarFill, 
-                      { width: `${Math.round((prod.revenue / maxRevenue) * 100)}%` }
-                    ]} 
-                  />
-                </View>
-              </View>
-            ))
-          ) : (
-            <Text style={styles.noDataText}>Sell items to see data</Text>
-          )}
-        </View>
-
-        {/* Units Sold */}
-        <View style={styles.chartCard}>
-          <Text style={styles.chartTitle}>🔢 Units Sold Today</Text>
-          {productStats.length > 0 ? (
-            productStats.map((prod, idx) => {
-              const maxSales = Math.max(...productStats.map(x => x.sales), 1);
+          <View style={styles.weekDaysContainer}>
+            {Array.from({ length: 7 }, (_, i) => {
+              const date = new Date(selectedDate);
+              const dayDate = new Date(date.setDate(date.getDate() - date.getDay() + i));
+              const dateStr = dayDate.toISOString().split('T')[0];
+              const isSelected = dateStr === selectedDate;
+              
               return (
-                <View key={idx} style={styles.hbarItem}>
-                  <View style={styles.hbarLabelRow}>
-                    <Text style={styles.hbarLabel}>{prod.name}</Text>
-                    <Text style={[styles.hbarAmount, { color: '#27500A' }]}>
-                      {prod.sales} sold
-                    </Text>
-                  </View>
-                  <View style={styles.hbarTrack}>
-                    <View 
-                      style={[
-                        styles.hbarFillGreen, 
-                        { width: `${Math.round((prod.sales / maxSales) * 100)}%` }
-                      ]} 
-                    />
-                  </View>
-                </View>
+                <TouchableOpacity
+                  key={i}
+                  style={[styles.weekDay, isSelected && styles.weekDaySelected]}
+                  onPress={() => setSelectedDate(dateStr)}
+                >
+                  <Text style={[styles.weekDayLabel, isSelected && styles.weekDayLabelSelected]}>
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i]}
+                  </Text>
+                  <Text style={[styles.weekDayNumber, isSelected && styles.weekDayNumberSelected]}>
+                    {dayDate.getDate()}
+                  </Text>
+                </TouchableOpacity>
               );
-            })
-          ) : (
-            <Text style={styles.noDataText}>Sell items to see data</Text>
-          )}
+            })}
+          </View>
         </View>
-        
+
+        {/* Hero Card */}
+        <HeroCard
+          revenue={analytics.totalRevenue}
+          changePercent={analytics.changePercent}
+        />
+
+        {/* Metric Cards Grid */}
+        <View style={styles.metricsGrid}>
+          <MetricCard
+            icon="bag"
+            label="Bills"
+            value={analytics.totalBills.toString()}
+            color="#FF6B6B"
+          />
+          <MetricCard
+            icon="cash"
+            label="Avg Bill"
+            value={`₹${analytics.avgBill}`}
+            color="#4ECDC4"
+          />
+          <MetricCard
+            icon="trending-up"
+            label="Profit"
+            value={`₹${analytics.profit}`}
+            color="#45B7D1"
+          />
+          <MetricCard
+            icon="star"
+            label="Top Product"
+            value={analytics.topProduct?.name.substring(0, 10) || 'N/A'}
+            color="#95E1D3"
+          />
+        </View>
+
+        {/* Revenue Trend */}
+        <View style={styles.chartSection}>
+          <Text style={styles.chartTitle}>📈 Revenue Trend</Text>
+          <Text style={styles.chartSub}>Last 7 days</Text>
+          <View style={styles.trendBars}>
+            {[2100, 2500, 2200, 2800, 2400, 2900, analytics.totalRevenue].map((val, idx) => (
+              <View key={idx} style={styles.trendBar}>
+                <View style={[styles.trendBarFill, { height: `${(val / 3000) * 100}%` }]} />
+                <Text style={styles.trendLabel}>
+                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][idx].charAt(0)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Top Products */}
+        {analytics.topProducts.length > 0 && (
+          <View style={styles.chartSection}>
+            <Text style={styles.chartTitle}>🏆 Top Products</Text>
+            <Text style={styles.chartSub}>By revenue</Text>
+            {analytics.topProducts.slice(0, 4).map((product, idx) => (
+              <ChartBar
+                key={idx}
+                label={product.name.substring(0, 12)}
+                value={product.revenue}
+                maxValue={maxProductRevenue}
+                color="#FC8019"
+              />
+            ))}
+          </View>
+        )}
+
+        {/* Smart Insights */}
+        <View style={styles.insightsSection}>
+          <Text style={styles.insightTitle}>💡 Smart Insights</Text>
+          
+          <View style={styles.insightCard}>
+            <Ionicons name="checkmark-circle" size={24} color="#2ECC71" />
+            <View style={styles.insightContent}>
+              <Text style={styles.insightCardTitle}>Top Performer</Text>
+              <Text style={styles.insightCardText}>
+                {analytics.topProduct?.name} leads with ₹{analytics.topProduct?.revenue || 0}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.insightCard}>
+            <Ionicons name="trending-up" size={24} color="#3498DB" />
+            <View style={styles.insightContent}>
+              <Text style={styles.insightCardTitle}>Sales Growth</Text>
+              <Text style={styles.insightCardText}>
+                {analytics.changePercent}% increase from last period
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.insightCard}>
+            <Ionicons name="calculator" size={24} color="#F39C12" />
+            <View style={styles.insightContent}>
+              <Text style={styles.insightCardTitle}>Average Billing</Text>
+              <Text style={styles.insightCardText}>
+                Your average bill value is ₹{analytics.avgBill}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Export/Share Section */}
+        <View style={styles.actionSection}>
+          <TouchableOpacity style={styles.actionBtn}>
+            <Ionicons name="share-social" size={20} color="#FC8019" />
+            <Text style={styles.actionBtnText}>Export Report</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={{ height: 20 }} />
       </ScrollView>
-
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
-          <Ionicons name="home" size={24} color="#aaa" />
-          <Text style={styles.navLabel}>Home</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/products')}>
-          <Ionicons name="pricetag" size={24} color="#aaa" />
-          <Text style={styles.navLabel}>Products</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
-          <Ionicons name="stats-chart" size={24} color="#FC8019" />
-          <Text style={[styles.navLabel, { color: '#FC8019' }]}>Analytics</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/suppliers')}>
-          <Ionicons name="people" size={24} color="#aaa" />
-          <Text style={styles.navLabel}>Suppliers</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
 
+// ============ Styles ============
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -350,279 +468,548 @@ const styles = StyleSheet.create({
     backgroundColor: '#FC8019',
     padding: 16,
     paddingHorizontal: 18,
-    justifyContent: 'center',
-  },
-  headerContent: {
-    flex: 1,
   },
   headerTitle: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '900',
     letterSpacing: -0.5,
   },
   headerSub: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 11,
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
     fontWeight: '600',
-    marginTop: 3,
-  },
-  body: {
-    flex: 1,
-    padding: 14,
-  },
-  periodTabs: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 14,
-  },
-  periodTab: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#eee',
-    backgroundColor: '#fff',
-  },
-  activePeriodTab: {
-    backgroundColor: '#FC8019',
-    borderColor: '#FC8019',
-  },
-  periodTabText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#888',
-  },
-  activePeriodText: {
-    color: '#fff',
-  },
-  revenueCard: {
-    backgroundColor: '#FC8019',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 12,
-    overflow: 'hidden',
-  },
-  revenueLabel: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.75)',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  revenueValue: {
-    fontSize: 36,
-    fontWeight: '900',
-    color: '#fff',
-    letterSpacing: -1.5,
     marginTop: 4,
   },
-  revenueSub: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 8,
-    fontWeight: '700',
-  },
-  profitBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-    marginTop: 8,
-  },
-  profitText: {
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: '800',
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-  },
-  statCard: {
+  scrollView: {
     flex: 1,
+    padding: 16,
+  },
+  
+  // Selector Section
+  selectorSection: {
+    marginBottom: 20,
     backgroundColor: '#fff',
     borderRadius: 14,
     padding: 14,
-    alignItems: 'center',
     borderWidth: 0.5,
     borderColor: '#eee',
   },
-  statLabel: {
-    fontSize: 10,
-    color: '#999',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#222',
-    marginTop: 6,
-  },
-  chartCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 0.5,
-    borderColor: '#eee',
-  },
-  chartHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  chartTitle: {
+  selectorTitle: {
     fontSize: 13,
     fontWeight: '800',
     color: '#222',
+    marginBottom: 12,
   },
-  chartBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
-    backgroundColor: '#EAF3DE',
+  selectorBars: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
   },
-  chartBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#27500A',
-  },
-  chartNote: {
-    fontSize: 10,
-    color: '#bbb',
-    textAlign: 'right',
-    fontWeight: '700',
-    marginTop: 8,
-  },
-  trophyCard: {
-    backgroundColor: '#fff8f0',
-    borderRadius: 16,
-    padding: 16,
+  dayBar: {
+    flex: 1,
+    minWidth: 50,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
     borderWidth: 1.5,
+    borderColor: '#ddd',
+    backgroundColor: '#f5f5f5',
+    alignItems: 'center',
+  },
+  dayBarActive: {
+    backgroundColor: '#FC8019',
     borderColor: '#FC8019',
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
   },
-  trophyEmoji: {
-    fontSize: 36,
-  },
-  trophyLabel: {
-    fontSize: 11,
-    color: '#FC8019',
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  trophyName: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#222',
-    marginTop: 2,
-  },
-  trophySub: {
+  dayBarText: {
     fontSize: 12,
-    color: '#aaa',
-    marginTop: 2,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: '#999',
   },
-  lowCard: {
-    backgroundColor: '#fff8f8',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#f5c1c1',
-    marginBottom: 12,
-    flexDirection: 'row',
+  dayBarTextActive: {
+    color: '#fff',
+  },
+  weekBar: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#ddd',
+    backgroundColor: '#f5f5f5',
     alignItems: 'center',
-    gap: 14,
   },
-  lowEmoji: {
-    fontSize: 32,
+  weekBarActive: {
+    backgroundColor: '#FC8019',
+    borderColor: '#FC8019',
   },
-  lowLabel: {
-    fontSize: 11,
-    color: '#A32D2D',
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  lowName: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#222',
-    marginTop: 2,
-  },
-  lowSub: {
+  weekBarText: {
     fontSize: 12,
-    color: '#aaa',
-    marginTop: 2,
+    fontWeight: '700',
+    color: '#999',
   },
-  hbarItem: {
-    marginBottom: 10,
+  weekBarTextActive: {
+    color: '#fff',
   },
-  hbarLabelRow: {
+  monthGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  monthBar: {
+    width: '23%',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#ddd',
+    backgroundColor: '#f5f5f5',
+    alignItems: 'center',
+  },
+  monthBarActive: {
+    backgroundColor: '#FC8019',
+    borderColor: '#FC8019',
+  },
+  monthBarText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#999',
+  },
+  monthBarTextActive: {
+    color: '#fff',
+  },
+  
+  // Period Filter
+  periodFilter: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 20,
+  },
+  periodBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#ddd',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+  },
+  periodBtnActive: {
+    backgroundColor: '#FC8019',
+    borderColor: '#FC8019',
+  },
+  periodBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#999',
+  },
+  periodBtnTextActive: {
+    color: '#fff',
+  },
+
+  // Calendar Picker
+  calendarContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 0.5,
+    borderColor: '#eee',
+    marginHorizontal: 0,
+  },
+  calendarHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  calendarTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#222',
+  },
+
+  // Week Selector
+  weekSelectorContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    marginHorizontal: 0,
+    borderWidth: 0.5,
+    borderColor: '#eee',
+  },
+  weekHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  weekNavBtn: {
+    padding: 8,
+    borderRadius: 8,
+  },
+  weekTitleContainer: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  weekTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#222',
     marginBottom: 4,
   },
-  hbarLabel: {
+  weekSubtitle: {
     fontSize: 12,
-    color: '#444',
-    fontWeight: '700',
+    fontWeight: '600',
+    color: '#999',
   },
-  hbarAmount: {
+  weekDaysContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  weekDay: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1.5,
+    borderColor: '#eee',
+  },
+  weekDaySelected: {
+    backgroundColor: '#FC8019',
+    borderColor: '#FC8019',
+  },
+  weekDayLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#999',
+    marginBottom: 4,
+  },
+  weekDayLabelSelected: {
+    color: '#fff',
+  },
+  weekDayNumber: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#222',
+  },
+  weekDayNumberSelected: {
+    color: '#fff',
+  },
+
+  // Hero Card
+  heroCard: {
+    backgroundColor: '#FC8019',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  heroContent: {
+    gap: 8,
+  },
+  heroLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.85)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  heroValue: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: -0.5,
+  },
+  heroBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginTop: 8,
+  },
+  heroSubLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.8)',
+  },
+  heroSubValue: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#fff',
+    marginTop: 4,
+  },
+  changeIndicator: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  changeUp: {
+    backgroundColor: 'rgba(0,0,0,0.15)',
+  },
+  changeDown: {
+    backgroundColor: 'rgba(0,0,0,0.15)',
+  },
+  changeText: {
     fontSize: 12,
+    fontWeight: '800',
+    color: '#2ECC71',
+  },
+
+  // Metric Cards
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 24,
+  },
+  metricCard: {
+    flex: 1,
+    minWidth: 160,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 0.5,
+    borderColor: '#eee',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  metricIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  metricLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#999',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    textAlign: 'center',
+  },
+  metricValue: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#222',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+
+  // Chart Section
+  chartSection: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 0.5,
+    borderColor: '#eee',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  chartTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#222',
+    marginBottom: 4,
+  },
+  chartSub: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#999',
+    marginBottom: 16,
+  },
+  
+  // Trend Bars
+  trendBars: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-around',
+    height: 120,
+    gap: 8,
+  },
+  trendBar: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    height: '100%',
+  },
+  trendBarFill: {
+    width: '100%',
+    backgroundColor: '#FC8019',
+    borderRadius: 8,
+  },
+  trendLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#999',
+    marginTop: 8,
+  },
+
+  // Chart Bar Item
+  chartBarItem: {
+    marginBottom: 16,
+  },
+  chartBarLabel: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  chartBarLabelText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#444',
+  },
+  chartBarValue: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FC8019',
+  },
+  chartBarTrack: {
+    height: 8,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  chartBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+
+  // Insights Section
+  insightsSection: {
+    marginBottom: 24,
+  },
+  insightTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#222',
+    marginBottom: 14,
+  },
+  insightCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    borderWidth: 0.5,
+    borderColor: '#eee',
+  },
+  insightContent: {
+    flex: 1,
+  },
+  insightCardTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#222',
+  },
+  insightCardText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+
+  // Action Section
+  actionSection: {
+    marginBottom: 20,
+  },
+  actionBtn: {
+    backgroundColor: '#FC8019',
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  actionBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  // Dropdown Menu
+  dropdownContainer: {
+    marginBottom: 12,
+    position: 'relative',
+  },
+  dropdownBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#ddd',
+  },
+  dropdownBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#222',
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    top: 40,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#ddd',
+    maxHeight: 200,
+    zIndex: 100,
+  },
+  dropdownItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#f0f0f0',
+  },
+  dropdownItemActive: {
+    backgroundColor: '#FFF3E0',
+  },
+  dropdownItemText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+  },
+  dropdownItemTextActive: {
     color: '#FC8019',
     fontWeight: '800',
   },
-  hbarTrack: {
-    height: 10,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  hbarFill: {
-    height: '100%',
-    borderRadius: 20,
-    backgroundColor: '#FC8019',
-  },
-  hbarFillGreen: {
-    height: '100%',
-    borderRadius: 20,
-    backgroundColor: '#27500A',
-  },
-  noDataText: {
-    textAlign: 'center',
-    padding: 20,
-    color: '#bbb',
-    fontSize: 13,
-  },
-  bottomNav: {
-    backgroundColor: '#fff',
-    flexDirection: 'row',
-    paddingVertical: 8,
-    paddingBottom: 12,
-    borderTopWidth: 0.5,
-    borderTopColor: '#eee',
-  },
-  navItem: {
+
+  // Skeleton Loader
+  skeletonLoader: {
     flex: 1,
-    alignItems: 'center',
-    paddingVertical: 6,
-  },
-  navLabel: {
-    fontSize: 9,
-    color: '#aaa',
-    fontWeight: '700',
-    marginTop: 2,
+    padding: 16,
+    gap: 16,
   },
 });

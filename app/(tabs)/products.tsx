@@ -56,16 +56,15 @@ export default function ProductsScreen() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [newProductName, setNewProductName] = useState('');
   const [newProductPrice, setNewProductPrice] = useState('');
-  const [newProductUnit, setNewProductUnit] = useState('pieces');
-  const [unitPickerVisible, setUnitPickerVisible] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [pickerVisible, setPickerVisible] = useState(false);
   const [npValue, setNpValue] = useState('0');
   const [itemName, setItemName] = useState('');
   const [customItemName, setCustomItemName] = useState('');
   const [customItemAmount, setCustomItemAmount] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [billSearchQuery, setBillSearchQuery] = useState('');
+  const [newProductUnit, setNewProductUnit] = useState('pieces');
+  const [unitPickerVisible, setUnitPickerVisible] = useState(false);
+  const [addProductVisible, setAddProductVisible] = useState(false);
 
   const unitOptions = ['pieces', 'kgs', 'liters', 'grams', 'ml', 'units'];
 
@@ -241,6 +240,7 @@ export default function ProductsScreen() {
     
     setNewProductName('');
     setNewProductPrice('');
+    setNewProductUnit('pieces');
     Alert.alert('Success', 'Product added!');
   };
 
@@ -361,7 +361,6 @@ export default function ProductsScreen() {
       <View>
         <Text style={styles.productName}>{item.name}</Text>
         <Text style={styles.productPrice}>₹{item.price}</Text>
-        <Text style={styles.productUnit}>Unit: {item.unit}</Text>
         <Text style={styles.productSales}>Sold {item.sales} times today</Text>
       </View>
       <View style={styles.productActions}>
@@ -376,78 +375,162 @@ export default function ProductsScreen() {
   );
 
   // Catalogue Picker Modal
-  const PickerModal = () => {
-    const filteredProducts = products.filter(p => 
-      p.name.toLowerCase().includes(billSearchQuery.toLowerCase())
-    );
-    
-    return (
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={pickerVisible}
-        onRequestClose={() => {
-          setPickerVisible(false);
-          setBillSearchQuery('');
-        }}
+  const PickerModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={pickerVisible}
+      onRequestClose={() => setPickerVisible(false)}
+    >
+      <TouchableOpacity 
+        style={styles.modalOverlay} 
+        activeOpacity={1} 
+        onPress={() => setPickerVisible(false)}
       >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
-          onPress={() => {
-            setPickerVisible(false);
-            setBillSearchQuery('');
-          }}
-        >
-          <View style={styles.pickerBox}>
-            <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>Pick product</Text>
-              <TouchableOpacity onPress={() => {
-                setPickerVisible(false);
-                setBillSearchQuery('');
-              }}>
-                <Text style={styles.pickerClose}>×</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <TextInput
-              style={styles.pickerSearchInput}
-              placeholder="Search products..."
-              value={billSearchQuery}
-              onChangeText={setBillSearchQuery}
-              placeholderTextColor="#999"
-            />
-            
-            <FlatList
-              data={filteredProducts}
-              renderItem={({ item }) => (
-                <View style={styles.pickerRow}>
-                  <View>
-                    <Text style={styles.pickerProdName}>{item.name}</Text>
-                    <Text style={styles.pickerProdPrice}>₹{item.price} · {item.unit}</Text>
-                  </View>
-                  <TouchableOpacity 
-                    style={styles.pickerAddBtn}
-                    onPress={() => {
-                      addItemToBill(item.name, item.price, item.id);
-                      setPickerVisible(false);
-                      setBillSearchQuery('');
-                    }}
-                  >
-                    <Text style={styles.pickerAddText}>+ Add</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-              keyExtractor={(item) => item.id.toString()}
-              ListEmptyComponent={
-                <Text style={styles.noResultsText}>No products found</Text>
-              }
-            />
+        <View style={styles.pickerBox}>
+          <View style={styles.pickerHeader}>
+            <Text style={styles.pickerTitle}>Pick product</Text>
+            <TouchableOpacity onPress={() => setPickerVisible(false)}>
+              <Text style={styles.pickerClose}>×</Text>
+            </TouchableOpacity>
           </View>
-        </TouchableOpacity>
-      </Modal>
-    );
-  };
+          <FlatList
+            data={products}
+            renderItem={({ item }) => (
+              <View style={styles.pickerRow}>
+                <View>
+                  <Text style={styles.pickerProdName}>{item.name}</Text>
+                  <Text style={styles.pickerProdPrice}>₹{item.price}</Text>
+                </View>
+                <TouchableOpacity 
+                  style={styles.pickerAddBtn}
+                  onPress={() => {
+                    addItemToBill(item.name, item.price, item.id);
+                    setPickerVisible(false);
+                  }}
+                >
+                  <Text style={styles.pickerAddText}>+ Add</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            keyExtractor={(item) => item.id.toString()}
+          />
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  // Unit Picker Modal
+  const UnitPickerModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={unitPickerVisible}
+      onRequestClose={() => setUnitPickerVisible(false)}
+    >
+      <TouchableOpacity 
+        style={styles.modalOverlay} 
+        activeOpacity={1} 
+        onPress={() => setUnitPickerVisible(false)}
+      >
+        <View style={styles.pickerBox}>
+          <View style={styles.pickerHeader}>
+            <Text style={styles.pickerTitle}>Select Unit</Text>
+            <TouchableOpacity onPress={() => setUnitPickerVisible(false)}>
+              <Text style={styles.pickerClose}>×</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.unitGrid}>
+            {unitOptions.map((unit) => (
+              <TouchableOpacity 
+                key={unit}
+                style={[
+                  styles.unitOption,
+                  newProductUnit === unit && styles.unitOptionSelected
+                ]}
+                onPress={() => {
+                  setNewProductUnit(unit);
+                  setUnitPickerVisible(false);
+                }}
+              >
+                <Text 
+                  style={[
+                    styles.unitOptionText,
+                    newProductUnit === unit && styles.unitOptionTextSelected
+                  ]}
+                >
+                  {unit}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  // Add Product Modal
+  const AddProductModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={addProductVisible}
+      onRequestClose={() => setAddProductVisible(false)}
+    >
+      <TouchableOpacity 
+        style={styles.modalOverlay} 
+        activeOpacity={1} 
+        onPress={() => setAddProductVisible(false)}
+      >
+        <View style={styles.addProductModal}>
+          <View style={styles.addProductModalHeader}>
+            <Text style={styles.addProductModalTitle}>➕ Add New Product</Text>
+            <TouchableOpacity onPress={() => setAddProductVisible(false)}>
+              <Text style={styles.pickerClose}>×</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.addProductModalContent}>
+            <Text style={styles.inputLabel}>Product Name</Text>
+            <TextInput
+              style={styles.addInput}
+              placeholder="Enter product name"
+              value={newProductName}
+              onChangeText={setNewProductName}
+            />
+
+            <Text style={styles.inputLabel}>Price (₹)</Text>
+            <TextInput
+              style={styles.addInput}
+              placeholder="Enter price"
+              value={newProductPrice}
+              onChangeText={setNewProductPrice}
+              keyboardType="numeric"
+            />
+
+            <Text style={styles.inputLabel}>Unit</Text>
+            <TouchableOpacity 
+              style={styles.unitSelectBtn}
+              onPress={() => setUnitPickerVisible(true)}
+            >
+              <Text style={styles.unitSelectText}>{newProductUnit}</Text>
+              <Ionicons name="chevron-down" size={18} color="#FC8019" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.saveBtn} 
+              onPress={() => {
+                addProduct();
+                setAddProductVisible(false);
+              }}
+            >
+              <Text style={styles.saveBtnText}>Save Product ✓</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
 
   if (!currentSession && sessionId) {
     return (
@@ -619,110 +702,53 @@ export default function ProductsScreen() {
   }
 
   // Default: show Products Management UI when not in a billing session
+  const filteredProducts = products.filter(p =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <View style={styles.container}>
+      <PickerModal />
+      <UnitPickerModal />
+      <AddProductModal />
+      
       {/* Product Catalogue Section */}
       <View style={styles.catalogueSection}>
         <View style={styles.catalogueHeader}>
           <Text style={styles.catalogueTitle}>📦 Your Products</Text>
         </View>
-        
-        <TextInput
-          style={styles.searchInput}
-          placeholder="🔍 Search products..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholderTextColor="#999"
-        />
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search products..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color="#999" />
+            </TouchableOpacity>
+          )}
+        </View>
         
         <FlatList
-          data={products.filter(p => 
-            p.name.toLowerCase().includes(searchQuery.toLowerCase())
-          )}
+          data={filteredProducts}
           renderItem={renderProduct}
           keyExtractor={(item) => item.id.toString()}
           style={styles.productList}
-          ListEmptyComponent={
-            <Text style={styles.noResultsText}>No products found</Text>
-          }
         />
         
-        <View style={styles.addProductCard}>
-          <Text style={styles.addProductTitle}>➕ Add new product</Text>
-          <TextInput
-            style={styles.addInput}
-            placeholder="Product name"
-            value={newProductName}
-            onChangeText={setNewProductName}
-          />
-          <TextInput
-            style={styles.addInput}
-            placeholder="Price ₹"
-            value={newProductPrice}
-            onChangeText={setNewProductPrice}
-            keyboardType="numeric"
-          />
-          
-          <View style={styles.unitSelectRow}>
-            <Text style={styles.unitLabel}>Unit</Text>
-            <TouchableOpacity 
-              style={styles.unitSelectBtn}
-              onPress={() => setUnitPickerVisible(true)}
-            >
-              <Text style={styles.unitSelectText}>{newProductUnit}</Text>
-              <Ionicons name="chevron-down" size={18} color="#FC8019" />
-            </TouchableOpacity>
-          </View>
-          
-          <TouchableOpacity style={styles.saveBtn} onPress={addProduct}>
-            <Text style={styles.saveBtnText}>Save Product ✓</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Unit Picker Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={unitPickerVisible}
-        onRequestClose={() => setUnitPickerVisible(false)}
-      >
         <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
-          onPress={() => setUnitPickerVisible(false)}
+          style={styles.addProductButton}
+          onPress={() => setAddProductVisible(true)}
         >
-          <View style={styles.unitPickerBox}>
-            <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>Select Unit</Text>
-              <TouchableOpacity onPress={() => setUnitPickerVisible(false)}>
-                <Text style={styles.pickerClose}>×</Text>
-              </TouchableOpacity>
-            </View>
-            
-            {unitOptions.map((unit) => (
-              <TouchableOpacity
-                key={unit}
-                style={[
-                  styles.unitOption,
-                  newProductUnit === unit && styles.unitOptionSelected
-                ]}
-                onPress={() => {
-                  setNewProductUnit(unit);
-                  setUnitPickerVisible(false);
-                }}
-              >
-                <Text style={[
-                  styles.unitOptionText,
-                  newProductUnit === unit && styles.unitOptionTextSelected
-                ]}>
-                  {unit}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <Ionicons name="add-circle" size={50} color="#FC8019" />
+          <Text style={styles.addProductButtonText}>Add Product</Text>
         </TouchableOpacity>
-      </Modal>
+      </View>
 
       {/* Bottom Nav */}
       <View style={styles.bottomNav}>
@@ -1099,6 +1125,86 @@ const styles = StyleSheet.create({
   productList: {
     flex: 1,
   },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginHorizontal: 12,
+    marginVertical: 10,
+    height: 40,
+    gap: 8,
+  },
+  searchIcon: {
+    color: '#999',
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#222',
+  },
+  unitSelectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  unitLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#666',
+    width: 50,
+  },
+  unitSelectBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  unitSelectText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FC8019',
+  },
+  unitGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 12,
+    gap: 10,
+    justifyContent: 'space-around',
+  },
+  unitOption: {
+    width: '45%',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#ddd',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  unitOptionSelected: {
+    borderColor: '#FC8019',
+    backgroundColor: 'rgba(252,128,25,0.1)',
+  },
+  unitOptionText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#666',
+    textTransform: 'capitalize',
+  },
+  unitOptionTextSelected: {
+    color: '#FC8019',
+  },
   productCard: {
     backgroundColor: '#fff',
     borderRadius: 14,
@@ -1257,138 +1363,43 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
-  searchContainer: {
-    flexDirection: 'row',
+  addProductButton: {
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: '#eee',
+    justifyContent: 'center',
+    paddingVertical: 20,
     gap: 8,
-    marginBottom: 14,
   },
-  searchInput: {
-    width: '100%',
-    padding: 12,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#222',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#eee',
-    marginBottom: 12,
-  },
-  noResultsText: {
-    textAlign: 'center',
-    color: '#aaa',
-    fontSize: 13,
-    fontWeight: '600',
-    paddingVertical: 30,
-  },
-  pickerSearchInput: {
-    padding: 12,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#222',
-    backgroundColor: '#fafafa',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#eee',
-    marginBottom: 12,
-  },
-  productDetails: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  productUnit: {
-    fontSize: 11,
-    backgroundColor: '#FFF5E6',
-    color: '#FC8019',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+  addProductButtonText: {
+    fontSize: 14,
     fontWeight: '700',
+    color: '#FC8019',
   },
-  unitPickerBox: {
+  addProductModal: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    padding: 18,
-    maxHeight: '50%',
+    padding: 20,
+    maxHeight: '80%',
   },
-  unitPickerHeader: {
+  addProductModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
-  unitPickerTitle: {
-    fontSize: 16,
+  addProductModalTitle: {
+    fontSize: 18,
     fontWeight: '900',
     color: '#222',
   },
-  unitPickerClose: {
-    fontSize: 28,
-    color: '#aaa',
+  addProductModalContent: {
+    gap: 14,
   },
-  unitGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  unitOption: {
-    flex: 1,
-    minWidth: '45%',
-    paddingVertical: 14,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#eee',
-  },
-  unitOptionSelected: {
-    backgroundColor: '#FFF5E6',
-    borderColor: '#FC8019',
-  },
-  unitOptionText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#222',
-  },
-  unitOptionTextSelected: {
-    color: '#FC8019',
-  },
-  unitSelectRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
-  unitLabel: {
-    fontSize: 13,
+  inputLabel: {
+    fontSize: 12,
     fontWeight: '700',
-    color: '#222',
-    flex: 0.3,
-  },
-  unitSelectBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#FC8019',
-    backgroundColor: '#FFF5E6',
-    borderRadius: 10,
-    padding: 12,
-  },
-  unitSelectText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FC8019',
+    color: '#666',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });
