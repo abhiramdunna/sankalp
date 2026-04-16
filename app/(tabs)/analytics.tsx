@@ -1,14 +1,14 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Dimensions,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Dimensions,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 // import { LineChart, BarChart } from 'react-native-chart-kit'; // Package not installed
 
@@ -131,11 +131,8 @@ export default function AnalyticsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <View>
-          <Text style={styles.headerTitle}>Analytics · విశ్లేషణలు</Text>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>📊 Analytics</Text>
           <Text style={styles.headerSub}>Business insights at a glance</Text>
         </View>
       </View>
@@ -158,7 +155,7 @@ export default function AnalyticsScreen() {
 
         {/* Revenue Card */}
         <View style={styles.revenueCard}>
-          <Text style={styles.revenueLabel}>Revenue · ఆదాయం</Text>
+          <Text style={styles.revenueLabel}>Revenue</Text>
           <Text style={styles.revenueValue}>₹{getPeriodRevenue().toLocaleString('en-IN')}</Text>
           <Text style={styles.revenueSub}>{activePeriod} collection</Text>
           <View style={styles.profitBadge}>
@@ -351,30 +348,24 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#FC8019',
-    padding: 14,
+    padding: 16,
     paddingHorizontal: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerContent: {
+    flex: 1,
   },
   headerTitle: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '900',
+    letterSpacing: -0.5,
   },
   headerSub: {
     color: 'rgba(255,255,255,0.75)',
     fontSize: 11,
     fontWeight: '600',
-    marginTop: 1,
+    marginTop: 3,
   },
   body: {
     flex: 1,

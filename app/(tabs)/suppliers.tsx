@@ -3,14 +3,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 // Types
@@ -31,42 +31,7 @@ interface Supplier {
 
 export default function SuppliersScreen() {
   const router = useRouter();
-  const [suppliers, setSuppliers] = useState<Supplier[]>([
-    {
-      id: 1,
-      name: 'Raju Wholesale',
-      category: 'Puri & dry goods',
-      orders: [
-        { id: 101, date: '10 Apr', amount: 8500, paid: 6000, note: 'Monthly stock' },
-        { id: 102, date: '11 Apr', amount: 3000, paid: 0, note: 'Extra order' },
-      ],
-    },
-    {
-      id: 2,
-      name: 'Venkat Fresh Mart',
-      category: 'Vegetables & onions',
-      orders: [
-        { id: 201, date: '9 Apr', amount: 3200, paid: 3200, note: 'Weekly vegs' },
-      ],
-    },
-    {
-      id: 3,
-      name: 'Sri Lakshmi Traders',
-      category: 'Masala & spices',
-      orders: [
-        { id: 301, date: '8 Apr', amount: 4500, paid: 2000, note: 'Masala stock' },
-        { id: 302, date: '11 Apr', amount: 2000, paid: 0, note: 'Urgent reorder' },
-      ],
-    },
-    {
-      id: 4,
-      name: 'Hari Oil Suppliers',
-      category: 'Cooking oil & ghee',
-      orders: [
-        { id: 401, date: '5 Apr', amount: 6000, paid: 6000, note: 'Full month oil' },
-      ],
-    },
-  ]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   
   const [payModalVisible, setPayModalVisible] = useState(false);
   const [addSupModalVisible, setAddSupModalVisible] = useState(false);
@@ -306,7 +271,7 @@ export default function SuppliersScreen() {
         onPress={() => setAddSupModalVisible(false)}
       >
         <View style={styles.addModalBox}>
-          <Text style={styles.addModalTitle}>➕ Add Supplier · కొత్త సప్లయర్</Text>
+          <Text style={styles.addModalTitle}>➕ Add Supplier</Text>
           <TextInput
             style={styles.addModalInput}
             placeholder="Supplier name"
@@ -410,7 +375,7 @@ export default function SuppliersScreen() {
         {!isPaid && (
           <TouchableOpacity style={styles.payButton} onPress={() => openPayModal(supplier)}>
             <Text style={styles.payButtonText}>
-              Pay ₹{pending.toLocaleString('en-IN')} pending · చెల్లించు
+              Pay ₹{pending.toLocaleString('en-IN')} pending
             </Text>
           </TouchableOpacity>
         )}
@@ -433,7 +398,7 @@ export default function SuppliersScreen() {
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <View>
-          <Text style={styles.headerTitle}>Suppliers · సప్లయర్లు</Text>
+          <Text style={styles.headerTitle}>Suppliers</Text>
           <Text style={styles.headerSub}>Manage vendor bills & payments</Text>
         </View>
       </View>
@@ -444,7 +409,7 @@ export default function SuppliersScreen() {
         
         {/* Add Supplier Card */}
         <TouchableOpacity style={styles.addSupplierCard} onPress={() => setAddSupModalVisible(true)}>
-          <Text style={styles.addSupplierTitle}>➕ Add Supplier · కొత్త సప్లయర్</Text>
+          <Text style={styles.addSupplierTitle}>➕ Add Supplier</Text>
           <Text style={styles.addSupplierHint}>Tap to add new supplier</Text>
         </TouchableOpacity>
         

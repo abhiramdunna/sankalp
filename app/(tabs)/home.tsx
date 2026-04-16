@@ -1,3 +1,5 @@
+import { useAuthStore } from '@/lib/store';
+import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -5,14 +7,18 @@ import React, { useEffect, useState } from 'react';
 import {
   Alert,
   FlatList,
+  Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Types
 interface BillItem {
@@ -41,6 +47,8 @@ interface SaleLog {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const user = useAuthStore((state) => state.user);
   const [bizName, setBizName] = useState('Sri Venkata Tiffins');
   const [todayTotal, setTodayTotal] = useState(0);
   const [salesLog, setSalesLog] = useState<SaleLog[]>([]);
@@ -52,6 +60,13 @@ export default function HomeScreen() {
   const [profileVisible, setProfileVisible] = useState(false);
   const [totalBills, setTotalBills] = useState(0);
   const [nextDue, setNextDue] = useState('');
+  const [billingMode, setBillingMode] = useState<'full' | 'quick' | null>(null);
+  const [quickAmount, setQuickAmount] = useState('');
+  const [billingSessionActive, setBillingSessionActive] = useState(false);
+  const [billingCustomerName, setBillingCustomerName] = useState('');
+  const [billingCustomerPhone, setBillingCustomerPhone] = useState('');
+  const [billingItems, setBillingItems] = useState<BillItem[]>([]);
+  const [products, setProducts] = useState<BillItem[]>([]);
 
   // Load data on mount
   useEffect(() => {
@@ -81,13 +96,45 @@ export default function HomeScreen() {
   // Load all data from storage
   const loadData = async () => {
     try {
+      console.log('📦 Loading home data...');
+      
+      // ✅ Get user from Zustand store (already populated during login)
+      console.log('👤 User from store:', user?.email, user?.id);
+      
+      if (user?.id) {
+        console.log('🔍 Fetching profile for user:', user.id);
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('business_name')
+          .eq('id', user.id)
+          .maybeSingle();
+        
+        console.log('📊 Profile result:', { profile, error: profileError });
+        
+        if (profile?.business_name) {
+          console.log('✅ Loaded business name:', profile.business_name);
+          setBizName(profile.business_name);
+        } else {
+          console.log('⚠️ No business name found in profile');
+        }
+      } else {
+        console.log('⚠️ No user in store');
+      }
+
       const storedSales = await AsyncStorage.getItem('salesLog');
       if (storedSales) {
         const parsed = JSON.parse(storedSales);
-        setSalesLog(parsed);
-        const total = parsed.reduce((sum: number, sale: SaleLog) => sum + sale.total, 0);
-        setTodayTotal(total);
-        setTotalBills(parsed.length);
+        if (Array.isArray(parsed)) {
+          setSalesLog(parsed);
+          const total = parsed.reduce((sum: number, sale: SaleLog) => sum + sale.total, 0);
+          setTodayTotal(total);
+          setTotalBills(parsed.length);
+        } else {
+          console.warn('⚠️ Corrupted salesLog data, resetting');
+          setSalesLog([]);
+          setTodayTotal(0);
+          setTotalBills(0);
+        }
       }
 
       const storedSessions = await AsyncStorage.getItem('sessions');
@@ -95,7 +142,7 @@ export default function HomeScreen() {
         setSessions(JSON.parse(storedSessions));
       }
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('❌ Error loading data:', error);
     }
   };
 
@@ -135,6 +182,53 @@ export default function HomeScreen() {
       pathname: '/products',
       params: { sessionId: sessionId.toString() }
     });
+  };
+
+  // ✅ Save quick transaction
+  const saveQuickTransaction = async () => {
+    if (!newCustName.trim() || !quickAmount.trim()) {
+      Alert.alert('Error', 'Please enter name and amount');
+      return;
+    }
+
+    const amount = parseFloat(quickAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+
+    const newBill: SaleLog = {
+      total: amount,
+      time: new Date().toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      }),
+      items: [{ 
+        name: 'Quick Payment', 
+        price: amount, 
+        qty: 1 
+      }],
+      customerName: newCustName || 'Walk-in',
+      phone: newCustPhone,
+    };
+
+    const updatedBills = [newBill, ...salesLog];
+    setSalesLog(updatedBills);
+    await AsyncStorage.setItem('salesLog', JSON.stringify(updatedBills));
+
+    // Update totals
+    setTodayTotal(prev => prev + amount);
+    setTotalBills(prev => prev + 1);
+
+    // Reset and close
+    setNewCustName('');
+    setNewCustPhone('');
+    setQuickAmount('');
+    setBillingMode(null);
+    setModalVisible(false);
+
+    Alert.alert('Success', `Transaction saved! ₹${amount}`);
   };
 
   // View completed bill details
@@ -206,10 +300,13 @@ export default function HomeScreen() {
           <View style={styles.profileHeader}>
             <Text style={styles.profileBizName}>{bizName}</Text>
             <Text style={styles.profileBizSub}>🏪 Hyderabad · Active since 2024</Text>
+            <Text style={styles.profileEmail}>📧 {user?.email || 'Not available'}</Text>
             <View style={styles.qrBox}>
-              <Text style={styles.qrEmoji}>▦</Text>
-              <Text style={styles.qrText}>QR Code{'\n'}Payment</Text>
-              <Text style={styles.qrSubText}>Tap to share</Text>
+              <Image
+                source={require('@/assets/images/icon.png')}
+                style={styles.qrImage}
+                resizeMode="contain"
+              />
             </View>
           </View>
 
@@ -250,28 +347,50 @@ export default function HomeScreen() {
     </Modal>
   );
 
-  // New Customer Modal
-  const CustomerModal = () => (
+  // Transaction Mode Modal (shows two options)
+  const TransactionModeModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={false}
+      onRequestClose={() => {
+        setBillingMode(null);
+      }}
+    >
+      <View style={styles.modalOverlay} />
+    </Modal>
+  );
+
+  // New Customer Modal - Quick Payment Version
+  const QuickPaymentModal = () => (
     <Modal
       animationType="slide"
       transparent={true}
-      visible={modalVisible}
-      onRequestClose={() => setModalVisible(false)}
+      visible={billingMode === 'quick'}
+      onRequestClose={() => {
+        setBillingMode(null);
+      }}
     >
       <TouchableOpacity 
-        style={styles.modalOverlay} 
-        activeOpacity={1} 
-        onPress={() => setModalVisible(false)}
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={() => {
+          setBillingMode(null);
+        }}
       >
-        <View style={styles.modalBox}>
-          <Text style={styles.modalTitle}>New Bill · కొత్త బిల్లు</Text>
-          <Text style={styles.modalSub}>Enter customer details to start billing</Text>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBox} pointerEvents="auto">
+          <Text style={styles.modalTitle}>Quick Payment</Text>
+          <Text style={styles.modalSub}>Enter customer name and amount</Text>
           
           <TextInput
             style={styles.modalInput}
-            placeholder="Customer name (optional)"
+            placeholder="Customer name"
             value={newCustName}
             onChangeText={setNewCustName}
+            placeholderTextColor="#999"
+            editable={true}
+            selectTextOnFocus={false}
+            blurOnSubmit={false}
           />
           
           <TextInput
@@ -280,27 +399,216 @@ export default function HomeScreen() {
             value={newCustPhone}
             onChangeText={setNewCustPhone}
             keyboardType="phone-pad"
+            placeholderTextColor="#999"
+            editable={true}
+            selectTextOnFocus={false}
+            blurOnSubmit={false}
+          />
+
+          <TextInput
+            style={[styles.modalInput, styles.amountInput]}
+            placeholder="Amount (₹)"
+            value={quickAmount}
+            onChangeText={setQuickAmount}
+            keyboardType="decimal-pad"
+            placeholderTextColor="#999"
+            editable={true}
+            selectTextOnFocus={false}
+            blurOnSubmit={false}
           />
           
-          <TouchableOpacity style={styles.modalBtn} onPress={startNewSession}>
-            <Text style={styles.modalBtnText}>Start Billing ⚡</Text>
+          <TouchableOpacity style={styles.modalBtn} onPress={saveQuickTransaction}>
+            <Text style={styles.modalBtnText}>Save Payment ✓</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity onPress={() => setModalVisible(false)}>
+          <TouchableOpacity onPress={() => {
+            setBillingMode(null);
+          }}>
             <Text style={styles.modalCancel}>Cancel</Text>
           </TouchableOpacity>
-        </View>
+        </KeyboardAvoidingView>
       </TouchableOpacity>
     </Modal>
   );
 
+  // Live Billing Modal - Select items and add to bill
+  const LiveBillingModal = () => {
+    const billTotal = billingItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
+    
+    const handleAddItem = (item: BillItem) => {
+      const existingItem = billingItems.find(i => i.name === item.name);
+      if (existingItem) {
+        setBillingItems(billingItems.map(i => 
+          i.name === item.name ? { ...i, qty: i.qty + 1 } : i
+        ));
+      } else {
+        setBillingItems([...billingItems, { ...item, qty: 1 }]);
+      }
+    };
+
+    const handleRemoveItem = (itemName: string) => {
+      setBillingItems(billingItems.filter(i => i.name !== itemName));
+    };
+
+    const handleCompleteNill = async () => {
+      if (!billingCustomerName.trim()) {
+        Alert.alert('Error', 'Please enter customer name');
+        return;
+      }
+
+      if (billingItems.length === 0) {
+        Alert.alert('Error', 'Please add at least one item');
+        return;
+      }
+
+      const newBill: SaleLog = {
+        total: billTotal,
+        time: new Date().toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: true 
+        }),
+        items: billingItems,
+        customerName: billingCustomerName,
+        phone: billingCustomerPhone,
+      };
+
+      const updatedBills = [newBill, ...salesLog];
+      setSalesLog(updatedBills);
+      await AsyncStorage.setItem('salesLog', JSON.stringify(updatedBills));
+
+      setTodayTotal(prev => prev + billTotal);
+      setTotalBills(prev => prev + 1);
+
+      setBillingSessionActive(false);
+      setBillingCustomerName('');
+      setBillingCustomerPhone('');
+      setBillingItems([]);
+
+      Alert.alert('Success', `Bill saved! ₹${billTotal}`);
+    };
+
+    // Sample products list
+    const sampleProducts = [
+      { name: 'Coffee', price: 80, qty: 0 },
+      { name: 'Tea', price: 40, qty: 0 },
+      { name: 'Samosa', price: 20, qty: 0 },
+      { name: 'Dosa', price: 60, qty: 0 },
+      { name: 'Idly', price: 30, qty: 0 },
+      { name: 'Vada', price: 35, qty: 0 },
+    ];
+
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={billingSessionActive}
+        onRequestClose={() => {
+          setBillingSessionActive(false);
+        }}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => {
+            setBillingSessionActive(false);
+          }}
+        >
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.liveBillingBox} pointerEvents="auto">
+            <View style={styles.billingHeader}>
+              <Text style={styles.modalTitle}>Live Billing</Text>
+              <TouchableOpacity onPress={() => setBillingSessionActive(false)}>
+                <Ionicons name="close" size={28} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Customer Details */}
+            <View style={styles.billingSection}>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Customer name"
+                value={billingCustomerName}
+                onChangeText={setBillingCustomerName}
+                placeholderTextColor="#999"
+              />
+              
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Phone (optional)"
+                value={billingCustomerPhone}
+                onChangeText={setBillingCustomerPhone}
+                keyboardType="phone-pad"
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            {/* Products List */}
+            <View style={styles.billingSection}>
+              <Text style={styles.billingSubTitle}>Add Items</Text>
+              <ScrollView style={styles.productsList} nestedScrollEnabled={true}>
+                {sampleProducts.map((product) => (
+                  <View key={product.name} style={styles.productItem}>
+                    <View style={styles.productInfo}>
+                      <Text style={styles.productName}>{product.name}</Text>
+                      <Text style={styles.productPrice}>₹{product.price}</Text>
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.addBtn}
+                      onPress={() => handleAddItem(product)}
+                    >
+                      <Ionicons name="add" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Selected Items */}
+            {billingItems.length > 0 && (
+              <View style={styles.billingSection}>
+                <Text style={styles.billingSubTitle}>Bill Items</Text>
+                {billingItems.map((item) => (
+                  <View key={item.name} style={styles.billItemRow}>
+                    <View>
+                      <Text style={styles.billItemName}>{item.name} x {item.qty}</Text>
+                      <Text style={styles.billItemPrice}>₹{item.price * item.qty}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => handleRemoveItem(item.name)}>
+                      <Ionicons name="trash" size={20} color="#A32D2D" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Total and Complete Button */}
+            <View style={styles.billingFooter}>
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>Total:</Text>
+                <Text style={styles.totalAmount}>₹{billTotal}</Text>
+              </View>
+              <TouchableOpacity style={styles.completeBillBtn} onPress={handleCompleteNill}>
+                <Text style={styles.completeBillText}>Complete Bill ✓</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setBillingSessionActive(false)}>
+                <Text style={styles.modalCancel}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </TouchableOpacity>
+      </Modal>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <ProfileModal />
-      <CustomerModal />
+      <TransactionModeModal />
+      <QuickPaymentModal />
+      <LiveBillingModal />
       
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerTop}>
           <View>
             <Text style={styles.shopName}>{bizName}</Text>
@@ -316,7 +624,7 @@ export default function HomeScreen() {
         
         {/* Collection Card */}
         <View style={styles.collectionCard}>
-          <Text style={styles.collectionLabel}>Today's Collection · నేటి వసూలు</Text>
+          <Text style={styles.collectionLabel}>Today's Collection</Text>
           <Text style={styles.collectionValue}>₹{todayTotal.toLocaleString('en-IN')}</Text>
           <Text style={styles.collectionSub}>
             {salesLog.length} bill{salesLog.length !== 1 ? 's' : ''} today
@@ -325,13 +633,41 @@ export default function HomeScreen() {
       </View>
 
       {/* Body */}
-      <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
-        <TouchableOpacity 
-          style={styles.newBillBtn} 
-          onPress={() => setModalVisible(true)}
-        >
-          <Text style={styles.newBillBtnText}>⚡ New Bill · కొత్త బిల్లు</Text>
-        </TouchableOpacity>
+      <ScrollView 
+        style={styles.body} 
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Two Transaction Options */}
+        <View style={styles.transactionOptions}>
+          <TouchableOpacity 
+            style={[styles.transactionCard, styles.quickPaymentCard]}
+            onPress={() => {
+              setNewCustName('');
+              setNewCustPhone('');
+              setQuickAmount('');
+              setBillingMode('quick');
+            }}
+          >
+            <Ionicons name="flash" size={32} color="#FC8019" />
+            <Text style={styles.transactionCardTitle}>Quick Payment</Text>
+            <Text style={styles.transactionCardSub}>Name + Amount</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.transactionCard, styles.liveBillingCard]}
+            onPress={() => {
+              setBillingCustomerName('');
+              setBillingCustomerPhone('');
+              setBillingItems([]);
+              setBillingSessionActive(true);
+            }}
+          >
+            <Ionicons name="cart" size={32} color="#27500A" />
+            <Text style={styles.transactionCardTitle}>Live Billing</Text>
+            <Text style={styles.transactionCardSub}>Add items</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Active Sessions */}
         {sessions.length > 0 && (
@@ -350,10 +686,10 @@ export default function HomeScreen() {
         )}
 
         {/* Completed Bills */}
-        <Text style={styles.todayTitle}>Today's Bills · నేటి బిల్లులు</Text>
+        <Text style={styles.todayTitle}>Today's Bills</Text>
         {salesLog.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No sales yet · ఇంకా అమ్మకాలు లేవు</Text>
+            <Text style={styles.emptyText}>No sales yet</Text>
           </View>
         ) : (
           <FlatList
@@ -400,7 +736,6 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#FC8019',
     padding: 16,
-    paddingTop: 12,
     paddingBottom: 20,
   },
   headerTop: {
@@ -462,6 +797,46 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     padding: 14,
+  },
+  transactionOptions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 18,
+  },
+  transactionCard: {
+    flex: 1,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 140,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  quickPaymentCard: {
+    backgroundColor: '#FFF5E6',
+    borderWidth: 2,
+    borderColor: '#FC8019',
+  },
+  liveBillingCard: {
+    backgroundColor: '#F0F8E6',
+    borderWidth: 2,
+    borderColor: '#27500A',
+  },
+  transactionCardTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    marginTop: 8,
+    color: '#222',
+  },
+  transactionCardSub: {
+    fontSize: 11,
+    color: '#666',
+    fontWeight: '600',
+    marginTop: 2,
   },
   newBillBtn: {
     backgroundColor: '#FC8019',
@@ -613,6 +988,57 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
   },
+  modeSelectionBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 32,
+  },
+  modeTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#111827',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    marginBottom: 12,
+    borderRadius: 14,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#ececec',
+  },
+  modeIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  modeContent: {
+    flex: 1,
+  },
+  modeOptionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  modeOptionSub: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  amountInput: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FC8019',
+  },
   modalBox: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 24,
@@ -692,32 +1118,27 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: 16,
   },
+  profileEmail: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '600',
+    marginBottom: 16,
+  },
   qrBox: {
     width: 140,
     height: 140,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff',
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#ddd',
     borderStyle: 'dashed',
+    overflow: 'hidden',
   },
-  qrEmoji: {
-    fontSize: 28,
-    marginBottom: 6,
-  },
-  qrText: {
-    fontSize: 11,
-    color: '#bbb',
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  qrSubText: {
-    fontSize: 10,
-    color: '#FC8019',
-    fontWeight: '700',
-    marginTop: 4,
+  qrImage: {
+    width: 130,
+    height: 130,
   },
   profileGrid: {
     flexDirection: 'row',
@@ -772,6 +1193,127 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   profileCloseText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  // Live Billing Modal Styles
+  liveBillingBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+    padding: 20,
+    paddingTop: 16,
+  },
+  billingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  billingSection: {
+    marginBottom: 16,
+  },
+  billingSubTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#222',
+    marginBottom: 10,
+  },
+  productsList: {
+    maxHeight: 200,
+    marginBottom: 10,
+  },
+  productItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  productInfo: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#222',
+  },
+  productPrice: {
+    fontSize: 12,
+    color: '#FC8019',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  addBtn: {
+    backgroundColor: '#FC8019',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  billItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f0f8e6',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#27500A',
+  },
+  billItemName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#222',
+  },
+  billItemPrice: {
+    fontSize: 12,
+    color: '#27500A',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  billingFooter: {
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    paddingTop: 12,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingVertical: 10,
+    backgroundColor: '#FC8019',
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  totalLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  totalAmount: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#fff',
+  },
+  completeBillBtn: {
+    backgroundColor: '#27500A',
+    padding: 13,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  completeBillText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '800',

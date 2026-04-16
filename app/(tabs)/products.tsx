@@ -3,15 +3,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  FlatList,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    FlatList,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 // Types
@@ -19,6 +19,7 @@ interface Product {
   id: number;
   name: string;
   price: number;
+  unit: string;
   sales: number;
 }
 
@@ -44,22 +45,27 @@ export default function ProductsScreen() {
   const sessionId = params.sessionId ? parseInt(params.sessionId as string) : null;
   
   const [products, setProducts] = useState<Product[]>([
-    { id: 1, name: 'Puri plate', price: 20, sales: 0 },
-    { id: 2, name: 'Masala puri', price: 25, sales: 0 },
-    { id: 3, name: 'Tamarind water', price: 10, sales: 0 },
-    { id: 4, name: 'Special plate', price: 40, sales: 0 },
-    { id: 5, name: 'Idly 2pcs', price: 15, sales: 0 },
+    { id: 1, name: 'Puri plate', price: 20, unit: 'pieces', sales: 0 },
+    { id: 2, name: 'Masala puri', price: 25, unit: 'pieces', sales: 0 },
+    { id: 3, name: 'Tamarind water', price: 10, unit: 'liters', sales: 0 },
+    { id: 4, name: 'Special plate', price: 40, unit: 'pieces', sales: 0 },
+    { id: 5, name: 'Idly 2pcs', price: 15, unit: 'pieces', sales: 0 },
   ]);
   
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [newProductName, setNewProductName] = useState('');
   const [newProductPrice, setNewProductPrice] = useState('');
+  const [newProductUnit, setNewProductUnit] = useState('pieces');
+  const [unitPickerVisible, setUnitPickerVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [pickerVisible, setPickerVisible] = useState(false);
   const [npValue, setNpValue] = useState('0');
   const [itemName, setItemName] = useState('');
   const [customItemName, setCustomItemName] = useState('');
   const [customItemAmount, setCustomItemAmount] = useState('');
+
+  const unitOptions = ['pieces', 'kgs', 'liters', 'grams', 'ml', 'units'];
 
   // Load products and sessions
   useEffect(() => {
@@ -154,14 +160,16 @@ export default function ProductsScreen() {
 
   // Remove item from bill
   const removeItem = (index: number) => {
-    const newItems = [...currentSession!.items];
+    if (!currentSession) return;
+    const newItems = [...currentSession.items];
     newItems.splice(index, 1);
     updateCurrentSession(newItems);
   };
 
   // Adjust quantity
   const adjustQuantity = (index: number, delta: number) => {
-    const newItems = [...currentSession!.items];
+    if (!currentSession) return;
+    const newItems = [...currentSession.items];
     newItems[index].qty = Math.max(1, newItems[index].qty + delta);
     updateCurrentSession(newItems);
   };
@@ -221,6 +229,7 @@ export default function ProductsScreen() {
       id: Date.now(),
       name: newProductName.trim(),
       price,
+      unit: newProductUnit,
       sales: 0,
     };
     
@@ -420,7 +429,9 @@ export default function ProductsScreen() {
     );
   }
 
-  return (
+  // If in a billing session, show Live Bill UI
+  if (currentSession != null) {
+    return (
     <View style={styles.container}>
       <PickerModal />
       
@@ -439,9 +450,9 @@ export default function ProductsScreen() {
       <View style={styles.customerDisplay}>
         <Text style={styles.customerIcon}>👤</Text>
         <View style={styles.customerInfo}>
-          <Text style={styles.customerName}>{currentSession?.customerName || '—'}</Text>
-          {currentSession?.phone && (
-            <Text style={styles.customerPhone}>📞 {currentSession.phone}</Text>
+          <Text style={styles.customerName}>{currentSession!.customerName}</Text>
+          {currentSession!.phone && (
+            <Text style={styles.customerPhone}>📞 {currentSession!.phone}</Text>
           )}
         </View>
       </View>
@@ -454,13 +465,13 @@ export default function ProductsScreen() {
 
       {/* Bill Items */}
       <ScrollView style={styles.itemsArea}>
-        {currentSession?.items.length === 0 ? (
+        {currentSession!.items.length === 0 ? (
           <View style={styles.emptyBill}>
             <Text style={styles.emptyBillText}>No items yet</Text>
             <Text style={styles.emptyBillSub}>Use numpad below or pick from catalogue</Text>
           </View>
         ) : (
-          currentSession?.items.map((item, index) => (
+          currentSession!.items.map((item: BillItem, index: number) => (
             <View key={index} style={styles.billItem}>
               <Text style={styles.itemName}>
                 {item.name}
@@ -547,9 +558,9 @@ export default function ProductsScreen() {
         </View>
         
         <TouchableOpacity 
-          style={[styles.collectBtn, !currentSession?.items.length && styles.collectBtnDisabled]}
+          style={[styles.collectBtn, !currentSession!.items.length && styles.collectBtnDisabled]}
           onPress={collectBill}
-          disabled={!currentSession?.items.length}
+          disabled={!currentSession!.items.length}
         >
           <Text style={styles.collectBtnText}>Collect · వసూలు చేయి ✓</Text>
         </TouchableOpacity>
@@ -578,11 +589,17 @@ export default function ProductsScreen() {
         </TouchableOpacity>
       </View>
 
+    </View>
+  );
+  }
+
+  // Default: show Products Management UI when not in a billing session
+  return (
+    <View style={styles.container}>
       {/* Product Catalogue Section */}
       <View style={styles.catalogueSection}>
         <View style={styles.catalogueHeader}>
-          <Text style={styles.catalogueTitle}>Product Catalogue · కాటలాగ్</Text>
-          <Text style={styles.catalogueSub}>Edit & manage your products</Text>
+          <Text style={styles.catalogueTitle}>📦 Your Products</Text>
         </View>
         
         <FlatList
@@ -607,10 +624,45 @@ export default function ProductsScreen() {
             onChangeText={setNewProductPrice}
             keyboardType="numeric"
           />
+          
+          <View style={styles.unitSelectRow}>
+            <Text style={styles.unitLabel}>Unit</Text>
+            <TouchableOpacity 
+              style={styles.unitSelectBtn}
+              onPress={() => setUnitPickerVisible(true)}
+            >
+              <Text style={styles.unitSelectText}>{newProductUnit}</Text>
+              <Ionicons name="chevron-down" size={18} color="#FC8019" />
+            </TouchableOpacity>
+          </View>
+          
           <TouchableOpacity style={styles.saveBtn} onPress={addProduct}>
-            <Text style={styles.saveBtnText}>Save Product · సేవ్ చేయి</Text>
+            <Text style={styles.saveBtnText}>Save Product ✓</Text>
           </TouchableOpacity>
         </View>
+      </View>
+
+      {/* Bottom Nav */}
+      <View style={styles.bottomNav}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
+          <Ionicons name="home" size={24} color="#aaa" />
+          <Text style={styles.navLabel}>Home</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
+          <Ionicons name="pricetag" size={24} color="#FC8019" />
+          <Text style={[styles.navLabel, { color: '#FC8019' }]}>Products</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/analytics')}>
+          <Ionicons name="stats-chart" size={24} color="#aaa" />
+          <Text style={styles.navLabel}>Analytics</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/suppliers')}>
+          <Ionicons name="people" size={24} color="#aaa" />
+          <Text style={styles.navLabel}>Suppliers</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -1122,5 +1174,115 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     fontWeight: '800',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#eee',
+    gap: 8,
+    marginBottom: 14,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#222',
+  },
+  productDetails: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  productUnit: {
+    fontSize: 11,
+    backgroundColor: '#FFF5E6',
+    color: '#FC8019',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    fontWeight: '700',
+  },
+  unitPickerBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 18,
+    maxHeight: '50%',
+  },
+  unitPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  unitPickerTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#222',
+  },
+  unitPickerClose: {
+    fontSize: 28,
+    color: '#aaa',
+  },
+  unitGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  unitOption: {
+    flex: 1,
+    minWidth: '45%',
+    paddingVertical: 14,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#eee',
+  },
+  unitOptionSelected: {
+    backgroundColor: '#FFF5E6',
+    borderColor: '#FC8019',
+  },
+  unitOptionText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#222',
+  },
+  unitOptionTextSelected: {
+    color: '#FC8019',
+  },
+  unitSelectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  unitLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#222',
+    flex: 0.3,
+  },
+  unitSelectBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FC8019',
+    backgroundColor: '#FFF5E6',
+    borderRadius: 10,
+    padding: 12,
+  },
+  unitSelectText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FC8019',
   },
 });

@@ -1,20 +1,23 @@
+import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase'; // adjust path if needed
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function Onboarding() {
   const router = useRouter();
+  const user = useAuthStore((state) => state.user);
+  const session = useAuthStore((state) => state.session);
   const [businessName, setBusinessName] = useState('');
   const [city, setCity] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -25,19 +28,46 @@ export default function Onboarding() {
       return;
     }
 
+    if (!user) {
+      Alert.alert('Error', 'User information not found. Please sign in again.', [
+        {
+          text: 'OK',
+          onPress: () => router.replace('/login'),
+        }
+      ]);
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      console.log('Onboarding - Current user:', user);
-      if (!user) throw new Error('No user found');
+      console.log('💾 Onboarding - Preparing to upsert profile...');
+      
+      // ✅ CRITICAL: Restore session before database query
+      // This ensures the RLS policy can verify the user
+      if (session?.access_token && session?.refresh_token) {
+        console.log('🔐 Restoring session from store...');
+        const { error: setSessionError } = await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        });
+        
+        if (setSessionError) {
+          console.warn('⚠️ Could not restore session:', setSessionError.message);
+        } else {
+          console.log('✅ Session restored');
+        }
+      } else {
+        console.warn('⚠️ No session tokens in store');
+      }
 
-      console.log('Onboarding - Upserting profile:', {
-        id: user.id,
-        business_name: businessName.trim(),
+      console.log('💾 Onboarding - Upserting profile for user:', {
+        userId: user.id,
+        email: user.email,
+        businessName: businessName.trim(),
         city: city.trim(),
       });
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .upsert({
           id: user.id,
@@ -45,19 +75,26 @@ export default function Onboarding() {
           city: city.trim(),
         });
 
+      console.log('📊 Upsert response:', { data, error });
+
       if (error) {
-        console.log('Onboarding - Upsert error:', error);
-        throw error;
+        console.error('❌ Onboarding - Upsert error details:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+        });
+        throw new Error(`Database error: ${error.message || JSON.stringify(error)}`);
       }
 
-      console.log('Onboarding - Profile updated successfully, redirecting to dashboard');
-      router.replace('/(tabs)/dashboard');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Something went wrong.';
-      console.log('Onboarding - Error:', message);
-      Alert.alert('Error', message);
-    } finally {
+      console.log('✅ Onboarding - Profile updated successfully');
       setIsLoading(false);
+      console.log('🏠 Navigating to home...');
+      router.replace('/(tabs)/home');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error('❌ Onboarding - Full error:', error);
+      setIsLoading(false);
+      Alert.alert('Error', message);
     }
   };
 

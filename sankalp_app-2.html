@@ -163,7 +163,7 @@ body{background:#d4d4d4;display:flex;justify-content:center;padding:20px;min-hei
 <!-- NEW CUSTOMER MODAL -->
 <div class="modal-overlay" id="new-cust-modal">
   <div class="modal-box">
-    <div class="modal-title">New Customer · కొత్త కస్టమర్</div>
+    <div class="modal-title">New Customer</div>
     <input class="modal-input" id="modal-cust-name" placeholder="Customer name (optional)" autocomplete="off" />
     <button class="modal-btn" onclick="startNewSession()">Start Bill →</button>
     <button class="modal-cancel" onclick="closeModal()">Cancel</button>
@@ -175,19 +175,19 @@ body{background:#d4d4d4;display:flex;justify-content:center;padding:20px;min-hei
   <div class="statusbar"><span id="st-time-home">11:38</span><span>Sankalp</span><span>5G 72%</span></div>
   <div class="home-header">
     <div class="shop-row">
-      <div><div class="shop-name">Sankalp 🏪</div><div class="shop-sub">వ్యాపారం · Your business, your way</div></div>
+      <div><div class="shop-name">Sankalp 🏪</div><div class="shop-sub">Your business, your way</div></div>
       <button class="notif-btn">🔔</button>
     </div>
     <div class="collection-card">
-      <div class="coll-label">Today's collection · నేటి వసూలు</div>
+      <div class="coll-label">Today's collection</div>
       <div class="coll-value" id="home-total">₹0</div>
       <div class="coll-sub" id="home-sub">No sales yet today</div>
     </div>
   </div>
   <div class="home-body">
-    <button class="pay-btn-big" onclick="openNewBillModal()"><span style="font-size:22px">⚡</span> New Bill · కొత్త బిల్లు</button>
-    <div class="today-list-title">Today's bills · నేటి బిల్లులు</div>
-    <div id="home-sale-list"><div style="text-align:center;padding:30px 20px;color:#bbb;font-size:13px">No sales yet · ఇంకా అమ్మకాలు లేవు</div></div>
+    <button class="pay-btn-big" onclick="openNewBillModal()"><span style="font-size:22px">⚡</span> New Bill</button>
+    <div class="today-list-title">Today's bills</div>
+    <div id="home-sale-list"><div style="text-align:center;padding:30px 20px;color:#bbb;font-size:13px">No sales yet</div></div>
   </div>
   <div class="bnav">
     <button class="bni active" id="nav-home" onclick="navTo('home')"><span class="bicon">🏠</span><div class="blabel" style="color:#FC8019">Home</div></button>
@@ -204,7 +204,7 @@ body{background:#d4d4d4;display:flex;justify-content:center;padding:20px;min-hei
   <div class="bill-header">
     <div class="bill-header-top">
       <button class="back-btn" onclick="navTo('home')">←</button>
-      <div style="flex:1"><div class="htitle">Live Bill · లైవ్ బిల్లు</div><div class="hsub">Add items · collect when done</div></div>
+      <div style="flex:1"><div class="htitle">Live Bill</div><div class="hsub">Add items · collect when done</div></div>
       <button class="pause-btn" onclick="openNewBillModal()">+ New</button>
     </div>
     <div class="customer-name-row">
@@ -215,7 +215,7 @@ body{background:#d4d4d4;display:flex;justify-content:center;padding:20px;min-hei
   <!-- Hold Tabs -->
   <div class="hold-tabs" id="hold-tabs"></div>
   <div class="bill-total-bar">
-    <div class="btl">Running total · మొత్తం</div>
+    <div class="btl">Running total</div>
     <div class="btv" id="bill-total">₹0</div>
   </div>
   <div class="bill-items-area" id="bill-items">
@@ -236,7 +236,7 @@ body{background:#d4d4d4;display:flex;justify-content:center;padding:20px;min-hei
       <button class="btn-outline" onclick="openPicker()">📋 From catalogue</button>
       <button class="btn-fill" onclick="npAdd()">+ Add item</button>
     </div>
-    <button class="collect-btn" id="collect-btn" onclick="collectBill()" disabled>Collect · వసూలు చేయి</button>
+    <button class="collect-btn" id="collect-btn" onclick="collectBill()" disabled>Collect</button>
   </div>
   <!-- Bill screen nav -->
   <div class="bnav">
@@ -251,7 +251,7 @@ body{background:#d4d4d4;display:flex;justify-content:center;padding:20px;min-hei
 <!-- CATALOGUE PICKER OVERLAY -->
 <div class="cat-picker" id="cat-picker">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-    <span style="font-size:15px;font-weight:800;color:#222">Pick product · ఉత్పత్తి ఎంచుకో</span>
+    <span style="font-size:15px;font-weight:800;color:#222">Pick product</span>
     <button onclick="closePicker()" style="background:none;border:none;font-size:24px;color:#aaa;cursor:pointer">×</button>
   </div>
   <div id="picker-list"></div>
@@ -262,15 +262,15 @@ body{background:#d4d4d4;display:flex;justify-content:center;padding:20px;min-hei
   <div class="statusbar"><span>11:38</span><span>Sankalp</span><span>5G 72%</span></div>
   <div class="cat-header">
     <button class="back-btn" onclick="navTo('home')">←</button>
-    <div><div class="htitle">Product Catalogue · కాటలాగ్</div><div class="hsub">Add & manage your items</div></div>
+    <div><div class="htitle">Product Catalogue</div><div class="hsub">Add & manage your items</div></div>
   </div>
   <div class="cat-body">
     <div id="prod-list"></div>
     <div class="add-prod-card">
-      <div class="add-prod-title">➕ Add new product · కొత్త ఉత్పత్తి</div>
-      <input class="ap-input" id="new-pname" placeholder="Product name · పేరు" autocomplete="off"/>
+      <div class="add-prod-title">➕ Add new product</div>
+      <input class="ap-input" id="new-pname" placeholder="Product name" autocomplete="off"/>
       <input class="ap-input" id="new-pprice" type="number" placeholder="Price ₹" />
-      <button class="save-btn" onclick="addProduct()">Save · సేవ్ చేయి</button>
+      <button class="save-btn" onclick="addProduct()">Save</button>
       <div class="success-pill" id="prod-success">Saved! · సేవ్ అయింది ✓</div>
     </div>
   </div>
@@ -288,7 +288,7 @@ body{background:#d4d4d4;display:flex;justify-content:center;padding:20px;min-hei
   <div class="statusbar"><span>11:38</span><span>Sankalp</span><span>5G 72%</span></div>
   <div class="analytics-header">
     <button class="back-btn" onclick="navTo('home')">←</button>
-    <div><div class="htitle">Analytics · విశ్లేషణలు</div><div class="hsub">Product sales & revenue insights</div></div>
+    <div><div class="htitle">Analytics</div><div class="hsub">Product sales & revenue insights</div></div>
   </div>
   <div class="analytics-body" id="analytics-body">
     <!-- rendered by JS -->
@@ -307,7 +307,7 @@ body{background:#d4d4d4;display:flex;justify-content:center;padding:20px;min-hei
   <div class="statusbar"><span>11:38</span><span>Sankalp</span><span>5G 72%</span></div>
   <div class="sup-header">
     <button class="back-btn" onclick="navTo('home')">←</button>
-    <div><div class="htitle">Suppliers · సప్లయర్లు</div><div class="hsub">Manage your vendors</div></div>
+    <div><div class="htitle">Suppliers</div><div class="hsub">Manage your vendors</div></div>
   </div>
   <div class="sup-body" id="sup-body">
     <!-- rendered by JS -->
@@ -325,19 +325,9 @@ body{background:#d4d4d4;display:flex;justify-content:center;padding:20px;min-hei
 // ============================================================
 // DATA
 // ============================================================
-let products = [
-  {id:1,name:"Puri plate",price:20,sales:0},
-  {id:2,name:"Masala puri",price:25,sales:0},
-  {id:3,name:"Tamarind water",price:10,sales:0},
-  {id:4,name:"Special plate",price:40,sales:0}
-];
+let products = [];
 
-let suppliers = [
-  {id:1,name:"Raju Wholesale",category:"Puri & dry goods",total:8500,paid:6000},
-  {id:2,name:"Venkat Fresh Mart",category:"Vegetables & onions",total:3200,paid:3200},
-  {id:3,name:"Sri Lakshmi Traders",category:"Masala & spices",total:4500,paid:2000},
-  {id:4,name:"Hari Oil Suppliers",category:"Cooking oil & ghee",total:6000,paid:6000}
-];
+let suppliers = [];
 
 let salesLog = [];
 let todayTotal = 0;
@@ -638,7 +628,7 @@ function renderAnalytics() {
 
     <!-- Product Revenue -->
     <div class="analytics-card">
-      <div class="analytics-card-title">💰 Product Revenue · ఉత్పత్తి ఆదాయం</div>
+      <div class="analytics-card-title">💰 Product Revenue</div>
       ${prodStats.length ? prodStats.map(p => `
         <div class="bar-item">
           <div class="bar-label"><span>${p.name}</span><span class="bamt">₹${p.revenue.toLocaleString('en-IN')}</span></div>
@@ -649,7 +639,7 @@ function renderAnalytics() {
 
     <!-- Product Sales Count -->
     <div class="analytics-card">
-      <div class="analytics-card-title">🔢 Units Sold · అమ్మిన మొత్తం</div>
+      <div class="analytics-card-title">🔢 Units Sold</div>
       ${prodStats.length ? prodStats.map(p => `
         <div class="bar-item">
           <div class="bar-label"><span>${p.name}</span><span class="bamt">${p.sales} sold</span></div>
@@ -696,13 +686,13 @@ function renderSuppliers() {
         </div>
         <div class="prog-wrap"><div class="prog-fill" style="width:${pct}%;${isPaid ? 'background:#3B6D11' : ''}"></div></div>
         ${isPaid
-          ? `<div style="font-size:12px;color:#27500A;font-weight:700">Fully paid · పూర్తిగా చెల్లించారు ✓</div>`
-          : `<button class="pay-outline" onclick="paySupplier(${sup.id})">Pay ₹${pending.toLocaleString('en-IN')} · చెల్లించు</button>`
+          ? `<div style="font-size:12px;color:#27500A;font-weight:700">Fully paid ✓</div>`
+          : `<button class="pay-outline" onclick="paySupplier(${sup.id})">Pay ₹${pending.toLocaleString('en-IN')}</button>`
         }
       </div>`;
   }).join('') +
   `<div class="add-sup-card">
-    <div class="add-sup-title">➕ Add Supplier · సప్లయర్ జోడించు</div>
+    <div class="add-sup-title">➕ Add Supplier</div>
     <input class="ap-input" id="new-sname" placeholder="Supplier name" autocomplete="off"/>
     <input class="ap-input" id="new-scat" placeholder="Category (e.g. Vegetables)" autocomplete="off"/>
     <input class="ap-input" id="new-stotal" type="number" placeholder="Total amount ₹"/>
@@ -735,7 +725,7 @@ function addSupplier() {
 function renderHomeList() {
   const el = document.getElementById('home-sale-list');
   if (!salesLog.length) {
-    el.innerHTML = '<div style="text-align:center;padding:30px 20px;color:#bbb;font-size:13px">No sales yet · ఇంకా అమ్మకాలు లేవు</div>';
+    el.innerHTML = '<div style="text-align:center;padding:30px 20px;color:#bbb;font-size:13px">No sales yet</div>';
     return;
   }
   el.innerHTML = salesLog.map((s,i) =>
