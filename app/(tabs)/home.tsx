@@ -611,24 +611,15 @@ export default function HomeScreen() {
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerTop}>
           <View>
+            <Text style={styles.greeting}>Good Morning! 👋</Text>
             <Text style={styles.shopName}>{bizName}</Text>
-            <Text style={styles.shopDateTime}>{currentDateTime}</Text>
           </View>
           <TouchableOpacity 
             style={styles.profileBtn} 
             onPress={() => setProfileVisible(true)}
           >
-            <Ionicons name="person" size={24} color="#fff" />
+            <Ionicons name="notifications" size={20} color="#fff" />
           </TouchableOpacity>
-        </View>
-        
-        {/* Collection Card */}
-        <View style={styles.collectionCard}>
-          <Text style={styles.collectionLabel}>Today's Collection</Text>
-          <Text style={styles.collectionValue}>₹{todayTotal.toLocaleString('en-IN')}</Text>
-          <Text style={styles.collectionSub}>
-            {salesLog.length} bill{salesLog.length !== 1 ? 's' : ''} today
-          </Text>
         </View>
       </View>
 
@@ -638,35 +629,75 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Two Transaction Options */}
-        <View style={styles.transactionOptions}>
-          <TouchableOpacity 
-            style={[styles.transactionCard, styles.quickPaymentCard]}
-            onPress={() => {
-              setNewCustName('');
-              setNewCustPhone('');
-              setQuickAmount('');
-              setBillingMode('quick');
-            }}
-          >
-            <Ionicons name="flash" size={32} color="#FC8019" />
-            <Text style={styles.transactionCardTitle}>Quick Payment</Text>
-            <Text style={styles.transactionCardSub}>Name + Amount</Text>
-          </TouchableOpacity>
+        {/* Summary Cards */}
+        <View style={styles.summaryCards}>
+          <View style={styles.summaryCard}>
+            <Ionicons name="trending-up" size={20} color="#FC8019" />
+            <Text style={styles.summaryLabel}>Sales</Text>
+            <Text style={styles.summaryValue}>₹{todayTotal.toLocaleString('en-IN')}</Text>
+          </View>
+          <View style={styles.summaryCard}>
+            <Ionicons name="document-text" size={20} color="#FC8019" />
+            <Text style={styles.summaryLabel}>Bills</Text>
+            <Text style={styles.summaryValue}>{totalBills}</Text>
+          </View>
+        </View>
 
-          <TouchableOpacity 
-            style={[styles.transactionCard, styles.liveBillingCard]}
-            onPress={() => {
-              setBillingCustomerName('');
-              setBillingCustomerPhone('');
-              setBillingItems([]);
-              setBillingSessionActive(true);
-            }}
-          >
-            <Ionicons name="cart" size={32} color="#27500A" />
-            <Text style={styles.transactionCardTitle}>Live Billing</Text>
-            <Text style={styles.transactionCardSub}>Add items</Text>
-          </TouchableOpacity>
+        {/* Quick Actions */}
+        <View style={styles.quickActionsContainer}>
+          <Text style={styles.quickActionsTitle}>Quick Actions</Text>
+          <View style={styles.quickActionsGrid}>
+            <TouchableOpacity 
+              style={styles.quickActionCard}
+              onPress={() => {
+                setBillingCustomerName('');
+                setBillingCustomerPhone('');
+                setBillingItems([]);
+                setBillingSessionActive(true);
+              }}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: '#FC8019' }]}>
+                <Ionicons name="calculator" size={28} color="#fff" />
+              </View>
+              <Text style={styles.quickActionLabel}>Start Billing</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.quickActionCard}
+              onPress={() => {
+                setNewCustName('');
+                setNewCustPhone('');
+                setQuickAmount('');
+                setBillingMode('quick');
+              }}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: '#8B5CF6' }]}>
+                <Ionicons name="flash" size={28} color="#fff" />
+              </View>
+              <Text style={styles.quickActionLabel}>Quick Payment</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.quickActionCard}
+              onPress={() => router.push('/products')}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: '#27500A' }]}>
+                <Ionicons name="cube" size={28} color="#fff" />
+              </View>
+              <Text style={styles.quickActionLabel}>Products</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Tip Section */}
+        <View style={styles.tipCard}>
+          <View style={styles.tipIcon}>
+            <Ionicons name="bulb" size={18} color="#FC8019" />
+          </View>
+          <View style={styles.tipContent}>
+            <Text style={styles.tipLabel}>Tip</Text>
+            <Text style={styles.tipText}>You can add items, set quantity and complete the bill in seconds.</Text>
+          </View>
         </View>
 
         {/* Active Sessions */}
@@ -686,18 +717,16 @@ export default function HomeScreen() {
         )}
 
         {/* Completed Bills */}
-        <Text style={styles.todayTitle}>Today's Bills</Text>
-        {salesLog.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No sales yet</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={salesLog}
-            renderItem={renderSaleBill}
-            keyExtractor={(_, index) => index.toString()}
-            scrollEnabled={false}
-          />
+        {salesLog.length > 0 && (
+          <>
+            <Text style={styles.todayTitle}>Today's Bills</Text>
+            <FlatList
+              data={salesLog}
+              renderItem={renderSaleBill}
+              keyExtractor={(_, index) => index.toString()}
+              scrollEnabled={false}
+            />
+          </>
         )}
         <View style={{ height: 20 }} />
       </ScrollView>
@@ -731,40 +760,154 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f9f9f9',
   },
   header: {
     backgroundColor: '#FC8019',
     padding: 16,
-    paddingBottom: 20,
+    paddingBottom: 16,
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+  },
+  greeting: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: -0.3,
   },
   shopName: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: -0.5,
-  },
-  shopDateTime: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 10,
-    fontWeight: '600',
-    marginTop: 2,
+    marginTop: 4,
   },
   profileBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.35)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  body: {
+    flex: 1,
+    padding: 16,
+  },
+  summaryCards: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  summaryCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 0.5,
+    borderColor: '#e5e5e5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  summaryLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  summaryValue: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#222',
+    marginTop: 4,
+  },
+  quickActionsContainer: {
+    marginBottom: 24,
+  },
+  quickActionsTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#222',
+    marginBottom: 12,
+  },
+  quickActionsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  quickActionCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 0.5,
+    borderColor: '#e5e5e5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  quickActionIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  quickActionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#333',
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  tipCard: {
+    backgroundColor: '#FFF9F0',
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#FFE8D0',
+  },
+  tipIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tipContent: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  tipLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#333',
+    marginBottom: 2,
+  },
+  tipText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#666',
+    lineHeight: 15,
   },
   collectionCard: {
     backgroundColor: 'rgba(255,255,255,0.15)',
@@ -793,10 +936,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
     marginTop: 6,
     fontWeight: '700',
-  },
-  body: {
-    flex: 1,
-    padding: 14,
   },
   transactionOptions: {
     flexDirection: 'row',
@@ -837,23 +976,6 @@ const styles = StyleSheet.create({
     color: '#666',
     fontWeight: '600',
     marginTop: 2,
-  },
-  newBillBtn: {
-    backgroundColor: '#FC8019',
-    padding: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#FC8019',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  newBillBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
   },
   activeSection: {
     marginBottom: 16,
@@ -898,6 +1020,206 @@ const styles = StyleSheet.create({
     color: '#888',
     fontWeight: '600',
     marginTop: 2,
+  },
+  billingBadge: {
+    backgroundColor: '#FC8019',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 20,
+    marginTop: 3,
+    alignSelf: 'flex-start',
+  },
+  billingBadgeText: {
+    fontSize: 9,
+    color: '#fff',
+    fontWeight: '800',
+  },
+  activeCardRight: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#FC8019',
+  },
+  todayTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#222',
+    marginBottom: 10,
+  },
+  saleCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 0.5,
+    borderColor: '#eee',
+  },
+  saleName: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#333',
+  },
+  saleCust: {
+    fontSize: 11,
+    color: '#FC8019',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  saleTime: {
+    fontSize: 11,
+    color: '#aaa',
+    marginTop: 1,
+  },
+  saleAmount: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#27500A',
+  },
+  emptyState: {
+    alignItems: 'center',
+    padding: 30,
+  },
+  emptyText: {
+    color: '#bbb',
+    fontSize: 13,
+  },
+  bottomNav: {
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    paddingVertical: 8,
+    paddingBottom: 12,
+    borderTopWidth: 0.5,
+    borderTopColor: '#eee',
+  },
+  navItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  navLabel: {
+    fontSize: 9,
+    color: '#aaa',
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  modeSelectionBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 32,
+  },
+  modeTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#111827',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    marginBottom: 12,
+    borderRadius: 14,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#ececec',
+  },
+  modeIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  modeContent: {
+    flex: 1,
+  },
+  modeOptionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  modeOptionSub: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  amountInput: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FC8019',
+  },
+  modalBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#222',
+    marginBottom: 4,
+  },
+  modalSub: {
+    fontSize: 12,
+    color: '#999',
+    fontWeight: '600',
+    marginBottom: 18,
+  },
+  modalInput: {
+    borderWidth: 1.5,
+    borderColor: '#eee',
+    backgroundColor: '#fafafa',
+    borderRadius: 12,
+    padding: 13,
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  modalBtn: {
+    backgroundColor: '#FC8019',
+    padding: 15,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  modalBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  modalCancel: {
+    textAlign: 'center',
+    padding: 10,
+    color: '#aaa',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  // Profile Panel Styles
+  profilePanel: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 22,
+  },
+  profileHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#eee',
   },
   billingBadge: {
     backgroundColor: '#FC8019',
