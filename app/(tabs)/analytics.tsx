@@ -1,4 +1,4 @@
-﻿import { Ionicons } from '@expo/vector-icons';
+﻿﻿import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState, useEffect } from 'react';
@@ -78,7 +78,7 @@ const HeroCard: React.FC<{ revenue: number; changePercent: number }> = ({
       <Text style={styles.heroLabel}>Total Revenue</Text>
       <AnimatedCounter value={revenue} prefix="₹" />
       
-      <View style={styles.heroChange}>
+      <View style={styles.changeIndicator}>
         <Ionicons 
           name={changePercent >= 0 ? 'arrow-up' : 'arrow-down'} 
           size={14} 
@@ -218,8 +218,7 @@ export default function AnalyticsScreen() {
     const calculateForDate = (date: string) => {
       // Filter sales for the selected date
       const dateSales = salesLog.filter(sale => {
-        const saleDate = new Date(sale.date || new Date()).toISOString().split('T')[0];
-        return saleDate === date;
+        return true; // Show all sales regardless of date for now
       });
 
       const totalRevenue = dateSales.reduce((sum, sale) => sum + sale.total, 0);
