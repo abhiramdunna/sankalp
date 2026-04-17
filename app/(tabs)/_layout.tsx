@@ -9,7 +9,7 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerStyle: {
-            backgroundColor: '#FC8019',
+            backgroundColor: '#2563EB',
           },
           headerTintColor: '#fff',
           headerTitleStyle: {
@@ -29,21 +29,21 @@ export default function RootLayout() {
           name="products" 
           options={{ 
             title: 'Products',
-            headerShown: true,
+            headerShown: false,
           }} 
         />
         <Stack.Screen 
           name="analytics" 
           options={{ 
             title: 'Analytics',
-            headerShown: true,
+            headerShown: false,
           }} 
         />
         <Stack.Screen 
           name="suppliers" 
           options={{ 
             title: 'Suppliers',
-            headerShown: true,
+            headerShown: false,
           }} 
         />
       </Stack>

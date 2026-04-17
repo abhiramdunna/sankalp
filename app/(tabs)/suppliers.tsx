@@ -12,6 +12,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Types
 interface Order {
@@ -31,6 +32,7 @@ interface Supplier {
 
 export default function SuppliersScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   
   const [payModalVisible, setPayModalVisible] = useState(false);
@@ -357,11 +359,11 @@ export default function SuppliersScreen() {
           </View>
           <View style={styles.totalCell}>
             <Text style={styles.totalLabel}>Paid</Text>
-            <Text style={[styles.totalValue, { color: '#27500A' }]}>₹{paid.toLocaleString('en-IN')}</Text>
+            <Text style={[styles.totalValue, { color: '#22C55E' }]}>₹{paid.toLocaleString('en-IN')}</Text>
           </View>
           <View style={styles.totalCell}>
             <Text style={styles.totalLabel}>Pending</Text>
-            <Text style={[styles.totalValue, { color: pending === 0 ? '#27500A' : '#C0392B' }]}>
+            <Text style={[styles.totalValue, { color: pending === 0 ? '#22C55E' : '#C0392B' }]}>
               ₹{pending.toLocaleString('en-IN')}
             </Text>
           </View>
@@ -393,11 +395,8 @@ export default function SuppliersScreen() {
       <AddSupplierModal />
       
       {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Suppliers</Text>
-          <Text style={styles.headerSub}>Manage vendor bills & payments</Text>
-        </View>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <Text style={styles.headerTitle}>Suppliers</Text>
       </View>
       
       {/* Body */}
@@ -416,23 +415,23 @@ export default function SuppliersScreen() {
       {/* Bottom Navigation */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
-          <Ionicons name="home" size={24} color="#aaa" />
+          <Ionicons name="home" size={24} color="#64748B" />
           <Text style={styles.navLabel}>Home</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/products')}>
-          <Ionicons name="pricetag" size={24} color="#aaa" />
-          <Text style={styles.navLabel}>Products</Text>
-        </TouchableOpacity>
-        
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/analytics')}>
-          <Ionicons name="stats-chart" size={24} color="#aaa" />
+          <Ionicons name="stats-chart" size={24} color="#64748B" />
           <Text style={styles.navLabel}>Analytics</Text>
         </TouchableOpacity>
         
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/products')}>
+          <Ionicons name="pricetag" size={24} color="#64748B" />
+          <Text style={styles.navLabel}>Products</Text>
+        </TouchableOpacity>
+        
         <TouchableOpacity style={styles.navItem} onPress={() => {}}>
-          <Ionicons name="people" size={24} color="#FC8019" />
-          <Text style={[styles.navLabel, { color: '#FC8019' }]}>Suppliers</Text>
+          <Ionicons name="people" size={24} color="#2563EB" />
+          <Text style={[styles.navLabel, { color: '#2563EB' }]}>Suppliers</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -442,28 +441,20 @@ export default function SuppliersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8FAFC',
   },
   header: {
-    backgroundColor: '#FC8019',
-    padding: 14,
-    paddingHorizontal: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#2563EB',
+    padding: 16,
+    paddingBottom: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '900',
+    letterSpacing: -0.5,
   },
   headerSub: {
     color: 'rgba(255,255,255,0.75)',
@@ -481,7 +472,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderWidth: 0.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
   },
   paidCard: {
     borderColor: '#c0dd97',
@@ -496,7 +487,7 @@ const styles = StyleSheet.create({
   supplierName: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#222',
+    color: '#0F172A',
   },
   supplierBadge: {
     paddingHorizontal: 10,
@@ -534,7 +525,7 @@ const styles = StyleSheet.create({
   orderUnpaid: {
     backgroundColor: '#fff5eb',
     borderWidth: 1,
-    borderColor: '#FC8019',
+    borderColor: '#2563EB',
     borderStyle: 'dashed',
   },
   orderPartPaid: {
@@ -555,10 +546,10 @@ const styles = StyleSheet.create({
   orderAmount: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#222',
+    color: '#0F172A',
   },
   orderPaidNote: {
-    color: '#aaa',
+    color: '#64748B',
     fontWeight: '600',
   },
   statusUnpaid: {
@@ -606,7 +597,7 @@ const styles = StyleSheet.create({
   totalValue: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#222',
+    color: '#0F172A',
     marginTop: 2,
   },
   progressBar: {
@@ -619,21 +610,21 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 20,
-    backgroundColor: '#FC8019',
+    backgroundColor: '#2563EB',
   },
   progressDone: {
-    backgroundColor: '#27500A',
+    backgroundColor: '#22C55E',
   },
   payButton: {
     padding: 10,
     borderWidth: 1.5,
-    borderColor: '#FC8019',
+    borderColor: '#2563EB',
     borderRadius: 10,
     alignItems: 'center',
     marginBottom: 8,
   },
   payButtonText: {
-    color: '#FC8019',
+    color: '#2563EB',
     fontSize: 13,
     fontWeight: '800',
   },
@@ -641,13 +632,13 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: '#fff8f0',
     borderWidth: 1.5,
-    borderColor: '#FC8019',
+    borderColor: '#2563EB',
     borderStyle: 'dashed',
     borderRadius: 10,
     alignItems: 'center',
   },
   addOrderBtnText: {
-    color: '#FC8019',
+    color: '#2563EB',
     fontSize: 12,
     fontWeight: '800',
   },
@@ -656,19 +647,19 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     borderWidth: 0.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
     marginTop: 4,
     alignItems: 'center',
   },
   addSupplierTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#222',
+    color: '#0F172A',
     marginBottom: 4,
   },
   addSupplierHint: {
     fontSize: 11,
-    color: '#FC8019',
+    color: '#2563EB',
     fontWeight: '600',
   },
   modalOverlay: {
@@ -685,7 +676,7 @@ const styles = StyleSheet.create({
   payModalTitle: {
     fontSize: 17,
     fontWeight: '900',
-    color: '#222',
+    color: '#0F172A',
     marginBottom: 4,
   },
   payModalSub: {
@@ -696,7 +687,7 @@ const styles = StyleSheet.create({
   },
   payModalInput: {
     borderWidth: 1.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
     backgroundColor: '#fafafa',
     borderRadius: 12,
     padding: 13,
@@ -705,7 +696,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   payModalBtn: {
-    backgroundColor: '#FC8019',
+    backgroundColor: '#2563EB',
     padding: 15,
     borderRadius: 14,
     alignItems: 'center',
@@ -719,7 +710,7 @@ const styles = StyleSheet.create({
   payModalCancel: {
     textAlign: 'center',
     padding: 10,
-    color: '#aaa',
+    color: '#64748B',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -732,12 +723,12 @@ const styles = StyleSheet.create({
   addModalTitle: {
     fontSize: 17,
     fontWeight: '900',
-    color: '#222',
+    color: '#0F172A',
     marginBottom: 16,
   },
   addModalInput: {
     borderWidth: 1.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
     backgroundColor: '#fafafa',
     borderRadius: 12,
     padding: 13,
@@ -746,7 +737,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   addModalBtn: {
-    backgroundColor: '#FC8019',
+    backgroundColor: '#2563EB',
     padding: 15,
     borderRadius: 14,
     alignItems: 'center',
@@ -760,7 +751,7 @@ const styles = StyleSheet.create({
   addModalCancel: {
     textAlign: 'center',
     padding: 10,
-    color: '#aaa',
+    color: '#64748B',
     fontSize: 13,
     fontWeight: '600',
     marginTop: 8,
@@ -771,7 +762,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingBottom: 12,
     borderTopWidth: 0.5,
-    borderTopColor: '#eee',
+    borderTopColor: '#E2E8F0',
   },
   navItem: {
     flex: 1,
@@ -780,7 +771,7 @@ const styles = StyleSheet.create({
   },
   navLabel: {
     fontSize: 9,
-    color: '#aaa',
+    color: '#64748B',
     fontWeight: '700',
     marginTop: 2,
   },

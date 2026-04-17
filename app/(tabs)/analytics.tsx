@@ -1,4 +1,4 @@
-﻿﻿import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState, useEffect } from 'react';
@@ -11,6 +11,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Types
 interface Product {
@@ -76,7 +77,7 @@ const HeroCard: React.FC<{ revenue: number; changePercent: number }> = ({
   <View style={styles.heroCard}>
     <View style={styles.heroContent}>
       <Text style={styles.heroLabel}>Total Revenue</Text>
-      <AnimatedCounter value={revenue} prefix="₹" />
+      <AnimatedCounter value={revenue} prefix="?" />
       
       <View style={styles.changeIndicator}>
         <Ionicons 
@@ -118,7 +119,7 @@ const ChartBar: React.FC<{ label: string; value: number; maxValue: number; color
     <View style={styles.chartBarItem}>
       <View style={styles.chartBarLabel}>
         <Text style={styles.chartBarLabelText}>{label}</Text>
-        <Text style={styles.chartBarValue}>₹{value.toLocaleString()}</Text>
+        <Text style={styles.chartBarValue}>?{value.toLocaleString()}</Text>
       </View>
       <View style={styles.chartBarTrack}>
         <View style={[styles.chartBarFill, { width: `${percentage}%`, backgroundColor: color }]} />
@@ -130,6 +131,7 @@ const ChartBar: React.FC<{ label: string; value: number; maxValue: number; color
 // ============ Main Analytics Screen ============
 export default function AnalyticsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [products, setProducts] = useState<Product[]>([]);
   const [salesLog, setSalesLog] = useState<SaleLog[]>([]);
@@ -276,6 +278,11 @@ export default function AnalyticsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <Text style={styles.headerTitle}>Analytics</Text>
+      </View>
+
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Week Selector */}
         <View style={styles.weekSelectorContainer}>
@@ -287,7 +294,7 @@ export default function AnalyticsScreen() {
                 setSelectedDate(prevWeek.toISOString().split('T')[0]);
               }}
             >
-              <Ionicons name="chevron-back" size={24} color="#FC8019" />
+              <Ionicons name="chevron-back" size={24} color="#2563EB" />
             </TouchableOpacity>
             
             <View style={styles.weekTitleContainer}>
@@ -312,7 +319,7 @@ export default function AnalyticsScreen() {
                 setSelectedDate(nextWeek.toISOString().split('T')[0]);
               }}
             >
-              <Ionicons name="chevron-forward" size={24} color="#FC8019" />
+              <Ionicons name="chevron-forward" size={24} color="#2563EB" />
             </TouchableOpacity>
           </View>
 
@@ -358,13 +365,13 @@ export default function AnalyticsScreen() {
           <MetricCard
             icon="cash"
             label="Avg Bill"
-            value={`₹${analytics.avgBill}`}
+            value={`?${analytics.avgBill}`}
             color="#4ECDC4"
           />
           <MetricCard
             icon="trending-up"
             label="Profit"
-            value={`₹${analytics.profit}`}
+            value={`?${analytics.profit}`}
             color="#45B7D1"
           />
           <MetricCard
@@ -377,7 +384,7 @@ export default function AnalyticsScreen() {
 
         {/* Revenue Trend */}
         <View style={styles.chartSection}>
-          <Text style={styles.chartTitle}>📈 Revenue Trend</Text>
+          <Text style={styles.chartTitle}>?? Revenue Trend</Text>
           <Text style={styles.chartSub}>Last 7 days</Text>
           <View style={styles.trendBars}>
             {[2100, 2500, 2200, 2800, 2400, 2900, analytics.totalRevenue].map((val, idx) => (
@@ -394,7 +401,7 @@ export default function AnalyticsScreen() {
         {/* Top Products */}
         {analytics.topProducts.length > 0 && (
           <View style={styles.chartSection}>
-            <Text style={styles.chartTitle}>🏆 Top Products</Text>
+            <Text style={styles.chartTitle}>?? Top Products</Text>
             <Text style={styles.chartSub}>By revenue</Text>
             {analytics.topProducts.slice(0, 4).map((product, idx) => (
               <ChartBar
@@ -402,7 +409,7 @@ export default function AnalyticsScreen() {
                 label={product.name.substring(0, 12)}
                 value={product.revenue}
                 maxValue={maxProductRevenue}
-                color="#FC8019"
+                color="#2563EB"
               />
             ))}
           </View>
@@ -410,14 +417,14 @@ export default function AnalyticsScreen() {
 
         {/* Smart Insights */}
         <View style={styles.insightsSection}>
-          <Text style={styles.insightTitle}>💡 Smart Insights</Text>
+          <Text style={styles.insightTitle}>?? Smart Insights</Text>
           
           <View style={styles.insightCard}>
             <Ionicons name="checkmark-circle" size={24} color="#2ECC71" />
             <View style={styles.insightContent}>
               <Text style={styles.insightCardTitle}>Top Performer</Text>
               <Text style={styles.insightCardText}>
-                {analytics.topProduct?.name} leads with ₹{analytics.topProduct?.revenue || 0}
+                {analytics.topProduct?.name} leads with ?{analytics.topProduct?.revenue || 0}
               </Text>
             </View>
           </View>
@@ -437,7 +444,7 @@ export default function AnalyticsScreen() {
             <View style={styles.insightContent}>
               <Text style={styles.insightCardTitle}>Average Billing</Text>
               <Text style={styles.insightCardText}>
-                Your average bill value is ₹{analytics.avgBill}
+                Your average bill value is ?{analytics.avgBill}
               </Text>
             </View>
           </View>
@@ -446,13 +453,36 @@ export default function AnalyticsScreen() {
         {/* Export/Share Section */}
         <View style={styles.actionSection}>
           <TouchableOpacity style={styles.actionBtn}>
-            <Ionicons name="share-social" size={20} color="#FC8019" />
+            <Ionicons name="share-social" size={20} color="#2563EB" />
             <Text style={styles.actionBtnText}>Export Report</Text>
           </TouchableOpacity>
         </View>
 
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      {/* Bottom Navigation */}
+      <View style={styles.bottomNav}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
+          <Ionicons name="home" size={24} color="#94A3B8" />
+          <Text style={styles.navLabel}>Home</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
+          <Ionicons name="stats-chart" size={24} color="#2563EB" />
+          <Text style={[styles.navLabel, { color: '#2563EB' }]}>Analytics</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/products')}>
+          <Ionicons name="pricetag" size={24} color="#94A3B8" />
+          <Text style={styles.navLabel}>Products</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/suppliers')}>
+          <Ionicons name="people" size={24} color="#94A3B8" />
+          <Text style={styles.navLabel}>Suppliers</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -461,12 +491,14 @@ export default function AnalyticsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8FAFC',
   },
   header: {
-    backgroundColor: '#FC8019',
+    backgroundColor: '#2563EB',
     padding: 16,
-    paddingHorizontal: 18,
+    paddingBottom: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     color: '#fff',
@@ -492,12 +524,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 0.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
   },
   selectorTitle: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#222',
+    color: '#0F172A',
     marginBottom: 12,
   },
   selectorBars: {
@@ -513,17 +545,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: '#ddd',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8FAFC',
     alignItems: 'center',
   },
   dayBarActive: {
-    backgroundColor: '#FC8019',
-    borderColor: '#FC8019',
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
   },
   dayBarText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#999',
+    color: '#94A3B8',
   },
   dayBarTextActive: {
     color: '#fff',
@@ -534,17 +566,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: '#ddd',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8FAFC',
     alignItems: 'center',
   },
   weekBarActive: {
-    backgroundColor: '#FC8019',
-    borderColor: '#FC8019',
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
   },
   weekBarText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#999',
+    color: '#94A3B8',
   },
   weekBarTextActive: {
     color: '#fff',
@@ -561,17 +593,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: '#ddd',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8FAFC',
     alignItems: 'center',
   },
   monthBarActive: {
-    backgroundColor: '#FC8019',
-    borderColor: '#FC8019',
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
   },
   monthBarText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#999',
+    color: '#94A3B8',
   },
   monthBarTextActive: {
     color: '#fff',
@@ -593,13 +625,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   periodBtnActive: {
-    backgroundColor: '#FC8019',
-    borderColor: '#FC8019',
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
   },
   periodBtnText: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#999',
+    color: '#94A3B8',
   },
   periodBtnTextActive: {
     color: '#fff',
@@ -612,7 +644,7 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 16,
     borderWidth: 0.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
     marginHorizontal: 0,
   },
   calendarHeader: {
@@ -622,12 +654,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#E2E8F0',
   },
   calendarTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#222',
+    color: '#0F172A',
   },
 
   // Week Selector
@@ -638,7 +670,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     marginHorizontal: 0,
     borderWidth: 0.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
   },
   weekHeader: {
     flexDirection: 'row',
@@ -657,13 +689,13 @@ const styles = StyleSheet.create({
   weekTitle: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#222',
+    color: '#0F172A',
     marginBottom: 4,
   },
   weekSubtitle: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#999',
+    color: '#94A3B8',
   },
   weekDaysContainer: {
     flexDirection: 'row',
@@ -677,18 +709,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8FAFC',
     borderWidth: 1.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
   },
   weekDaySelected: {
-    backgroundColor: '#FC8019',
-    borderColor: '#FC8019',
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
   },
   weekDayLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#999',
+    color: '#94A3B8',
     marginBottom: 4,
   },
   weekDayLabelSelected: {
@@ -697,7 +729,7 @@ const styles = StyleSheet.create({
   weekDayNumber: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#222',
+    color: '#0F172A',
   },
   weekDayNumberSelected: {
     color: '#fff',
@@ -705,7 +737,7 @@ const styles = StyleSheet.create({
 
   // Hero Card
   heroCard: {
-    backgroundColor: '#FC8019',
+    backgroundColor: '#2563EB',
     borderRadius: 16,
     padding: 14,
     marginBottom: 12,
@@ -783,7 +815,7 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     borderWidth: 0.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -801,7 +833,7 @@ const styles = StyleSheet.create({
   metricLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#999',
+    color: '#94A3B8',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     textAlign: 'center',
@@ -809,7 +841,7 @@ const styles = StyleSheet.create({
   metricValue: {
     fontSize: 18,
     fontWeight: '900',
-    color: '#222',
+    color: '#0F172A',
     marginTop: 8,
     textAlign: 'center',
   },
@@ -821,7 +853,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 20,
     borderWidth: 0.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -831,13 +863,13 @@ const styles = StyleSheet.create({
   chartTitle: {
     fontSize: 15,
     fontWeight: '900',
-    color: '#222',
+    color: '#0F172A',
     marginBottom: 4,
   },
   chartSub: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#999',
+    color: '#94A3B8',
     marginBottom: 16,
   },
   
@@ -857,13 +889,13 @@ const styles = StyleSheet.create({
   },
   trendBarFill: {
     width: '100%',
-    backgroundColor: '#FC8019',
+    backgroundColor: '#2563EB',
     borderRadius: 8,
   },
   trendLabel: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#999',
+    color: '#94A3B8',
     marginTop: 8,
   },
 
@@ -884,7 +916,7 @@ const styles = StyleSheet.create({
   chartBarValue: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#FC8019',
+    color: '#2563EB',
   },
   chartBarTrack: {
     height: 8,
@@ -904,7 +936,7 @@ const styles = StyleSheet.create({
   insightTitle: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#222',
+    color: '#0F172A',
     marginBottom: 14,
   },
   insightCard: {
@@ -916,7 +948,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 12,
     borderWidth: 0.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
   },
   insightContent: {
     flex: 1,
@@ -924,12 +956,12 @@ const styles = StyleSheet.create({
   insightCardTitle: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#222',
+    color: '#0F172A',
   },
   insightCardText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#666',
+    color: '#64748B',
     marginTop: 4,
     lineHeight: 18,
   },
@@ -939,7 +971,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   actionBtn: {
-    backgroundColor: '#FC8019',
+    backgroundColor: '#2563EB',
     borderRadius: 14,
     padding: 14,
     flexDirection: 'row',
@@ -972,7 +1004,7 @@ const styles = StyleSheet.create({
   dropdownBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#222',
+    color: '#0F172A',
   },
   dropdownMenu: {
     position: 'absolute',
@@ -998,10 +1030,10 @@ const styles = StyleSheet.create({
   dropdownItemText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#666',
+    color: '#64748B',
   },
   dropdownItemTextActive: {
-    color: '#FC8019',
+    color: '#2563EB',
     fontWeight: '800',
   },
 
@@ -1010,5 +1042,26 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     gap: 16,
+  },
+
+  // Bottom Navigation
+  bottomNav: {
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    paddingVertical: 8,
+    paddingBottom: 12,
+    borderTopWidth: 0.5,
+    borderTopColor: '#E2E8F0',
+  },
+  navItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  navLabel: {
+    fontSize: 9,
+    color: '#64748B',
+    fontWeight: '700',
+    marginTop: 2,
   },
 });

@@ -13,6 +13,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Types
 interface Product {
@@ -41,6 +42,7 @@ interface Session {
 
 export default function ProductsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const sessionId = params.sessionId ? parseInt(params.sessionId as string) : null;
   
@@ -65,6 +67,7 @@ export default function ProductsScreen() {
   const [newProductUnit, setNewProductUnit] = useState('pieces');
   const [unitPickerVisible, setUnitPickerVisible] = useState(false);
   const [addProductVisible, setAddProductVisible] = useState(false);
+  const [customerToggle, setCustomerToggle] = useState(false);
 
   const unitOptions = ['pieces', 'kgs', 'liters', 'grams', 'ml', 'units'];
 
@@ -514,7 +517,7 @@ export default function ProductsScreen() {
               onPress={() => setUnitPickerVisible(true)}
             >
               <Text style={styles.unitSelectText}>{newProductUnit}</Text>
-              <Ionicons name="chevron-down" size={18} color="#FC8019" />
+              <Ionicons name="chevron-down" size={18} color="#2563EB" />
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -549,21 +552,35 @@ export default function ProductsScreen() {
       {/* Bill Header */}
       <View style={styles.billHeader}>
         <View style={styles.headerText}>
-          <Text style={styles.headerTitle}>Live Bill · లైవ్ బిల్లు</Text>
+          <Text style={styles.billHeaderTitle}>Live Bill · లైవ్ బిల్లు</Text>
           <Text style={styles.headerSub}>Add items · collect when done</Text>
         </View>
+        <TouchableOpacity 
+          style={[styles.toggleBtn, customerToggle && styles.toggleBtnOn]}
+          onPress={() => setCustomerToggle(!customerToggle)}
+        >
+          <Text style={styles.toggleText}>{customerToggle ? 'ON' : 'OFF'}</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Customer Display */}
-      <View style={styles.customerDisplay}>
-        <Text style={styles.customerIcon}>👤</Text>
-        <View style={styles.customerInfo}>
-          <Text style={styles.customerName}>{currentSession!.customerName}</Text>
-          {currentSession!.phone && (
-            <Text style={styles.customerPhone}>📞 {currentSession!.phone}</Text>
-          )}
+      {!customerToggle && (
+        <View style={styles.customerDisplay}>
+          <Text style={styles.customerIcon}>👤</Text>
+          <View style={styles.customerInfo}>
+            <Text style={styles.customerName}>{currentSession!.customerName}</Text>
+            {currentSession!.phone && (
+              <Text style={styles.customerPhone}>📞 {currentSession!.phone}</Text>
+            )}
+          </View>
+          <TouchableOpacity 
+            style={[styles.toggleBtn, customerToggle && styles.toggleBtnOn]}
+            onPress={() => setCustomerToggle(!customerToggle)}
+          >
+            <Text style={styles.toggleText}>{customerToggle ? 'ON' : 'OFF'}</Text>
+          </TouchableOpacity>
         </View>
-      </View>
+      )}
 
       {/* Bill Total */}
       <View style={styles.totalBar}>
@@ -665,34 +682,45 @@ export default function ProductsScreen() {
           </TouchableOpacity>
         </View>
         
-        <TouchableOpacity 
-          style={[styles.collectBtn, !currentSession!.items.length && styles.collectBtnDisabled]}
-          onPress={collectBill}
-          disabled={!currentSession!.items.length}
-        >
-          <Text style={styles.collectBtnText}>Collect · వసూలు చేయి ✓</Text>
-        </TouchableOpacity>
+        {!customerToggle ? (
+          <TouchableOpacity 
+            style={[styles.collectBtn, !currentSession!.items.length && styles.collectBtnDisabled]}
+            onPress={collectBill}
+            disabled={!currentSession!.items.length}
+          >
+            <Text style={styles.collectBtnText}>Collect · వసూలు చేయి ✓</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.outlineBtn} onPress={() => router.back()}>
+              <Text style={styles.outlineBtnText}>← Go Back</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.fillBtn} onPress={collectBill}>
+              <Text style={styles.fillBtnText}>Bill ✓</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Bottom Nav */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
-          <Ionicons name="home" size={24} color="#aaa" />
+          <Ionicons name="home" size={24} color="#64748B" />
           <Text style={styles.navLabel}>Home</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
-          <Ionicons name="pricetag" size={24} color="#FC8019" />
-          <Text style={[styles.navLabel, { color: '#FC8019' }]}>Products</Text>
-        </TouchableOpacity>
-        
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/analytics')}>
-          <Ionicons name="stats-chart" size={24} color="#aaa" />
+          <Ionicons name="stats-chart" size={24} color="#64748B" />
           <Text style={styles.navLabel}>Analytics</Text>
         </TouchableOpacity>
         
+        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
+          <Ionicons name="pricetag" size={24} color="#2563EB" />
+          <Text style={[styles.navLabel, { color: '#2563EB' }]}>Products</Text>
+        </TouchableOpacity>
+        
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/suppliers')}>
-          <Ionicons name="people" size={24} color="#aaa" />
+          <Ionicons name="people" size={24} color="#64748B" />
           <Text style={styles.navLabel}>Suppliers</Text>
         </TouchableOpacity>
       </View>
@@ -712,15 +740,16 @@ export default function ProductsScreen() {
       <UnitPickerModal />
       <AddProductModal />
       
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <Text style={styles.headerTitle}>Products</Text>
+      </View>
+
       {/* Product Catalogue Section */}
       <View style={styles.catalogueSection}>
-        <View style={styles.catalogueHeader}>
-          <Text style={styles.catalogueTitle}>📦 Your Products</Text>
-        </View>
-
         {/* Search Bar */}
         <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
+          <Ionicons name="search" size={20} color="#94A3B8" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search products..."
@@ -729,7 +758,7 @@ export default function ProductsScreen() {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color="#999" />
+              <Ionicons name="close-circle" size={20} color="#94A3B8" />
             </TouchableOpacity>
           )}
         </View>
@@ -745,7 +774,7 @@ export default function ProductsScreen() {
           style={styles.addProductButton}
           onPress={() => setAddProductVisible(true)}
         >
-          <Ionicons name="add-circle" size={50} color="#FC8019" />
+          <Ionicons name="add-circle" size={50} color="#2563EB" />
           <Text style={styles.addProductButtonText}>Add Product</Text>
         </TouchableOpacity>
       </View>
@@ -753,22 +782,22 @@ export default function ProductsScreen() {
       {/* Bottom Nav */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
-          <Ionicons name="home" size={24} color="#aaa" />
+          <Ionicons name="home" size={24} color="#64748B" />
           <Text style={styles.navLabel}>Home</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
-          <Ionicons name="pricetag" size={24} color="#FC8019" />
-          <Text style={[styles.navLabel, { color: '#FC8019' }]}>Products</Text>
-        </TouchableOpacity>
-        
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/analytics')}>
-          <Ionicons name="stats-chart" size={24} color="#aaa" />
+          <Ionicons name="stats-chart" size={24} color="#64748B" />
           <Text style={styles.navLabel}>Analytics</Text>
         </TouchableOpacity>
         
+        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
+          <Ionicons name="pricetag" size={24} color="#2563EB" />
+          <Text style={[styles.navLabel, { color: '#2563EB' }]}>Products</Text>
+        </TouchableOpacity>
+        
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/suppliers')}>
-          <Ionicons name="people" size={24} color="#aaa" />
+          <Ionicons name="people" size={24} color="#64748B" />
           <Text style={styles.navLabel}>Suppliers</Text>
         </TouchableOpacity>
       </View>
@@ -779,16 +808,29 @@ export default function ProductsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8FAFC',
+  },
+  header: {
+    backgroundColor: '#2563EB',
+    padding: 16,
+    paddingBottom: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: -0.5,
   },
   loadingText: {
     textAlign: 'center',
     marginTop: 50,
     fontSize: 16,
-    color: '#999',
+    color: '#94A3B8',
   },
   billHeader: {
-    backgroundColor: '#FC8019',
+    backgroundColor: '#2563EB',
     padding: 12,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -806,7 +848,7 @@ const styles = StyleSheet.create({
   headerText: {
     flex: 1,
   },
-  headerTitle: {
+  billHeaderTitle: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '900',
@@ -817,12 +859,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 1,
   },
+  toggleBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleBtnOn: {
+    backgroundColor: '#22C55E',
+  },
+  toggleText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
   customerDisplay: {
     backgroundColor: 'rgba(252,128,25,0.15)',
     padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    justifyContent: 'space-between',
   },
   customerIcon: {
     fontSize: 18,
@@ -833,7 +892,7 @@ const styles = StyleSheet.create({
   customerName: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#FC8019',
+    color: '#2563EB',
   },
   customerPhone: {
     fontSize: 11,
@@ -848,17 +907,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderBottomWidth: 0.5,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#E2E8F0',
   },
   totalLabel: {
     fontSize: 12,
-    color: '#999',
+    color: '#94A3B8',
     fontWeight: '700',
   },
   totalValue: {
     fontSize: 28,
     fontWeight: '900',
-    color: '#FC8019',
+    color: '#2563EB',
     letterSpacing: -0.5,
   },
   itemsArea: {
@@ -888,17 +947,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 0.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
   },
   itemName: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#222',
+    color: '#0F172A',
     flex: 1,
   },
   customBadge: {
     fontSize: 10,
-    color: '#aaa',
+    color: '#64748B',
     fontWeight: '600',
   },
   itemControls: {
@@ -909,7 +968,7 @@ const styles = StyleSheet.create({
   qtyBtn: {
     width: 26,
     height: 26,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8FAFC',
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -917,19 +976,19 @@ const styles = StyleSheet.create({
   qtyBtnText: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#FC8019',
+    color: '#2563EB',
   },
   qtyNum: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#222',
+    color: '#0F172A',
     minWidth: 20,
     textAlign: 'center',
   },
   itemPrice: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#FC8019',
+    color: '#2563EB',
     minWidth: 52,
     textAlign: 'right',
   },
@@ -942,11 +1001,11 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: '#fff',
     borderTopWidth: 0.5,
-    borderTopColor: '#eee',
+    borderTopColor: '#E2E8F0',
   },
   customLabel: {
     fontSize: 10,
-    color: '#aaa',
+    color: '#64748B',
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -961,7 +1020,7 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
     backgroundColor: '#fff',
     fontSize: 13,
     fontWeight: '600',
@@ -971,7 +1030,7 @@ const styles = StyleSheet.create({
   },
   customAddBtn: {
     paddingHorizontal: 16,
-    backgroundColor: '#FC8019',
+    backgroundColor: '#2563EB',
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -984,7 +1043,7 @@ const styles = StyleSheet.create({
   numpad: {
     backgroundColor: '#fff',
     borderTopWidth: 0.5,
-    borderTopColor: '#eee',
+    borderTopColor: '#E2E8F0',
     padding: 12,
   },
   numpadInputRow: {
@@ -998,7 +1057,7 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
     backgroundColor: '#fafafa',
     fontSize: 13,
     fontWeight: '700',
@@ -1008,7 +1067,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: '#fafafa',
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
     borderRadius: 10,
     minWidth: 80,
     alignItems: 'center',
@@ -1016,7 +1075,7 @@ const styles = StyleSheet.create({
   numpadDisplayText: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#222',
+    color: '#0F172A',
   },
   numpadGrid: {
     flexDirection: 'row',
@@ -1027,17 +1086,17 @@ const styles = StyleSheet.create({
   numpadKey: {
     width: '31%',
     padding: 14,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8FAFC',
     borderRadius: 10,
     alignItems: 'center',
   },
   grayKey: {
-    backgroundColor: '#eee',
+    backgroundColor: '#E2E8F0',
   },
   numpadKeyText: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#222',
+    color: '#0F172A',
   },
   buttonRow: {
     flexDirection: 'row',
@@ -1049,19 +1108,19 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: '#fff',
     borderWidth: 1.5,
-    borderColor: '#FC8019',
+    borderColor: '#2563EB',
     borderRadius: 10,
     alignItems: 'center',
   },
   outlineBtnText: {
-    color: '#FC8019',
+    color: '#2563EB',
     fontSize: 12,
     fontWeight: '800',
   },
   fillBtn: {
     flex: 1,
     padding: 12,
-    backgroundColor: '#FC8019',
+    backgroundColor: '#2563EB',
     borderRadius: 10,
     alignItems: 'center',
   },
@@ -1072,7 +1131,7 @@ const styles = StyleSheet.create({
   },
   collectBtn: {
     padding: 14,
-    backgroundColor: '#FC8019',
+    backgroundColor: '#2563EB',
     borderRadius: 14,
     alignItems: 'center',
     marginTop: 4,
@@ -1090,7 +1149,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingVertical: 8,
     borderTopWidth: 0.5,
-    borderTopColor: '#eee',
+    borderTopColor: '#E2E8F0',
   },
   navItem: {
     flex: 1,
@@ -1099,14 +1158,14 @@ const styles = StyleSheet.create({
   },
   navLabel: {
     fontSize: 9,
-    color: '#aaa',
+    color: '#64748B',
     fontWeight: '700',
     marginTop: 2,
   },
   catalogueSection: {
     flex: 1,
     padding: 14,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8FAFC',
   },
   catalogueHeader: {
     marginBottom: 12,
@@ -1114,11 +1173,11 @@ const styles = StyleSheet.create({
   catalogueTitle: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#222',
+    color: '#0F172A',
   },
   catalogueSub: {
     fontSize: 11,
-    color: '#FC8019',
+    color: '#2563EB',
     fontWeight: '700',
     marginTop: 1,
   },
@@ -1128,7 +1187,7 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8FAFC',
     borderRadius: 12,
     paddingHorizontal: 12,
     marginHorizontal: 12,
@@ -1137,13 +1196,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   searchIcon: {
-    color: '#999',
+    color: '#94A3B8',
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
     fontWeight: '600',
-    color: '#222',
+    color: '#0F172A',
   },
   unitSelectRow: {
     flexDirection: 'row',
@@ -1154,7 +1213,7 @@ const styles = StyleSheet.create({
   unitLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#666',
+    color: '#64748B',
     width: 50,
   },
   unitSelectBtn: {
@@ -1164,15 +1223,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8FAFC',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
   },
   unitSelectText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FC8019',
+    color: '#2563EB',
   },
   unitGrid: {
     flexDirection: 'row',
@@ -1193,17 +1252,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   unitOptionSelected: {
-    borderColor: '#FC8019',
+    borderColor: '#2563EB',
     backgroundColor: 'rgba(252,128,25,0.1)',
   },
   unitOptionText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#666',
+    color: '#64748B',
     textTransform: 'capitalize',
   },
   unitOptionTextSelected: {
-    color: '#FC8019',
+    color: '#2563EB',
   },
   productCard: {
     backgroundColor: '#fff',
@@ -1214,23 +1273,26 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 0.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
   },
   productName: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#222',
+    color: '#0F172A',
+    textAlign: 'center',
   },
   productPrice: {
     fontSize: 13,
-    color: '#FC8019',
+    color: '#2563EB',
     marginTop: 3,
     fontWeight: '700',
+    textAlign: 'center',
   },
   productSales: {
     fontSize: 11,
-    color: '#aaa',
+    color: '#64748B',
     marginTop: 2,
+    textAlign: 'center',
   },
   productActions: {
     flexDirection: 'row',
@@ -1242,7 +1304,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     backgroundColor: '#fff8f0',
     borderWidth: 1,
-    borderColor: '#FC8019',
+    borderColor: '#2563EB',
     borderRadius: 9,
   },
   editBtnText: {
@@ -1262,7 +1324,7 @@ const styles = StyleSheet.create({
   useBtn: {
     paddingHorizontal: 14,
     paddingVertical: 7,
-    backgroundColor: '#FC8019',
+    backgroundColor: '#2563EB',
     borderRadius: 9,
   },
   useBtnText: {
@@ -1279,12 +1341,12 @@ const styles = StyleSheet.create({
   addProductTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#222',
+    color: '#0F172A',
     marginBottom: 12,
   },
   addInput: {
     borderWidth: 1.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
     backgroundColor: '#fafafa',
     borderRadius: 10,
     padding: 12,
@@ -1293,7 +1355,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   saveBtn: {
-    backgroundColor: '#FC8019',
+    backgroundColor: '#2563EB',
     padding: 12,
     borderRadius: 12,
     alignItems: 'center',
@@ -1324,11 +1386,11 @@ const styles = StyleSheet.create({
   pickerTitle: {
     fontSize: 15,
     fontWeight: '900',
-    color: '#222',
+    color: '#0F172A',
   },
   pickerClose: {
     fontSize: 26,
-    color: '#aaa',
+    color: '#64748B',
   },
   pickerRow: {
     flexDirection: 'row',
@@ -1339,23 +1401,23 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     borderWidth: 0.5,
-    borderColor: '#eee',
+    borderColor: '#E2E8F0',
   },
   pickerProdName: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#222',
+    color: '#0F172A',
   },
   pickerProdPrice: {
     fontSize: 12,
-    color: '#FC8019',
+    color: '#2563EB',
     marginTop: 2,
     fontWeight: '700',
   },
   pickerAddBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#FC8019',
+    backgroundColor: '#2563EB',
     borderRadius: 8,
   },
   pickerAddText: {
@@ -1372,7 +1434,7 @@ const styles = StyleSheet.create({
   addProductButtonText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FC8019',
+    color: '#2563EB',
   },
   addProductModal: {
     backgroundColor: '#fff',
@@ -1390,7 +1452,7 @@ const styles = StyleSheet.create({
   addProductModalTitle: {
     fontSize: 18,
     fontWeight: '900',
-    color: '#222',
+    color: '#0F172A',
   },
   addProductModalContent: {
     gap: 14,
@@ -1398,7 +1460,7 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#666',
+    color: '#64748B',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
