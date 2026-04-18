@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1094159048692",
+    "project_id": "android-app-6bde7",
+    "storage_bucket": "android-app-6bde7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1094159048692:android:c5c8c33d983370dba0e3a1",
+        "android_client_info": {
+          "package_name": "com.sankalp.app"
+        }
+      },
+      "oauth_client": ["91434556988-fribkfk8bimfo75318rldjsq7g4hh8kc.apps.googleusercontent.com"],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAgoSfgfL3g7M4vXqs_gLkMXt-pd9h_z20"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

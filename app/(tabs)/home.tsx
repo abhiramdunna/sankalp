@@ -1,9 +1,10 @@
+// home.tsx - UI redesigned to match the target images exactly
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef, memo } from 'react';
 import {
   Alert,
   FlatList,
@@ -16,11 +17,22 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// Types
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const SAMPLE_PRODUCTS = [
+  { name: 'Puri Plate', price: 20, qty: 0 },
+  { name: 'Masala Puri', price: 25, qty: 0 },
+  { name: 'Tamarind Water', price: 10, qty: 0 },
+  { name: 'Special Plate', price: 40, qty: 0 },
+  { name: 'Idly 2pcs', price: 15, qty: 0 },
+];
+
 interface BillItem {
   name: string;
   price: number;
@@ -40,38 +52,418 @@ interface Session {
 interface SaleLog {
   total: number;
   time: string;
+  date: string;
   items: BillItem[];
   customerName: string;
   phone: string;
 }
 
+// Toast Component
+const Toast = ({
+  visible,
+  message,
+  type = 'error',
+  onHide,
+}: {
+  visible: boolean;
+  message: string;
+  type?: 'error' | 'success' | 'info';
+  onHide: () => void;
+}) => {
+  useEffect(() => {
+    if (visible) {
+      const timer = setTimeout(() => onHide(), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  const bg =
+    type === 'error' ? '#EF4444' : type === 'success' ? '#10B981' : '#3B82F6';
+
+  return (
+    <View style={[styles.toastContainer, { backgroundColor: bg }]}>
+      <Text style={styles.toastText}>{message}</Text>
+    </View>
+  );
+};
+
+// ─────────────────────────────────────────────
+// LiveBillingModal — matches Image 2 left panel
+// ─────────────────────────────────────────────
+const LiveBillingModalComponent = memo(
+  ({
+    visible,
+    onClose,
+    onSave,
+    sessionId,
+    initialCustomerName = '',
+    initialCustomerPhone = '',
+    initialItems = [],
+  }: {
+    visible: boolean;
+    onClose: () => void;
+    onSave: (
+      customerName: string,
+      customerPhone: string,
+      items: BillItem[],
+      shouldComplete: boolean
+    ) => void;
+    sessionId?: number | null;
+    initialCustomerName?: string;
+    initialCustomerPhone?: string;
+    initialItems?: BillItem[];
+  }) => {
+    const [customerName, setCustomerName] = useState(initialCustomerName);
+    const [customerPhone, setCustomerPhone] = useState(initialCustomerPhone);
+    const [items, setItems] = useState<BillItem[]>(initialItems);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [showToast, setShowToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+
+    useEffect(() => {
+      if (visible) {
+        setCustomerName(initialCustomerName);
+        setCustomerPhone(initialCustomerPhone);
+        setItems(initialItems);
+      }
+    }, [visible]);
+
+    const showWarning = (msg: string) => {
+      setToastMessage(msg);
+      setShowToast(true);
+    };
+
+    const handleAddItem = useCallback((item: BillItem) => {
+      setItems((prev) => {
+        const existing = prev.find((i) => i.name === item.name);
+        if (existing) {
+          return prev.map((i) =>
+            i.name === item.name ? { ...i, qty: i.qty + 1 } : i
+          );
+        }
+        return [...prev, { ...item, qty: 1 }];
+      });
+    }, []);
+
+    const handleRemoveItem = useCallback((itemName: string) => {
+      setItems((prev) => {
+        const item = prev.find((i) => i.name === itemName);
+        if (item && item.qty > 1) {
+          return prev.map((i) =>
+            i.name === itemName ? { ...i, qty: i.qty - 1 } : i
+          );
+        }
+        return prev.filter((i) => i.name !== itemName);
+      });
+    }, []);
+
+    const handleSaveAndGoBack = () => {
+      const itemsToSave = items.filter((i) => i.qty > 0);
+      if (itemsToSave.length === 0) {
+        showWarning('Please add at least one item');
+        return;
+      }
+      onSave(customerName, customerPhone, itemsToSave, false);
+    };
+
+    const handleCompleteBill = () => {
+      if (items.filter((i) => i.qty > 0).length === 0) {
+        showWarning('Please add at least one item');
+        return;
+      }
+      onSave(customerName, customerPhone, items, true);
+    };
+
+    const billTotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
+    const totalItemCount = items.reduce((sum, i) => sum + i.qty, 0);
+
+    const filteredProducts = SAMPLE_PRODUCTS.filter((p) =>
+      p.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    if (!visible) return null;
+
+    return (
+      <>
+        <Toast
+          visible={showToast}
+          message={toastMessage}
+          onHide={() => setShowToast(false)}
+        />
+        <Modal
+          animationType="slide"
+          transparent={false}
+          visible={visible}
+          onRequestClose={onClose}
+        >
+          <KeyboardAvoidingView
+            style={styles.liveBillingFullScreen}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            {/* Header */}
+            <View style={styles.liveBillingHeader}>
+              <TouchableOpacity onPress={onClose} style={styles.liveBillingBackBtn}>
+                <Ionicons name="arrow-back" size={22} color="#333" />
+              </TouchableOpacity>
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={styles.liveBillingTitle}>Live Billing</Text>
+                <Text style={styles.liveBillingSub}>Add items and create bill</Text>
+              </View>
+              <TouchableOpacity onPress={onClose} style={styles.liveBillingCloseBtn}>
+                <Ionicons name="close" size={20} color="#2563EB" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.liveBillingContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Customer Name Section */}
+              <View style={styles.customerSection}>
+                <View style={styles.customerAvatarRow}>
+                  <View style={styles.customerAvatar}>
+                    <Ionicons name="person" size={24} color="#2563EB" />
+                  </View>
+                  <Text style={styles.customerSectionTitle}>Customer Name</Text>
+                </View>
+
+                {/* Name Input */}
+                <View style={styles.lbInputBox}>
+                  <Ionicons name="person-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={styles.lbInput}
+                    placeholder="Enter customer name (optional)"
+                    value={customerName}
+                    onChangeText={setCustomerName}
+                    placeholderTextColor="#ccc"
+                  />
+                  {customerName.length > 0 && (
+                    <TouchableOpacity onPress={() => setCustomerName('')}>
+                      <Ionicons name="close-circle" size={18} color="#bbb" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Phone Input */}
+                <View style={[styles.lbInputBox, { marginTop: 8 }]}>
+                  <Ionicons name="call-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={styles.lbInput}
+                    placeholder="Phone (optional)"
+                    value={customerPhone}
+                    onChangeText={setCustomerPhone}
+                    keyboardType="phone-pad"
+                    placeholderTextColor="#ccc"
+                  />
+                </View>
+              </View>
+
+              {/* Add Items Section */}
+              <View style={styles.addItemsSection}>
+                <View style={styles.addItemsHeader}>
+                  <Text style={styles.addItemsTitle}>Add Items</Text>
+                  <TouchableOpacity>
+                    <Text style={styles.addCustomItemBtn}>+ Add Custom Item</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Search Box */}
+                <View style={styles.searchBox}>
+                  <Ionicons name="search" size={18} color="#bbb" style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search items..."
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholderTextColor="#ccc"
+                  />
+                </View>
+
+                {/* Product Rows */}
+                {filteredProducts.map((product) => {
+                  const currentItem = items.find((i) => i.name === product.name);
+                  const qty = currentItem?.qty || 0;
+                  const lineTotal = qty * product.price;
+
+                  return (
+                    <View key={product.name} style={styles.productRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.productName}>{product.name}</Text>
+                        <Text style={styles.productPrice}>₹ {product.price.toFixed(2)}</Text>
+                      </View>
+                      <View style={styles.qtyControl}>
+                        <TouchableOpacity
+                          style={styles.qtyBtn}
+                          onPress={() => handleRemoveItem(product.name)}
+                        >
+                          <Ionicons name="remove" size={16} color="#2563EB" />
+                        </TouchableOpacity>
+                        <Text style={styles.qtyText}>{qty}</Text>
+                        <TouchableOpacity
+                          style={styles.qtyBtn}
+                          onPress={() => handleAddItem(product)}
+                        >
+                          <Ionicons name="add" size={16} color="#2563EB" />
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={styles.lineTotal}>
+                        ₹ {lineTotal > 0 ? lineTotal.toFixed(2) : '0.00'}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {/* Bill Summary Bar */}
+              <View style={styles.billSummaryBar}>
+                <View style={styles.summaryLeft}>
+                  <Ionicons name="document-text-outline" size={28} color="#2563EB" />
+                  <View style={{ marginLeft: 10 }}>
+                    <Text style={styles.summaryItemsLabel}>Total Items</Text>
+                    <Text style={styles.summaryItemsValue}>{totalItemCount} Items</Text>
+                  </View>
+                </View>
+                <View style={styles.summaryRight}>
+                  <Text style={styles.summaryTotalLabel}>Grand Total</Text>
+                  <Text style={styles.summaryTotalValue}>₹ {billTotal.toFixed(2)}</Text>
+                </View>
+              </View>
+
+              <View style={{ height: 100 }} />
+            </ScrollView>
+
+            {/* Bottom Buttons */}
+            <View style={styles.lbBottomButtons}>
+              <TouchableOpacity style={styles.saveGoBackBtn} onPress={handleSaveAndGoBack}>
+                <Ionicons name="save-outline" size={18} color="#2563EB" style={{ marginRight: 6 }} />
+                <Text style={styles.saveGoBackText}>Save & Go Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.completeBillBtn} onPress={handleCompleteBill}>
+                <Ionicons name="checkmark" size={18} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.completeBillText}>Complete Bill</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+      </>
+    );
+  }
+);
+
+// ─────────────────────────────────────────────
+// ReviewBillModal
+// ─────────────────────────────────────────────
+const ReviewBillModalComponent = memo(
+  ({
+    visible,
+    onClose,
+    onConfirm,
+    customerName = '',
+    customerPhone = '',
+    items = [],
+    total = 0,
+  }: {
+    visible: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+    customerName?: string;
+    customerPhone?: string;
+    items?: BillItem[];
+    total?: number;
+  }) => {
+    if (!visible) return null;
+    return (
+      <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
+        <View style={styles.reviewBillOverlay}>
+          <View style={styles.reviewBillContainer}>
+            <View style={styles.reviewBillHeader}>
+              <Text style={styles.reviewBillTitle}>Review Bill</Text>
+              <TouchableOpacity onPress={onClose}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.reviewBillCustomerInfo}>
+              <Text style={styles.reviewBillCustomerName}>{customerName || 'Walk-in Customer'}</Text>
+              {customerPhone ? (
+                <Text style={styles.reviewBillCustomerPhone}>{customerPhone}</Text>
+              ) : null}
+            </View>
+            <ScrollView style={{ maxHeight: SCREEN_HEIGHT * 0.4 }} showsVerticalScrollIndicator={false}>
+              {items.map((item, index) => (
+                <View key={index} style={styles.reviewBillItem}>
+                  <View>
+                    <Text style={styles.reviewBillItemName}>{item.name}</Text>
+                    <Text style={styles.reviewBillItemQty}>Qty: {item.qty}</Text>
+                  </View>
+                  <Text style={styles.reviewBillItemAmount}>₹{item.price * item.qty}</Text>
+                </View>
+              ))}
+            </ScrollView>
+            <View style={styles.reviewBillTotal}>
+              <Text style={styles.reviewBillTotalLabel}>Total</Text>
+              <Text style={styles.reviewBillTotalAmount}>₹{total}</Text>
+            </View>
+            <View style={styles.reviewBillButtons}>
+              <TouchableOpacity style={styles.reviewBillBackBtn} onPress={onClose}>
+                <Text style={styles.reviewBillBackBtnText}>Edit Bill</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.reviewBillDoneBtn} onPress={onConfirm}>
+                <Text style={styles.reviewBillDoneBtnText}>Confirm & Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+);
+
+// ─────────────────────────────────────────────
+// Main HomeScreen
+// ─────────────────────────────────────────────
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
+
   const [bizName, setBizName] = useState('Sri Venkata Tiffins');
   const [todayTotal, setTodayTotal] = useState(0);
   const [salesLog, setSalesLog] = useState<SaleLog[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentDateTime, setCurrentDateTime] = useState('');
-  const [modalVisible, setModalVisible] = useState(false);
-  const [newCustName, setNewCustName] = useState('');
-  const [newCustPhone, setNewCustPhone] = useState('');
   const [profileVisible, setProfileVisible] = useState(false);
   const [totalBills, setTotalBills] = useState(0);
   const [nextDue, setNextDue] = useState('');
-  const [billingMode, setBillingMode] = useState<'full' | 'quick' | null>(null);
-  const [quickAmount, setQuickAmount] = useState('');
-  const [billingSessionActive, setBillingSessionActive] = useState(false);
-  const [billingCustomerName, setBillingCustomerName] = useState('');
-  const [billingCustomerPhone, setBillingCustomerPhone] = useState('');
-  const [billingItems, setBillingItems] = useState<BillItem[]>([]);
-  const [products, setProducts] = useState<BillItem[]>([]);
-  const [customerToggleOn, setCustomerToggleOn] = useState(false);
-  const [walkInSessions, setWalkInSessions] = useState<Session[]>([]);
-  const [currentBillingSessionId, setCurrentBillingSessionId] = useState<number | null>(null);
 
-  // Load data on mount
+  // Quick Entry modal
+  const [quickEntryVisible, setQuickEntryVisible] = useState(false);
+  const [quickName, setQuickName] = useState('');
+  const [quickPhone, setQuickPhone] = useState('');
+  const [quickAmount, setQuickAmount] = useState('');
+  const [quickNote, setQuickNote] = useState('');
+
+  // Live Billing
+  const [billingSessionActive, setBillingSessionActive] = useState(false);
+  const [currentBillingSessionId, setCurrentBillingSessionId] = useState<number | null>(null);
+  const [billReviewVisible, setBillReviewVisible] = useState(false);
+  const [reviewData, setReviewData] = useState<{
+    customerName: string;
+    customerPhone: string;
+    items: BillItem[];
+    total: number;
+    sessionId?: number | null;
+  }>({ customerName: '', customerPhone: '', items: [], total: 0, sessionId: null });
+
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('error');
+
+  const showWarning = (msg: string) => { setToastMessage(msg); setToastType('error'); setShowToast(true); };
+  const showSuccess = (msg: string) => { setToastMessage(msg); setToastType('success'); setShowToast(true); };
+
   useEffect(() => {
     loadData();
     updateDateTime();
@@ -79,56 +471,30 @@ export default function HomeScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // Reload data when billing modal closes (to show new bills)
   useEffect(() => {
-    if (!billingSessionActive) {
-      loadData();
-    }
+    if (!billingSessionActive) loadData();
   }, [billingSessionActive]);
 
-  // Update date/time display
   const updateDateTime = () => {
     const now = new Date();
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const d = days[now.getDay()];
-    const dt = now.getDate();
-    const m = months[now.getMonth()];
-    const hh = now.getHours().toString().padStart(2, '0');
-    const mm = now.getMinutes().toString().padStart(2, '0');
-    setCurrentDateTime(`Sankalp · ${d}, ${dt} ${m} · ${hh}:${mm}`);
-    
-    // Set next due date (1st of next month)
+    setCurrentDateTime(
+      `Sankalp · ${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]} · ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
+    );
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     setNextDue(`${nextMonth.getDate()} ${months[nextMonth.getMonth()]}`);
   };
 
-  // Load all data from storage
   const loadData = async () => {
     try {
-      console.log('📦 Loading home data...');
-      
-      // ✅ Get user from Zustand store (already populated during login)
-      console.log('👤 User from store:', user?.email, user?.id);
-      
       if (user?.id) {
-        console.log('🔍 Fetching profile for user:', user.id);
-        const { data: profile, error: profileError } = await supabase
+        const { data: profile } = await supabase
           .from('profiles')
           .select('business_name')
           .eq('id', user.id)
           .maybeSingle();
-        
-        console.log('📊 Profile result:', { profile, error: profileError });
-        
-        if (profile?.business_name) {
-          console.log('✅ Loaded business name:', profile.business_name);
-          setBizName(profile.business_name);
-        } else {
-          console.log('⚠️ No business name found in profile');
-        }
-      } else {
-        console.log('⚠️ No user in store');
+        if (profile?.business_name) setBizName(profile.business_name);
       }
 
       const storedSales = await AsyncStorage.getItem('salesLog');
@@ -136,239 +502,157 @@ export default function HomeScreen() {
         const parsed = JSON.parse(storedSales);
         if (Array.isArray(parsed)) {
           setSalesLog(parsed);
-          const total = parsed.reduce((sum: number, sale: SaleLog) => sum + sale.total, 0);
-          setTodayTotal(total);
+          setTodayTotal(parsed.reduce((sum: number, s: SaleLog) => sum + s.total, 0));
           setTotalBills(parsed.length);
-        } else {
-          console.warn('⚠️ Corrupted salesLog data, resetting');
-          setSalesLog([]);
-          setTodayTotal(0);
-          setTotalBills(0);
         }
       }
 
       const storedSessions = await AsyncStorage.getItem('sessions');
       if (storedSessions) {
-        setSessions(JSON.parse(storedSessions));
+        const parsed = JSON.parse(storedSessions);
+        setSessions(parsed);
       }
-    } catch (error) {
-      console.error('❌ Error loading data:', error);
+    } catch (e) {
+      console.error(e);
     }
   };
 
-  // Create new billing session
-  const startNewSession = async () => {
-    if (!newCustName.trim() && !newCustPhone.trim()) {
-      Alert.alert('Info', 'Please enter customer details');
-      return;
-    }
-
-    const newSession: Session = {
-      id: Date.now(),
-      customerName: newCustName.trim() || 'Customer',
-      phone: newCustPhone.trim(),
-      items: [],
-      npVal: '0',
-    };
-
-    const updatedSessions = [...sessions, newSession];
-    setSessions(updatedSessions);
-    await AsyncStorage.setItem('sessions', JSON.stringify(updatedSessions));
-    
-    setModalVisible(false);
-    setNewCustName('');
-    setNewCustPhone('');
-    
-    // Navigate to products screen with session ID
-    router.push({
-      pathname: '/products',
-      params: { sessionId: newSession.id.toString() }
-    });
+  const startBilling = async () => {
+    const newSessionId = Date.now();
+    setCurrentBillingSessionId(newSessionId);
+    setBillingSessionActive(true);
   };
 
-  // Continue existing session
   const continueSession = (sessionId: number) => {
-    router.push({
-      pathname: '/products',
-      params: { sessionId: sessionId.toString() }
-    });
+    router.push({ pathname: '/products', params: { sessionId: sessionId.toString() } });
   };
 
-  // Update current billing session with items
   const updateCurrentBillingSession = async (items: BillItem[], custName?: string, custPhone?: string) => {
     if (!currentBillingSessionId) return;
-
-    const updatedSessions = sessions.map(session => 
-      session.id === currentBillingSessionId 
-        ? { 
-            ...session, 
-            items, 
-            customerName: custName || session.customerName,
-            phone: custPhone || session.phone
-          }
-        : session
+    const updated = sessions.map((s) =>
+      s.id === currentBillingSessionId
+        ? { ...s, items, customerName: custName || s.customerName, phone: custPhone || s.phone }
+        : s
     );
-
-    setSessions(updatedSessions);
-    await AsyncStorage.setItem('sessions', JSON.stringify(updatedSessions));
+    setSessions(updated);
+    await AsyncStorage.setItem('sessions', JSON.stringify(updated));
   };
 
-  // ✅ Save quick transaction
-  const saveQuickTransaction = async () => {
-    if (!newCustName.trim() || !quickAmount.trim()) {
-      Alert.alert('Error', 'Please enter name and amount');
-      return;
-    }
-
+  const saveQuickEntry = async () => {
+    if (!quickName.trim()) { showWarning('Please enter customer name'); return; }
+    if (!quickAmount.trim()) { showWarning('Please enter amount'); return; }
     const amount = parseFloat(quickAmount);
-    if (isNaN(amount) || amount <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount');
-      return;
-    }
+    if (isNaN(amount) || amount <= 0) { showWarning('Enter a valid amount'); return; }
 
+    const now = new Date();
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const newBill: SaleLog = {
       total: amount,
-      time: new Date().toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: true 
-      }),
-      items: [{ 
-        name: 'Quick Payment', 
-        price: amount, 
-        qty: 1 
-      }],
-      customerName: newCustName || 'Walk-in',
-      phone: newCustPhone,
+      time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      date: `${now.getDate()} ${months[now.getMonth()]}`,
+      items: [{ name: quickNote.trim() || 'Quick Entry', price: amount, qty: 1 }],
+      customerName: quickName.trim(),
+      phone: quickPhone,
     };
 
+    const updated = [newBill, ...salesLog];
+    setSalesLog(updated);
+    await AsyncStorage.setItem('salesLog', JSON.stringify(updated));
+    setTodayTotal((prev) => prev + amount);
+    setTotalBills((prev) => prev + 1);
+    setQuickName(''); setQuickPhone(''); setQuickAmount(''); setQuickNote('');
+    setQuickEntryVisible(false);
+    showSuccess(`Payment saved! ₹${amount}`);
+  };
+
+  const handleSaveBill = async (customerName: string, customerPhone: string, items: BillItem[], shouldComplete: boolean) => {
+    if (shouldComplete) {
+      const total = items.reduce((sum, i) => sum + i.price * i.qty, 0);
+      setReviewData({ customerName, customerPhone, items, total, sessionId: currentBillingSessionId });
+      setBillingSessionActive(false);
+      setBillReviewVisible(true);
+    } else {
+      if (!currentBillingSessionId) {
+        const id = Date.now();
+        setCurrentBillingSessionId(id);
+        const newSession: Session = { id, customerName: customerName || 'Walk-in Customer', phone: customerPhone, items, npVal: '0' };
+        const updated = [...sessions, newSession];
+        setSessions(updated);
+        await AsyncStorage.setItem('sessions', JSON.stringify(updated));
+      } else {
+        await updateCurrentBillingSession(items, customerName, customerPhone);
+      }
+      setBillingSessionActive(false);
+      showSuccess('Bill saved as draft');
+    }
+  };
+
+  const handleConfirmBill = async () => {
+    const now = new Date();
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const newBill: SaleLog = {
+      total: reviewData.total,
+      time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      date: `${now.getDate()} ${months[now.getMonth()]}`,
+      items: reviewData.items,
+      customerName: reviewData.customerName,
+      phone: reviewData.customerPhone,
+    };
     const updatedBills = [newBill, ...salesLog];
     setSalesLog(updatedBills);
     await AsyncStorage.setItem('salesLog', JSON.stringify(updatedBills));
 
-    // Update totals
-    setTodayTotal(prev => prev + amount);
-    setTotalBills(prev => prev + 1);
-
-    // Reset and close
-    setNewCustName('');
-    setNewCustPhone('');
-    setQuickAmount('');
-    setBillingMode(null);
-    setModalVisible(false);
-
-    Alert.alert('Success', `Transaction saved! ₹${amount}`);
+    if (reviewData.sessionId) {
+      const updatedSessions = sessions.filter((s) => s.id !== reviewData.sessionId);
+      setSessions(updatedSessions);
+      await AsyncStorage.setItem('sessions', JSON.stringify(updatedSessions));
+    }
+    setTodayTotal((prev) => prev + reviewData.total);
+    setTotalBills((prev) => prev + 1);
+    setBillReviewVisible(false);
+    setCurrentBillingSessionId(null);
+    setReviewData({ customerName: '', customerPhone: '', items: [], total: 0, sessionId: null });
+    showSuccess(`Bill saved! ₹${reviewData.total}`);
   };
 
-  // View completed bill details
-  const viewBillDetails = (bill: SaleLog, index: number) => {
-    Alert.alert(
-      `Bill #${salesLog.length - index}`,
-      `Customer: ${bill.customerName}\nPhone: ${bill.phone || 'N/A'}\nTime: ${bill.time}\nTotal: ₹${bill.total}\n\nItems:\n${bill.items.map(item => `${item.name} x${item.qty} = ₹${item.price * item.qty}`).join('\n')}`,
-      [{ text: 'OK' }]
-    );
-  };
+  // Active sessions = those with items
+  const activeSessions = sessions.filter((s) => s.items.length > 0);
 
-  // Render active sessions
-  const renderActiveSession = ({ item }: { item: Session }) => {
-    const total = item.items.reduce((sum, i) => sum + i.price * i.qty, 0);
-    const itemCount = item.items.reduce((sum, i) => sum + i.qty, 0);
-    return (
-      <TouchableOpacity 
-        style={styles.activeCard} 
-        onPress={() => continueSession(item.id)}
-      >
-        <View style={styles.activeCardLeft}>
-          <Text style={styles.activeCardName}>👤 {item.customerName}</Text>
-          <Text style={styles.activeCardItems}>
-            {itemCount} item{itemCount !== 1 ? 's' : ''}
-            {item.phone ? ` · 📞 ${item.phone}` : ''}
-          </Text>
-          <View style={styles.billingBadge}>
-            <Text style={styles.billingBadgeText}>● BILLING IN PROGRESS</Text>
-          </View>
-        </View>
-        <Text style={styles.activeCardRight}>₹{total.toLocaleString('en-IN')}</Text>
-      </TouchableOpacity>
-    );
-  };
+  // Colour cycling for order cards
+  const cardStyles = [
+    { bg: '#EEF2FF', borderColor: '#2563EB', badgeBg: '#2563EB', amountColor: '#2563EB', badgeText: '#fff' },
+    { bg: '#F5F3FF', borderColor: '#7C3AED', badgeBg: '#7C3AED', amountColor: '#7C3AED', badgeText: '#fff' },
+    { bg: '#FFF7ED', borderColor: '#F59E0B', badgeBg: '#F59E0B', amountColor: '#F59E0B', badgeText: '#fff' },
+  ];
 
-  // Render completed bills
-  const renderSaleBill = ({ item, index }: { item: SaleLog; index: number }) => (
-    <TouchableOpacity 
-      style={styles.saleCard} 
-      onPress={() => viewBillDetails(item, index)}
-    >
-      <View>
-        <Text style={styles.saleName}>Bill #{salesLog.length - index}</Text>
-        <Text style={styles.saleCust}>👤 {item.customerName}{item.phone ? ` · 📞 ${item.phone}` : ''}</Text>
-        <Text style={styles.saleTime}>
-          {item.items.reduce((sum, i) => sum + i.qty, 0)} items · {item.time}
-        </Text>
-      </View>
-      <Text style={styles.saleAmount}>+₹{item.total.toLocaleString('en-IN')}</Text>
-    </TouchableOpacity>
-  );
-
-  // Profile Modal Component
+  // Profile Modal
   const ProfileModal = () => (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={profileVisible}
-      onRequestClose={() => setProfileVisible(false)}
-    >
-      <TouchableOpacity 
-        style={styles.modalOverlay} 
-        activeOpacity={1} 
-        onPress={() => setProfileVisible(false)}
-      >
+    <Modal animationType="slide" transparent visible={profileVisible} onRequestClose={() => setProfileVisible(false)}>
+      <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setProfileVisible(false)}>
         <View style={styles.profilePanel}>
           <View style={styles.profileHandle} />
-          
           <View style={styles.profileHeader}>
             <Text style={styles.profileBizName}>{bizName}</Text>
-            <Text style={styles.profileBizSub}>🏪 Hyderabad · Active since 2024</Text>
+            <Text style={styles.profileBizSub}>🏪 Active since 2024</Text>
             <Text style={styles.profileEmail}>📧 {user?.email || 'Not available'}</Text>
             <View style={styles.qrBox}>
-              <Image
-                source={require('@/assets/images/icon.png')}
-                style={styles.qrImage}
-                resizeMode="contain"
-              />
+              <Image source={require('@/assets/images/icon.png')} style={styles.qrImage} resizeMode="contain" />
             </View>
           </View>
-
           <View style={styles.profileGrid}>
-            <View style={styles.profileCell}>
-              <Text style={styles.profileLabel}>Total Bills</Text>
-              <Text style={styles.profileValue}>{totalBills}</Text>
-            </View>
-            <View style={styles.profileCell}>
-              <Text style={styles.profileLabel}>Today Revenue</Text>
-              <Text style={[styles.profileValue, { color: '#2563EB' }]}>₹{todayTotal}</Text>
-            </View>
-            <View style={styles.profileCell}>
-              <Text style={styles.profileLabel}>Plan</Text>
-              <Text style={[styles.profileValue, { color: '#2563EB' }]}>Active</Text>
-            </View>
-            <View style={styles.profileCell}>
-              <Text style={styles.profileLabel}>Next Due</Text>
-              <Text style={[styles.profileValue, { color: '#A32D2D' }]}>{nextDue}</Text>
-            </View>
+            {[
+              { label: 'Total Bills', value: String(totalBills) },
+              { label: 'Today Revenue', value: `₹${todayTotal}`, color: '#2563EB' },
+              { label: 'Plan', value: 'Active', color: '#2563EB' },
+              { label: 'Next Due', value: nextDue, color: '#A32D2D' },
+            ].map((cell) => (
+              <View key={cell.label} style={styles.profileCell}>
+                <Text style={styles.profileLabel}>{cell.label}</Text>
+                <Text style={[styles.profileValue, cell.color ? { color: cell.color } : {}]}>{cell.value}</Text>
+              </View>
+            ))}
           </View>
-
-          <View style={styles.profileWarning}>
-            <Text style={styles.profileWarningText}>
-              ⚠️ Subscription renews on 1st of every month · ₹10
-            </Text>
-            <Text style={styles.profileWarningSub}>App runs till 5th if unpaid</Text>
-          </View>
-
-          <TouchableOpacity 
-            style={styles.profileCloseBtn} 
-            onPress={() => setProfileVisible(false)}
-          >
+          <TouchableOpacity style={styles.profileCloseBtn} onPress={() => setProfileVisible(false)}>
             <Text style={styles.profileCloseText}>Close</Text>
           </TouchableOpacity>
         </View>
@@ -376,1348 +660,448 @@ export default function HomeScreen() {
     </Modal>
   );
 
-  // Transaction Mode Modal (shows two options)
-  const TransactionModeModal = () => (
-    <Modal
-      animationType="fade"
-      transparent={true}
-      visible={false}
-      onRequestClose={() => {
-        setBillingMode(null);
-      }}
-    >
-      <View style={styles.modalOverlay} />
-    </Modal>
-  );
+  // ─── Quick Entry Bottom Sheet (Image 2 right panel) ───
+  const QuickEntryModal = () => (
+    <Modal animationType="slide" transparent visible={quickEntryVisible} onRequestClose={() => setQuickEntryVisible(false)}>
+      <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setQuickEntryVisible(false)}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.qeSheet}
+          pointerEvents="auto"
+        >
+          {/* Handle */}
+          <View style={styles.qeHandle} />
 
-  // New Customer Modal - Quick Payment Version
-  const QuickPaymentModal = () => (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={billingMode === 'quick'}
-      onRequestClose={() => {
-        setBillingMode(null);
-      }}
-    >
-      <TouchableOpacity 
-        style={styles.modalOverlay}
-        activeOpacity={1}
-        onPress={() => {
-          setBillingMode(null);
-        }}
-      >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBox} pointerEvents="auto">
           {/* Header */}
-          <View style={styles.quickPaymentHeader}>
-            <View style={styles.headerContent}>
-              <Ionicons name="flash" size={24} color="#2563EB" />
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.modalTitle}>Quick Payment</Text>
-                <Text style={styles.modalSub}>Receive payment quickly</Text>
+          <View style={styles.qeHeaderRow}>
+            <View style={styles.qeHeaderLeft}>
+              <View style={styles.qeIconBox}>
+                <Ionicons name="flash" size={24} color="#6D28D9" />
+              </View>
+              <View style={{ marginLeft: 12 }}>
+                <Text style={styles.qeTitle}>Quick Entry</Text>
+                <Text style={styles.qeSub}>Add name and amount quickly</Text>
               </View>
             </View>
-            <TouchableOpacity onPress={() => setBillingMode(null)}>
-              <Ionicons name="close" size={28} color="#999" />
+            <TouchableOpacity onPress={() => setQuickEntryVisible(false)}>
+              <Ionicons name="close" size={24} color="#333" />
             </TouchableOpacity>
           </View>
 
-          {/* Form Section */}
-          <View style={styles.quickPaymentForm}>
-            <Text style={styles.inputLabel}>Customer Name</Text>
-            <View style={styles.inputWithIcon}>
-              <Ionicons name="person" size={20} color="#2563EB" />
-              <TextInput
-                style={styles.textInputWithIcon}
-                placeholder="Enter name"
-                value={newCustName}
-                onChangeText={setNewCustName}
-                placeholderTextColor="#ccc"
-              />
-            </View>
-
-            <Text style={[styles.inputLabel, { marginTop: 16 }]}>Phone (Optional)</Text>
-            <View style={styles.inputWithIcon}>
-              <Ionicons name="call" size={20} color="#2563EB" />
-              <TextInput
-                style={styles.textInputWithIcon}
-                placeholder="+91 98765 43210"
-                value={newCustPhone}
-                onChangeText={setNewCustPhone}
-                keyboardType="phone-pad"
-                placeholderTextColor="#ccc"
-              />
-            </View>
-
-            <Text style={[styles.inputLabel, { marginTop: 16 }]}>Amount (₹)</Text>
-            <View style={styles.inputWithIcon}>
-              <Ionicons name="cash" size={20} color="#2563EB" />
-              <TextInput
-                style={[styles.textInputWithIcon, styles.amountInput]}
-                placeholder="0.00"
-                value={quickAmount}
-                onChangeText={setQuickAmount}
-                keyboardType="decimal-pad"
-                placeholderTextColor="#ccc"
-              />
+          {/* Fast & Simple Badge */}
+          <View style={styles.qeFastBadge}>
+            <Ionicons name="timer-outline" size={22} color="#6D28D9" />
+            <View style={{ marginLeft: 10 }}>
+              <Text style={styles.qeFastTitle}>Fast & Simple</Text>
+              <Text style={styles.qeFastSub}>Just enter details and save</Text>
             </View>
           </View>
 
-          {/* Buttons */}
-          <TouchableOpacity style={styles.modalBtn} onPress={saveQuickTransaction}>
-            <Text style={styles.modalBtnText}>Save Payment</Text>
+          {/* Form */}
+          <View style={styles.qeForm}>
+            <Text style={styles.qeLabel}>Customer Name</Text>
+            <View style={styles.qeInputBox}>
+              <Ionicons name="person-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+              <TextInput style={styles.qeInput} placeholder="Enter customer name" value={quickName} onChangeText={setQuickName} placeholderTextColor="#ccc" />
+            </View>
+
+            <Text style={[styles.qeLabel, { marginTop: 14 }]}>Phone (Optional)</Text>
+            <View style={styles.qeInputBox}>
+              <Ionicons name="call-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+              <TextInput style={styles.qeInput} placeholder="+91 98765 43210" value={quickPhone} onChangeText={setQuickPhone} keyboardType="phone-pad" placeholderTextColor="#ccc" />
+            </View>
+
+            <Text style={[styles.qeLabel, { marginTop: 14 }]}>Amount (₹)</Text>
+            <View style={styles.qeInputBox}>
+              <Ionicons name="logo-usd" size={18} color="#bbb" style={{ marginRight: 8 }} />
+              <TextInput style={[styles.qeInput, { fontSize: 16, color: '#2563EB', fontWeight: '700' }]} placeholder="0.00" value={quickAmount} onChangeText={setQuickAmount} keyboardType="decimal-pad" placeholderTextColor="#ccc" />
+            </View>
+
+            <Text style={[styles.qeLabel, { marginTop: 14 }]}>Payment Note (Optional)</Text>
+            <View style={styles.qeInputBox}>
+              <Ionicons name="document-text-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+              <TextInput style={styles.qeInput} placeholder="e.g., Lunch Payment, Advance, etc." value={quickNote} onChangeText={setQuickNote} placeholderTextColor="#ccc" />
+            </View>
+          </View>
+
+          {/* Save Button */}
+          <TouchableOpacity style={styles.qeSaveBtn} onPress={saveQuickEntry}>
+            <Ionicons name="wallet-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.qeSaveBtnText}>Save Payment</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.viewHistoryBtn} onPress={() => {}}>
-            <Ionicons name="time" size={20} color="#2563EB" />
-            <Text style={styles.viewHistoryText}>View Payment History</Text>
-            <Ionicons name="chevron-forward" size={20} color="#2563EB" />
-          </TouchableOpacity>
+          <View style={{ height: 12 }} />
         </KeyboardAvoidingView>
       </TouchableOpacity>
     </Modal>
   );
 
-  // Live Billing Modal - Select items and add to bill
-  const LiveBillingModal = () => {
-    const billTotal = billingItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
-    const itemCount = billingItems.reduce((sum, item) => sum + item.qty, 0);
-    
-    const handleAddItem = (item: BillItem) => {
-      let updatedItems = [];
-      const existingItem = billingItems.find(i => i.name === item.name);
-      if (existingItem) {
-        updatedItems = billingItems.map(i => 
-          i.name === item.name ? { ...i, qty: i.qty + 1 } : i
-        );
-      } else {
-        updatedItems = [...billingItems, { ...item, qty: 1 }];
-      }
-      setBillingItems(updatedItems);
-    };
-
-    const handleRemoveItem = (itemName: string) => {
-      let updatedItems = [];
-      const item = billingItems.find(i => i.name === itemName);
-      if (item && item.qty > 1) {
-        updatedItems = billingItems.map(i => 
-          i.name === itemName ? { ...i, qty: i.qty - 1 } : i
-        );
-      } else {
-        updatedItems = billingItems.filter(i => i.name !== itemName);
-      }
-      setBillingItems(updatedItems);
-    };
-
-    const handleCompleteNill = async () => {
-      if (!billingCustomerName.trim()) {
-        Alert.alert('Error', 'Please enter customer name');
-        return;
-      }
-
-      if (billingItems.length === 0) {
-        Alert.alert('Error', 'Please add at least one item');
-        return;
-      }
-
-      const newBill: SaleLog = {
-        total: billTotal,
-        time: new Date().toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
-          minute: '2-digit',
-          hour12: true 
-        }),
-        items: billingItems,
-        customerName: billingCustomerName,
-        phone: billingCustomerPhone,
-      };
-
-      const updatedBills = [newBill, ...salesLog];
-      setSalesLog(updatedBills);
-      await AsyncStorage.setItem('salesLog', JSON.stringify(updatedBills));
-
-      // Remove current session from sessions
-      if (currentBillingSessionId) {
-        const updatedSessions = sessions.filter(s => s.id !== currentBillingSessionId);
-        setSessions(updatedSessions);
-        await AsyncStorage.setItem('sessions', JSON.stringify(updatedSessions));
-        setCurrentBillingSessionId(null);
-      }
-
-      setTodayTotal(prev => prev + billTotal);
-      setTotalBills(prev => prev + 1);
-
-      setBillingSessionActive(false);
-      setBillingCustomerName('');
-      setBillingCustomerPhone('');
-      setBillingItems([]);
-
-      Alert.alert('Success', `Bill saved! ₹${billTotal}`);
-    };
-
-    // Sample products list
-    const sampleProducts = [
-      { name: 'Puri Plate', price: 20, qty: 0 },
-      { name: 'Masala Puri', price: 25, qty: 0 },
-      { name: 'Tamarind Water', price: 10, qty: 0 },
-      { name: 'Special Plate', price: 40, qty: 0 },
-      { name: 'Idly 2pcs', price: 15, qty: 0 },
-    ];
-
-    return (
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={billingSessionActive}
-        onRequestClose={async () => {
-          // Remove the billing session when modal is closed
-          if (currentBillingSessionId) {
-            const updatedSessions = sessions.filter(s => s.id !== currentBillingSessionId);
-            setSessions(updatedSessions);
-            await AsyncStorage.setItem('sessions', JSON.stringify(updatedSessions));
-            setCurrentBillingSessionId(null);
-          }
-          setBillingSessionActive(false);
-        }}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => {
-            setBillingSessionActive(false);
-          }}
-        >
-          <KeyboardAvoidingView style={styles.liveBillingBox} pointerEvents="auto">
-            {/* Header */}
-            <View style={styles.liveBillingHeader}>
-              <View>
-                <Text style={styles.liveBillingTitle}>Live Billing</Text>
-                <Text style={styles.liveBillingSub}>Add items and create bill</Text>
-              </View>
-              <TouchableOpacity onPress={async () => {
-                // Remove the billing session when closing
-                if (currentBillingSessionId) {
-                  const updatedSessions = sessions.filter(s => s.id !== currentBillingSessionId);
-                  setSessions(updatedSessions);
-                  await AsyncStorage.setItem('sessions', JSON.stringify(updatedSessions));
-                  setCurrentBillingSessionId(null);
-                }
-                setBillingSessionActive(false);
-              }}>
-                <Ionicons name="close" size={28} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.liveBillingContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              {/* Customer Details - Always visible */}
-              <View style={styles.customerSection}>
-                  <View style={styles.customerRow}>
-                    <View style={styles.customerInfo}>
-                      <Ionicons name="person-circle" size={40} color="#8B7AFF" />
-                      <Text style={styles.customerNameBilling}>{billingCustomerName || 'Walk-in Customer'}</Text>
-                    </View>
-                    <TouchableOpacity 
-                      style={[styles.toggleBtn, customerToggleOn && styles.toggleBtnOn]}
-                      onPress={() => setCustomerToggleOn(!customerToggleOn)}
-                    >
-                      <Text style={styles.toggleText}>{customerToggleOn ? 'ON' : 'OFF'}</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <TextInput
-                    style={[styles.modalInput, { marginTop: 12 }]}
-                    placeholder="Enter customer name"
-                    value={billingCustomerName}
-                    onChangeText={setBillingCustomerName}
-                    placeholderTextColor="#ccc"
-                  />
-                  <TextInput
-                    style={[styles.modalInput, { marginTop: 8 }]}
-                    placeholder="Phone (optional)"
-                    value={billingCustomerPhone}
-                    onChangeText={setBillingCustomerPhone}
-                    keyboardType="phone-pad"
-                    placeholderTextColor="#ccc"
-                  />
-              </View>
-
-              {/* Add Items Section - Always visible */
-                <View style={styles.addItemsSection}>
-                  <Text style={styles.sectionLabel}>Add Items</Text>
-                  <View style={styles.searchBox}>
-                    <Ionicons name="search" size={20} color="#999" />
-                    <TextInput
-                      style={styles.searchInput}
-                      placeholder="Search products..."
-                      placeholderTextColor="#ccc"
-                    />
-                    <TouchableOpacity style={styles.addItemBtn}>
-                      <Ionicons name="add" size={24} color="#fff" />
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Products List */}
-                  {sampleProducts.map((product) => (
-                    <View key={product.name} style={styles.productItemRow}>
-                      <View>
-                        <Text style={styles.productNameBilling}>{product.name}</Text>
-                        <Text style={styles.productPriceBilling}>₹ {product.price}</Text>
-                      </View>
-                      <View style={styles.quantityControl}>
-                        <TouchableOpacity 
-                          style={styles.qtyBtn}
-                          onPress={() => handleRemoveItem(product.name)}
-                        >
-                          <Ionicons name="remove" size={18} color="#FF6B6B" />
-                        </TouchableOpacity>
-                        <Text style={styles.qtyText}>
-                          {billingItems.find(i => i.name === product.name)?.qty || 0}
-                        </Text>
-                        <TouchableOpacity 
-                          style={styles.qtyBtn}
-                          onPress={() => handleAddItem(product)}
-                        >
-                          <Ionicons name="add" size={18} color="#2563EB" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))}
-
-                  {/* Bill Summary */}
-                  {billingItems.length > 0 && (
-                    <View style={styles.billSummary}>
-                      <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Items</Text>
-                        <Text style={styles.summaryValue}>{itemCount}</Text>
-                      </View>
-                      <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 8, marginTop: 8 }]}>
-                        <Text style={[styles.summaryLabel, { fontWeight: '700' }]}>Total</Text>
-                        <Text style={[styles.summaryValue, { fontWeight: '900', fontSize: 18 }]}>₹ {billTotal}</Text>
-                      </View>
-                    </View>
-                  )}
-                </View>
-              }
-            </ScrollView>
-
-            {/* Footer - Consistent height to prevent layout shifts */}
-            <View style={{ minHeight: 90, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#E2E8F0', justifyContent: 'center' }}>
-              {!customerToggleOn ? (
-                <TouchableOpacity style={styles.completeBillBtn} onPress={handleCompleteNill}>
-                  <Text style={styles.completeBillText}>Complete Bill</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity 
-                    style={styles.outlineBtn}
-                    onPress={async () => {
-                      // Remove the billing session and close modal
-                      if (currentBillingSessionId) {
-                        const updatedSessions = sessions.filter(s => s.id !== currentBillingSessionId);
-                        setSessions(updatedSessions);
-                        await AsyncStorage.setItem('sessions', JSON.stringify(updatedSessions));
-                        setCurrentBillingSessionId(null);
-                      }
-                      setModalVisible(false);
-                      setBillingSessionActive(false);
-                      setCustomerToggleOn(false);
-                      setBillingCustomerName('');
-                      setBillingCustomerPhone('');
-                      setBillingItems([]);
-                    }}
-                  >
-                    <Text style={styles.outlineBtnText}>← Go Back</Text>
-                  </TouchableOpacity>
-                <TouchableOpacity style={styles.fillBtn} onPress={handleCompleteNill}>
-                  <Text style={styles.fillBtnText}>Bill ✓</Text>
-                </TouchableOpacity>
-              </View>
-              )}
-            </View>
-          </KeyboardAvoidingView>
-        </TouchableOpacity>
-      </Modal>
-    );
-  };
-
   return (
     <View style={styles.container}>
+      <Toast visible={showToast} message={toastMessage} type={toastType} onHide={() => setShowToast(false)} />
       <ProfileModal />
-      <TransactionModeModal />
-      <QuickPaymentModal />
-      <LiveBillingModal />
-      
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <QuickEntryModal />
+      <LiveBillingModalComponent
+        visible={billingSessionActive}
+        onClose={() => { setBillingSessionActive(false); setCurrentBillingSessionId(null); }}
+        onSave={handleSaveBill}
+        sessionId={currentBillingSessionId}
+      />
+      <ReviewBillModalComponent
+        visible={billReviewVisible}
+        onClose={() => { setBillReviewVisible(false); setBillingSessionActive(true); }}
+        onConfirm={handleConfirmBill}
+        customerName={reviewData.customerName}
+        customerPhone={reviewData.customerPhone}
+        items={reviewData.items}
+        total={reviewData.total}
+      />
+
+      {/* ── HEADER (blue) ── */}
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <View style={styles.headerTop}>
           <View>
             <Text style={styles.shopName}>{bizName}</Text>
             <Text style={styles.shopDateTime}>{currentDateTime}</Text>
           </View>
-          <TouchableOpacity 
-            style={styles.profileBtn} 
-            onPress={() => setProfileVisible(true)}
-          >
-            <Ionicons name="person" size={24} color="#fff" />
+          <TouchableOpacity style={styles.profileBtn} onPress={() => setProfileVisible(true)}>
+            <Ionicons name="person" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
-        
+
         {/* Collection Card */}
         <View style={styles.collectionCard}>
-          <Text style={styles.collectionLabel}>Today's Collection</Text>
-          <Text style={styles.collectionValue}>₹{todayTotal.toLocaleString('en-IN')}</Text>
-          <Text style={styles.collectionSub}>
-            {salesLog.length} bill{salesLog.length !== 1 ? 's' : ''} today
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.collectionLabel}>TODAY'S COLLECTION</Text>
+            <Text style={styles.collectionValue}>₹{todayTotal.toLocaleString('en-IN')}</Text>
+            <Text style={styles.collectionSub}>{salesLog.length} bill{salesLog.length !== 1 ? 's' : ''} today</Text>
+          </View>
+          <View style={styles.collectionIconBox}>
+            <Ionicons name="wallet-outline" size={26} color="rgba(255,255,255,0.9)" />
+          </View>
         </View>
       </View>
 
-      {/* Body */}
-      <ScrollView 
-        style={styles.body} 
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Quick Actions Title */}
+      <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+        {/* ── ACTIVE ORDERS ── */}
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>Active Orders</Text>
+          <TouchableOpacity>
+            <Text style={styles.viewAllText}>View All &gt;</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+          {activeSessions.map((session, idx) => {
+            const total = session.items.reduce((s, i) => s + i.price * i.qty, 0);
+            const cs = cardStyles[idx % cardStyles.length];
+            return (
+              <TouchableOpacity
+                key={session.id}
+                style={[styles.activeOrderCard, { backgroundColor: cs.bg, borderColor: cs.borderColor }]}
+                onPress={() => continueSession(session.id)}
+              >
+                <View style={[styles.orderBadge, { backgroundColor: cs.badgeBg }]}>
+                  <Text style={[styles.orderBadgeText, { color: cs.badgeText }]}>#{idx + 1}</Text>
+                </View>
+                <Text style={styles.orderCustomerName} numberOfLines={1}>
+                  {session.customerName}
+                </Text>
+                <Text style={[styles.orderTotal, { color: cs.amountColor }]}>
+                  ₹{total.toLocaleString('en-IN')}
+                </Text>
+                <View style={styles.orderStatusRow}>
+                  <Ionicons name="time-outline" size={11} color="#888" />
+                  <Text style={styles.orderStatus}> In Progress</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* ── QUICK ACTIONS ── */}
         <Text style={styles.quickActionsTitle}>Quick Actions</Text>
+        <View style={styles.quickActionsRow}>
+          {/* New Bill */}
+          <TouchableOpacity style={[styles.qaBtn, { backgroundColor: '#2563EB', marginRight: 10 }]} onPress={startBilling}>
+            <View style={styles.qaLeft}>
+              <Ionicons name="document-text-outline" size={22} color="#fff" />
+              <View style={{ marginLeft: 10 }}>
+                <Text style={styles.qaBtnTitle}>+ New Bill</Text>
+                <Text style={styles.qaBtnSub}>Add items &amp; generate bill</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#fff" />
+          </TouchableOpacity>
 
-        {/* Start Billing Button */}
-        <TouchableOpacity 
-          style={[styles.fullWidthButton, { backgroundColor: '#2563EB' }]}
-          onPress={async () => {
-            // Create a new session for this billing
-            const newSessionId = Date.now();
-            const newSession: Session = {
-              id: newSessionId,
-              customerName: 'Walk-in Customer',
-              phone: '',
-              items: [],
-              npVal: '0',
-            };
-            
-            const updatedSessions = [...sessions, newSession];
-            setSessions(updatedSessions);
-            await AsyncStorage.setItem('sessions', JSON.stringify(updatedSessions));
-            
-            // Initialize billing modal
-            setCurrentBillingSessionId(newSessionId);
-            setBillingCustomerName('');
-            setBillingCustomerPhone('');
-            setBillingItems([]);
-            setBillingSessionActive(true);
-          }}
-        >
-          <Ionicons name="document-text" size={32} color="#fff" />
-          <Text style={styles.fullWidthButtonText}>Start Billing</Text>
-          <Ionicons name="chevron-forward" size={24} color="#fff" />
-        </TouchableOpacity>
+          {/* Quick Entry */}
+          <TouchableOpacity
+            style={[styles.qaBtn, { backgroundColor: '#6D28D9' }]}
+            onPress={() => { setQuickName(''); setQuickPhone(''); setQuickAmount(''); setQuickNote(''); setQuickEntryVisible(true); }}
+          >
+            <View style={styles.qaLeft}>
+              <Ionicons name="flash" size={22} color="#fff" />
+              <View style={{ marginLeft: 10 }}>
+                <Text style={styles.qaBtnTitle}>+ Quick Entry</Text>
+                <Text style={styles.qaBtnSub}>Just name &amp; amount</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
 
-        {/* Quick Payment Button */}
-        <TouchableOpacity 
-          style={[styles.fullWidthButton, { backgroundColor: '#7C3AED' }]}
-          onPress={() => {
-            setNewCustName('');
-            setNewCustPhone('');
-            setQuickAmount('');
-            setBillingMode('quick');
-          }}
-        >
-          <Ionicons name="flash" size={32} color="#FFD700" />
-          <Text style={styles.fullWidthButtonText}>Quick Payment</Text>
-          <Ionicons name="chevron-forward" size={24} color="#fff" />
-        </TouchableOpacity>
+        {/* ── TODAY'S BILLS ── */}
+        <View style={[styles.sectionRow, { marginTop: 16 }]}>
+          <Text style={styles.sectionTitle}>Today's Bills</Text>
+          <TouchableOpacity>
+            <Text style={styles.viewAllText}>View All</Text>
+          </TouchableOpacity>
+        </View>
 
-        {/* Completed Bills */}
-        <Text style={styles.todayTitle}>Today's Bills</Text>
         {salesLog.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No sales yet</Text>
+            <Text style={styles.emptyText}>No sales yet today</Text>
           </View>
         ) : (
-          <FlatList
-            data={salesLog}
-            renderItem={renderSaleBill}
-            keyExtractor={(_, index) => index.toString()}
-            scrollEnabled={false}
-          />
+          salesLog.map((bill, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.billCard}
+              onPress={() =>
+                Alert.alert(
+                  `Bill #${salesLog.length - index}`,
+                  `Customer: ${bill.customerName}\nTime: ${bill.time}\nTotal: ₹${bill.total}\n\nItems:\n${bill.items.map((i) => `${i.name} x${i.qty} = ₹${i.price * i.qty}`).join('\n')}`,
+                  [{ text: 'OK' }]
+                )
+              }
+            >
+              <View style={styles.billAvatarBox}>
+                <Ionicons name="person" size={22} color="#2563EB" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.billNumber}>Bill #{salesLog.length - index}</Text>
+                <Text style={styles.billCustomer}>{bill.customerName}</Text>
+                <Text style={styles.billTime}>{bill.time} · {bill.date || ''}</Text>
+              </View>
+              <View style={styles.billRight}>
+                <View style={styles.paidBadge}>
+                  <Text style={styles.paidBadgeText}>PAID</Text>
+                </View>
+                <Text style={styles.billAmount}>₹{bill.total.toLocaleString('en-IN')}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#bbb" style={{ marginLeft: 6 }} />
+            </TouchableOpacity>
+          ))
         )}
-        <View style={{ height: 20 }} />
+
+        <View style={{ height: 30 }} />
       </ScrollView>
 
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
+      {/* ── BOTTOM NAV ── */}
+      <View style={[styles.bottomNav, { paddingBottom: insets.bottom || 8 }]}>
         <TouchableOpacity style={styles.navItem} onPress={() => {}}>
           <Ionicons name="home" size={24} color="#2563EB" />
           <Text style={[styles.navLabel, { color: '#2563EB' }]}>Home</Text>
         </TouchableOpacity>
-        
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/analytics')}>
-          <Ionicons name="stats-chart" size={24} color="#94A3B8" />
+          <Ionicons name="stats-chart" size={24} color="#9CA3AF" />
           <Text style={styles.navLabel}>Analytics</Text>
         </TouchableOpacity>
-        
+
+        {/* FAB placeholder space */}
+        <View style={{ width: 60 }} />
+
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/products')}>
-          <Ionicons name="pricetag" size={24} color="#94A3B8" />
+          <Ionicons name="pricetag" size={24} color="#9CA3AF" />
           <Text style={styles.navLabel}>Products</Text>
         </TouchableOpacity>
-        
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/suppliers')}>
-          <Ionicons name="people" size={24} color="#94A3B8" />
-          <Text style={styles.navLabel}>Suppliers</Text>
+          <Ionicons name="people" size={24} color="#9CA3AF" />
+          <Text style={styles.navLabel}>Customers</Text>
         </TouchableOpacity>
       </View>
+
+      {/* FAB */}
+      <TouchableOpacity style={[styles.fab, { bottom: (insets.bottom || 8) + 56 }]} onPress={startBilling}>
+        <Ionicons name="add" size={32} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 }
 
+// ─────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  header: {
-    backgroundColor: '#2563EB',
-    padding: 16,
-    paddingBottom: 20,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  shopName: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-  },
-  shopDateTime: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 10,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  profileBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  collectionCard: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-    marginTop: 8,
-  },
-  collectionLabel: {
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.75)',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  collectionValue: {
-    fontSize: 36,
-    fontWeight: '900',
-    color: '#fff',
-    letterSpacing: -2,
-    marginTop: 4,
-  },
-  collectionSub: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 6,
-    fontWeight: '700',
-  },
-  body: {
-    flex: 1,
-    padding: 16,
-  },
-  quickActionsTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#222',
-    marginBottom: 14,
-    marginTop: 4,
-  },
-  fullWidthButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: 12,
-    padding: 16,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  fullWidthButtonText: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#fff',
-    marginLeft: 16,
-    letterSpacing: -0.3,
-  },
-  transactionOptions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 18,
-  },
-  transactionCard: {
-    flex: 1,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 140,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  quickPaymentCard: {
-    backgroundColor: '#FFF5E6',
-    borderWidth: 2,
-    borderColor: '#2563EB',
-  },
-  liveBillingCard: {
-    backgroundColor: '#F0F8E6',
-    borderWidth: 2,
-    borderColor: '#2563EB',
-  },
-  transactionCardTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-    marginTop: 8,
-    color: '#222',
-  },
-  transactionCardSub: {
-    fontSize: 11,
-    color: '#666',
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  newBillBtn: {
-    backgroundColor: '#2563EB',
-    padding: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  newBillBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  activeSection: {
-    marginBottom: 16,
-  },
-  activeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#222',
-  },
-  sectionSub: {
-    fontSize: 11,
-    color: '#2563EB',
-    fontWeight: '700',
-  },
-  activeCard: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#2563EB',
-  },
-  activeCardLeft: {
-    flex: 1,
-  },
-  activeCardName: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#2563EB',
-  },
-  activeCardItems: {
-    fontSize: 11,
-    color: '#888',
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  billingBadge: {
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 20,
-    marginTop: 3,
-    alignSelf: 'flex-start',
-  },
-  billingBadgeText: {
-    fontSize: 9,
-    color: '#fff',
-    fontWeight: '800',
-  },
-  activeCardRight: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#2563EB',
-  },
-  todayTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#222',
-    marginBottom: 10,
-  },
-  saleCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 0.5,
-    borderColor: '#eee',
-  },
-  saleName: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#333',
-  },
-  saleCust: {
-    fontSize: 11,
-    color: '#2563EB',
-    fontWeight: '600',
-    marginTop: 1,
-  },
-  saleTime: {
-    fontSize: 11,
-    color: '#aaa',
-    marginTop: 1,
-  },
-  saleAmount: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#2563EB',
-  },
-  emptyState: {
-    alignItems: 'center',
-    padding: 30,
-  },
-  emptyText: {
-    color: '#bbb',
-    fontSize: 13,
-  },
-  bottomNav: {
-    backgroundColor: '#fff',
-    flexDirection: 'row',
-    paddingVertical: 8,
-    paddingBottom: 12,
-    borderTopWidth: 0.5,
-    borderTopColor: '#eee',
-  },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 6,
-  },
-  navLabel: {
-    fontSize: 9,
-    color: '#aaa',
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
-  modeSelectionBox: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 32,
-  },
-  modeTitle: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: '#111827',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  modeOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    marginBottom: 12,
-    borderRadius: 14,
-    backgroundColor: '#f5f5f5',
-    borderWidth: 1,
-    borderColor: '#ececec',
-  },
-  modeIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  modeContent: {
-    flex: 1,
-  },
-  modeOptionTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#111827',
-  },
-  modeOptionSub: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  amountInput: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#2563EB',
-  },
-  modalBox: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    maxHeight: '95%',
-  },
-  quickPaymentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 24,
-  },
-  headerContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  quickPaymentForm: {
-    marginBottom: 20,
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  inputWithIcon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#f0f0f0',
-    backgroundColor: '#fafafa',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginBottom: 8,
-  },
-  textInputWithIcon: {
-    flex: 1,
-    padding: 12,
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#222',
-  },
-  viewHistoryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    backgroundColor: '#F0F9FF',
-    marginTop: 12,
-  },
-  viewHistoryText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#2563EB',
-    marginHorizontal: 8,
-  },
-  liveBillingBox: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    flex: 1,
-    maxHeight: '95%',
-    flexDirection: 'column',
-  },
-  liveBillingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingTop: 24,
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  liveBillingTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#222',
-  },
-  liveBillingSub: {
-    fontSize: 12,
-    color: '#999',
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  liveBillingContent: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-  },
-  customerSection: {
-    marginBottom: 20,
-  },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 12,
-  },
-  customerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: '#F3EDFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E8DCFF',
-  },
-  customerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  customerNameBilling: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#333',
-    marginLeft: 12,
-  },
-  customerLabelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  toggleBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#94A3B8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  toggleBtnOn: {
-    backgroundColor: '#2563EB',
-  },
-  toggleText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  toggleBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#666',
-  },
-  walkInsContainer: {
-    marginTop: 12,
-  },
-  walkInsTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 10,
-  },
-  emptyWalkIns: {
-    fontSize: 12,
-    color: '#999',
-    fontWeight: '600',
-    paddingVertical: 12,
-    textAlign: 'center',
-  },
-  walkInItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 10,
-    marginBottom: 8,
-    borderWidth: 0.5,
-    borderColor: '#e0e0e0',
-  },
-  walkInName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#222',
-  },
-  walkInDetails: {
-    fontSize: 11,
-    color: '#999',
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  addItemsSection: {
-    marginBottom: 20,
-  },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#f0f0f0',
-    backgroundColor: '#fafafa',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginBottom: 16,
-  },
-  searchInput: {
-    flex: 1,
-    padding: 12,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-  },
-  addItemBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#7C3AED',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  productItemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#f0f0f0',
-  },
-  productNameBilling: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#222',
-  },
-  productPriceBilling: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#2563EB',
-    marginTop: 4,
-  },
-  quantityControl: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  qtyBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: '#f0f0f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  qtyText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#333',
-    minWidth: 20,
-    textAlign: 'center',
-  },
-  billSummary: {
-    backgroundColor: '#f9f9f9',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  summaryLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  summaryValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#222',
-  },
-  onModeContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  walkInInfo: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  walkInInfoTitle: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#2563EB',
-    marginBottom: 8,
-  },
-  walkInInfoSub: {
-    fontSize: 14,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  completeBillBtn: {
-    backgroundColor: '#2563EB',
-    padding: 16,
-    borderRadius: 14,
-    alignItems: 'center',
-    marginHorizontal: 24,
-    marginVertical: 16,
-  },
-  completeBillText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginHorizontal: 16,
-    marginVertical: 0,
-    justifyContent: 'center',
-  },
-  outlineBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: '#fff',
-    borderWidth: 1.5,
-    borderColor: '#2563EB',
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 48,
-  },
-  outlineBtnText: {
-    color: '#2563EB',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  fillBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: '#2563EB',
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 48,
-  },
-  fillBtnText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#222',
-    marginBottom: 4,
-  },
-  modalSub: {
-    fontSize: 12,
-    color: '#999',
-    fontWeight: '600',
-    marginBottom: 18,
-  },
-  modalInput: {
-    borderWidth: 1.5,
-    borderColor: '#eee',
-    backgroundColor: '#fafafa',
-    borderRadius: 12,
-    padding: 13,
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  modalBtn: {
-    backgroundColor: '#2563EB',
-    padding: 15,
-    borderRadius: 14,
-    alignItems: 'center',
-    marginTop: 6,
-    marginBottom: 10,
-  },
-  modalBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  modalCancel: {
-    textAlign: 'center',
-    padding: 10,
-    color: '#aaa',
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  // Profile Panel Styles
-  profilePanel: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 22,
-  },
-  profileHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#eee',
-    borderRadius: 4,
-    alignSelf: 'center',
-    marginBottom: 20,
-  },
-  profileHeader: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  profileBizName: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#222',
-  },
-  profileBizSub: {
-    fontSize: 12,
-    color: '#2563EB',
-    fontWeight: '700',
-    marginTop: 2,
-    marginBottom: 16,
-  },
-  profileEmail: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  qrBox: {
-    width: 140,
-    height: 140,
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#ddd',
-    borderStyle: 'dashed',
-    overflow: 'hidden',
-  },
-  qrImage: {
-    width: 130,
-    height: 130,
-  },
-  profileGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 18,
-  },
-  profileCell: {
-    flex: 1,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-  },
-  profileLabel: {
-    fontSize: 10,
-    color: '#999',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  profileValue: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#222',
-    marginTop: 3,
-  },
-  profileWarning: {
-    backgroundColor: '#F0F9FF',
-    borderWidth: 1.5,
-    borderColor: '#2563EB',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  profileWarningText: {
-    fontSize: 12,
-    color: '#2563EB',
-    fontWeight: '700',
-  },
-  profileWarningSub: {
-    fontSize: 11,
-    color: '#888',
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  profileCloseBtn: {
-    backgroundColor: '#2563EB',
-    padding: 13,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  profileCloseText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
-  },
+  container: { flex: 1, backgroundColor: '#F0F2F8' },
+
+  // ── Header ──
+  header: { backgroundColor: '#2563EB', paddingHorizontal: 16, paddingBottom: 22 },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
+  shopName: { color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
+  shopDateTime: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '600', marginTop: 2 },
+  profileBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  collectionCard: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center' },
+  collectionLabel: { fontSize: 10, color: 'rgba(255,255,255,0.8)', fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
+  collectionValue: { fontSize: 38, fontWeight: '900', color: '#fff', letterSpacing: -2, marginTop: 2 },
+  collectionSub: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 4, fontWeight: '600' },
+  collectionIconBox: { width: 50, height: 50, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+
+  // ── Body ──
+  body: { flex: 1, paddingHorizontal: 16, paddingTop: 18 },
+
+  // ── Section row ──
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#111' },
+  viewAllText: { fontSize: 13, fontWeight: '700', color: '#2563EB' },
+
+  // ── Active Order Cards ──
+  activeOrderCard: { width: 150, borderRadius: 14, borderWidth: 1.5, padding: 12, marginRight: 10, marginBottom: 8 },
+  orderBadge: { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start', marginBottom: 8 },
+  orderBadgeText: { fontSize: 11, fontWeight: '800' },
+  orderCustomerName: { fontSize: 15, fontWeight: '800', color: '#111', marginBottom: 4 },
+  orderTotal: { fontSize: 16, fontWeight: '900', marginBottom: 4 },
+  orderStatusRow: { flexDirection: 'row', alignItems: 'center' },
+  orderStatus: { fontSize: 11, color: '#888', fontWeight: '600' },
+  newOrderCard: { width: 80, borderRadius: 14, borderWidth: 1.5, borderColor: '#2563EB', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', marginBottom: 8, backgroundColor: '#fff' },
+  newOrderText: { fontSize: 13, fontWeight: '700', color: '#2563EB', marginTop: 4 },
+
+  // ── Quick Actions ──
+  quickActionsTitle: { fontSize: 16, fontWeight: '800', color: '#111', marginBottom: 10, marginTop: 6 },
+  quickActionsRow: { flexDirection: 'row', marginBottom: 4 },
+  qaBtn: { flex: 1, borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4 },
+  qaLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  qaBtnTitle: { fontSize: 14, fontWeight: '800', color: '#fff' },
+  qaBtnSub: { fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginTop: 1 },
+
+  // ── Today's Bills ──
+  billCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', borderWidth: 0.5, borderColor: '#E5E7EB', elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3 },
+  billAvatarBox: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
+  billNumber: { fontSize: 12, fontWeight: '700', color: '#666' },
+  billCustomer: { fontSize: 15, fontWeight: '800', color: '#2563EB', marginTop: 1 },
+  billTime: { fontSize: 11, color: '#9CA3AF', marginTop: 2, fontWeight: '600' },
+  billRight: { alignItems: 'flex-end' },
+  paidBadge: { backgroundColor: '#DCFCE7', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginBottom: 4 },
+  paidBadgeText: { fontSize: 9, fontWeight: '800', color: '#16A34A', letterSpacing: 0.5 },
+  billAmount: { fontSize: 16, fontWeight: '900', color: '#2563EB' },
+
+  emptyState: { alignItems: 'center', paddingVertical: 30 },
+  emptyText: { color: '#bbb', fontSize: 13, fontWeight: '600' },
+
+  // ── Bottom Nav ──
+  bottomNav: { backgroundColor: '#fff', flexDirection: 'row', paddingTop: 8, borderTopWidth: 0.5, borderTopColor: '#E5E7EB' },
+  navItem: { flex: 1, alignItems: 'center', paddingVertical: 4 },
+  navLabel: { fontSize: 10, color: '#9CA3AF', fontWeight: '700', marginTop: 2 },
+  fab: { position: 'absolute', right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#2563EB', alignItems: 'center', justifyContent: 'center', elevation: 6, shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8 },
+
+  // ── Live Billing Modal ──
+  liveBillingFullScreen: { flex: 1, backgroundColor: '#fff' },
+  liveBillingHeader: { flexDirection: 'row', alignItems: 'center', paddingTop: 52, paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  liveBillingBackBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+  liveBillingCloseBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
+  liveBillingTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
+  liveBillingSub: { fontSize: 12, color: '#9CA3AF', fontWeight: '600', marginTop: 1 },
+  liveBillingContent: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
+
+  // Customer section
+  customerSection: { marginBottom: 20 },
+  customerAvatarRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  customerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
+  customerSectionTitle: { fontSize: 15, fontWeight: '800', color: '#111', marginLeft: 10 },
+  lbInputBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 2 },
+  lbInput: { flex: 1, padding: 12, fontSize: 14, fontWeight: '600', color: '#333' },
+
+  // Add items section
+  addItemsSection: { marginBottom: 20 },
+  addItemsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  addItemsTitle: { fontSize: 15, fontWeight: '800', color: '#111' },
+  addCustomItemBtn: { fontSize: 13, fontWeight: '700', color: '#2563EB' },
+  searchBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', borderRadius: 12, paddingHorizontal: 12, marginBottom: 10 },
+  searchInput: { flex: 1, paddingVertical: 11, fontSize: 14, color: '#333', fontWeight: '600' },
+
+  // Product rows
+  productRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' },
+  productName: { fontSize: 14, fontWeight: '700', color: '#111' },
+  productPrice: { fontSize: 12, fontWeight: '700', color: '#2563EB', marginTop: 2 },
+  qtyControl: { flexDirection: 'row', alignItems: 'center', gap: 10, marginRight: 12 },
+  qtyBtn: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
+  qtyText: { fontSize: 14, fontWeight: '800', color: '#111', minWidth: 18, textAlign: 'center' },
+  lineTotal: { fontSize: 13, fontWeight: '800', color: '#333', minWidth: 55, textAlign: 'right' },
+
+  // Bill summary bar
+  billSummaryBar: { backgroundColor: '#F0F4FF', borderRadius: 14, padding: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
+  summaryLeft: { flexDirection: 'row', alignItems: 'center' },
+  summaryItemsLabel: { fontSize: 11, color: '#666', fontWeight: '600' },
+  summaryItemsValue: { fontSize: 13, fontWeight: '800', color: '#2563EB', marginTop: 2 },
+  summaryRight: { alignItems: 'flex-end' },
+  summaryTotalLabel: { fontSize: 11, color: '#666', fontWeight: '600' },
+  summaryTotalValue: { fontSize: 22, fontWeight: '900', color: '#111', marginTop: 2 },
+
+  // Bottom buttons
+  lbBottomButtons: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderTopWidth: 1, borderTopColor: '#F0F0F0', backgroundColor: '#fff' },
+  saveGoBackBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#2563EB', borderRadius: 12, paddingVertical: 13 },
+  saveGoBackText: { color: '#2563EB', fontSize: 14, fontWeight: '800' },
+  completeBillBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', borderRadius: 12, paddingVertical: 13, elevation: 2 },
+  completeBillText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+
+  // ── Quick Entry Modal ──
+  qeSheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12 },
+  qeHandle: { width: 40, height: 4, backgroundColor: '#E5E7EB', borderRadius: 4, alignSelf: 'center', marginBottom: 16 },
+  qeHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  qeHeaderLeft: { flexDirection: 'row', alignItems: 'center' },
+  qeIconBox: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#EDE9FE', alignItems: 'center', justifyContent: 'center' },
+  qeTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
+  qeSub: { fontSize: 12, color: '#9CA3AF', fontWeight: '600', marginTop: 2 },
+  qeFastBadge: { backgroundColor: '#F5F3FF', borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  qeFastTitle: { fontSize: 14, fontWeight: '800', color: '#6D28D9' },
+  qeFastSub: { fontSize: 12, color: '#7C3AED', fontWeight: '600', marginTop: 1 },
+  qeForm: { marginBottom: 18 },
+  qeLabel: { fontSize: 13, fontWeight: '700', color: '#111', marginBottom: 8 },
+  qeInputBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', borderRadius: 12, paddingHorizontal: 12 },
+  qeInput: { flex: 1, paddingVertical: 12, fontSize: 14, fontWeight: '600', color: '#333' },
+  qeSaveBtn: { backgroundColor: '#6D28D9', borderRadius: 14, paddingVertical: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', elevation: 3 },
+  qeSaveBtnText: { color: '#fff', fontSize: 16, fontWeight: '900' },
+
+  // ── Profile Modal ──
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  profilePanel: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22 },
+  profileHandle: { width: 40, height: 4, backgroundColor: '#eee', borderRadius: 4, alignSelf: 'center', marginBottom: 20 },
+  profileHeader: { alignItems: 'center', marginBottom: 16 },
+  profileBizName: { fontSize: 22, fontWeight: '900', color: '#222' },
+  profileBizSub: { fontSize: 12, color: '#2563EB', fontWeight: '700', marginTop: 2, marginBottom: 10 },
+  profileEmail: { fontSize: 12, color: '#666', fontWeight: '600', marginBottom: 12 },
+  qrBox: { width: 130, height: 130, backgroundColor: '#fff', borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#ddd', borderStyle: 'dashed', overflow: 'hidden' },
+  qrImage: { width: 120, height: 120 },
+  profileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 18 },
+  profileCell: { flex: 1, minWidth: '45%', backgroundColor: '#f9f9f9', borderRadius: 12, padding: 12, alignItems: 'center' },
+  profileLabel: { fontSize: 10, color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  profileValue: { fontSize: 14, fontWeight: '800', color: '#222', marginTop: 3 },
+  profileCloseBtn: { backgroundColor: '#2563EB', padding: 13, borderRadius: 12, alignItems: 'center' },
+  profileCloseText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+
+  // ── Review Bill Modal ──
+  reviewBillOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+  reviewBillContainer: { backgroundColor: '#fff', borderRadius: 16, width: '100%', maxHeight: '85%' },
+  reviewBillHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  reviewBillTitle: { fontSize: 16, fontWeight: '900', color: '#222' },
+  reviewBillCustomerInfo: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#F8FAFC', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  reviewBillCustomerName: { fontSize: 16, fontWeight: '900', color: '#222' },
+  reviewBillCustomerPhone: { fontSize: 13, color: '#666', fontWeight: '600', marginTop: 2 },
+  reviewBillItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  reviewBillItemName: { fontSize: 14, fontWeight: '700', color: '#222' },
+  reviewBillItemQty: { fontSize: 12, color: '#666', fontWeight: '600', marginTop: 2 },
+  reviewBillItemAmount: { fontSize: 14, fontWeight: '900', color: '#2563EB' },
+  reviewBillTotal: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 2, borderTopColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
+  reviewBillTotalLabel: { fontSize: 14, fontWeight: '800', color: '#666' },
+  reviewBillTotalAmount: { fontSize: 18, fontWeight: '900', color: '#2563EB' },
+  reviewBillButtons: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
+  reviewBillBackBtn: { flex: 1, paddingVertical: 12, borderWidth: 2, borderColor: '#2563EB', borderRadius: 10, alignItems: 'center' },
+  reviewBillBackBtnText: { color: '#2563EB', fontWeight: '800', fontSize: 14 },
+  reviewBillDoneBtn: { flex: 1, paddingVertical: 12, backgroundColor: '#2563EB', borderRadius: 10, alignItems: 'center' },
+  reviewBillDoneBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+
+  // ── Toast ──
+  toastContainer: { position: 'absolute', bottom: 100, left: 20, right: 20, padding: 12, borderRadius: 10, alignItems: 'center', zIndex: 9999 },
+  toastText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 });

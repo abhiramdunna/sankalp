@@ -359,11 +359,11 @@ export default function SuppliersScreen() {
           </View>
           <View style={styles.totalCell}>
             <Text style={styles.totalLabel}>Paid</Text>
-            <Text style={[styles.totalValue, { color: '#2563EB' }]}>₹{paid.toLocaleString('en-IN')}</Text>
+            <Text style={[styles.totalValue, { color: '#22C55E' }]}>₹{paid.toLocaleString('en-IN')}</Text>
           </View>
           <View style={styles.totalCell}>
             <Text style={styles.totalLabel}>Pending</Text>
-            <Text style={[styles.totalValue, { color: pending === 0 ? '#2563EB' : '#C0392B' }]}>
+            <Text style={[styles.totalValue, { color: pending === 0 ? '#22C55E' : '#C0392B' }]}>
               ₹{pending.toLocaleString('en-IN')}
             </Text>
           </View>
@@ -613,7 +613,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563EB',
   },
   progressDone: {
-    backgroundColor: '#2563EB',
+    backgroundColor: '#22C55E',
   },
   payButton: {
     padding: 10,
