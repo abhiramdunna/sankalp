@@ -346,11 +346,11 @@ export default function HomeScreen() {
             </View>
             <View style={styles.profileCell}>
               <Text style={styles.profileLabel}>Today Revenue</Text>
-              <Text style={[styles.profileValue, { color: '#FF7A1A' }]}>₹{todayTotal}</Text>
+              <Text style={[styles.profileValue, { color: '#2563EB' }]}>₹{todayTotal}</Text>
             </View>
             <View style={styles.profileCell}>
               <Text style={styles.profileLabel}>Plan</Text>
-              <Text style={[styles.profileValue, { color: '#27500A' }]}>Active</Text>
+              <Text style={[styles.profileValue, { color: '#2563EB' }]}>Active</Text>
             </View>
             <View style={styles.profileCell}>
               <Text style={styles.profileLabel}>Next Due</Text>
@@ -411,7 +411,7 @@ export default function HomeScreen() {
           {/* Header */}
           <View style={styles.quickPaymentHeader}>
             <View style={styles.headerContent}>
-              <Ionicons name="flash" size={24} color="#FF7A1A" />
+              <Ionicons name="flash" size={24} color="#2563EB" />
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.modalTitle}>Quick Payment</Text>
                 <Text style={styles.modalSub}>Receive payment quickly</Text>
@@ -426,7 +426,7 @@ export default function HomeScreen() {
           <View style={styles.quickPaymentForm}>
             <Text style={styles.inputLabel}>Customer Name</Text>
             <View style={styles.inputWithIcon}>
-              <Ionicons name="person" size={20} color="#FF7A1A" />
+              <Ionicons name="person" size={20} color="#2563EB" />
               <TextInput
                 style={styles.textInputWithIcon}
                 placeholder="Enter name"
@@ -438,7 +438,7 @@ export default function HomeScreen() {
 
             <Text style={[styles.inputLabel, { marginTop: 16 }]}>Phone (Optional)</Text>
             <View style={styles.inputWithIcon}>
-              <Ionicons name="call" size={20} color="#FF7A1A" />
+              <Ionicons name="call" size={20} color="#2563EB" />
               <TextInput
                 style={styles.textInputWithIcon}
                 placeholder="+91 98765 43210"
@@ -451,7 +451,7 @@ export default function HomeScreen() {
 
             <Text style={[styles.inputLabel, { marginTop: 16 }]}>Amount (₹)</Text>
             <View style={styles.inputWithIcon}>
-              <Ionicons name="cash" size={20} color="#FF7A1A" />
+              <Ionicons name="cash" size={20} color="#2563EB" />
               <TextInput
                 style={[styles.textInputWithIcon, styles.amountInput]}
                 placeholder="0.00"
@@ -469,9 +469,9 @@ export default function HomeScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.viewHistoryBtn} onPress={() => {}}>
-            <Ionicons name="time" size={20} color="#FF7A1A" />
+            <Ionicons name="time" size={20} color="#2563EB" />
             <Text style={styles.viewHistoryText}>View Payment History</Text>
-            <Ionicons name="chevron-forward" size={20} color="#FF7A1A" />
+            <Ionicons name="chevron-forward" size={20} color="#2563EB" />
           </TouchableOpacity>
         </KeyboardAvoidingView>
       </TouchableOpacity>
@@ -676,7 +676,7 @@ export default function HomeScreen() {
                           style={styles.qtyBtn}
                           onPress={() => handleAddItem(product)}
                         >
-                          <Ionicons name="add" size={18} color="#27500A" />
+                          <Ionicons name="add" size={18} color="#2563EB" />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -700,7 +700,7 @@ export default function HomeScreen() {
             </ScrollView>
 
             {/* Footer - Consistent height to prevent layout shifts */}
-            <View style={{ height: 60, borderTopWidth: 1, borderTopColor: '#E2E8F0' }}>
+            <View style={{ minHeight: 90, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#E2E8F0', justifyContent: 'center' }}>
               {!customerToggleOn ? (
                 <TouchableOpacity style={styles.completeBillBtn} onPress={handleCompleteNill}>
                   <Text style={styles.completeBillText}>Complete Bill</Text>
@@ -719,14 +719,14 @@ export default function HomeScreen() {
                       }
                       setModalVisible(false);
                       setBillingSessionActive(false);
-                    setCustomerToggleOn(false);
-                    setBillingCustomerName('');
-                    setBillingCustomerPhone('');
-                    setBillingItems([]);
-                  }}
-                >
-                  <Text style={styles.outlineBtnText}>← Go Back</Text>
-                </TouchableOpacity>
+                      setCustomerToggleOn(false);
+                      setBillingCustomerName('');
+                      setBillingCustomerPhone('');
+                      setBillingItems([]);
+                    }}
+                  >
+                    <Text style={styles.outlineBtnText}>← Go Back</Text>
+                  </TouchableOpacity>
                 <TouchableOpacity style={styles.fillBtn} onPress={handleCompleteNill}>
                   <Text style={styles.fillBtnText}>Bill ✓</Text>
                 </TouchableOpacity>
@@ -989,12 +989,12 @@ const styles = StyleSheet.create({
   quickPaymentCard: {
     backgroundColor: '#FFF5E6',
     borderWidth: 2,
-    borderColor: '#FF7A1A',
+    borderColor: '#2563EB',
   },
   liveBillingCard: {
     backgroundColor: '#F0F8E6',
     borderWidth: 2,
-    borderColor: '#27500A',
+    borderColor: '#2563EB',
   },
   transactionCardTitle: {
     fontSize: 14,
@@ -1009,12 +1009,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   newBillBtn: {
-    backgroundColor: '#FF7A1A',
+    backgroundColor: '#2563EB',
     padding: 16,
     borderRadius: 16,
     alignItems: 'center',
     marginBottom: 16,
-    shadowColor: '#FF7A1A',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1123,7 +1123,7 @@ const styles = StyleSheet.create({
   saleAmount: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#27500A',
+    color: '#2563EB',
   },
   emptyState: {
     alignItems: 'center',
@@ -1207,7 +1207,7 @@ const styles = StyleSheet.create({
   amountInput: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FF7A1A',
+    color: '#2563EB',
   },
   modalBox: {
     backgroundColor: '#fff',
@@ -1271,7 +1271,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: '700',
-    color: '#FF7A1A',
+    color: '#2563EB',
     marginHorizontal: 8,
   },
   liveBillingBox: {
@@ -1355,7 +1355,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   toggleBtnOn: {
-    backgroundColor: '#22C55E',
+    backgroundColor: '#2563EB',
   },
   toggleText: {
     fontSize: 11,
@@ -1450,7 +1450,7 @@ const styles = StyleSheet.create({
   productPriceBilling: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#FF7A1A',
+    color: '#2563EB',
     marginTop: 4,
   },
   quantityControl: {
@@ -1507,7 +1507,7 @@ const styles = StyleSheet.create({
   walkInInfoTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: '#22C55E',
+    color: '#2563EB',
     marginBottom: 8,
   },
   walkInInfoSub: {
@@ -1516,7 +1516,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   completeBillBtn: {
-    backgroundColor: '#27500A',
+    backgroundColor: '#2563EB',
     padding: 16,
     borderRadius: 14,
     alignItems: 'center',
@@ -1532,16 +1532,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginHorizontal: 16,
-    marginVertical: 16,
+    marginVertical: 0,
+    justifyContent: 'center',
   },
   outlineBtn: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     backgroundColor: '#fff',
     borderWidth: 1.5,
     borderColor: '#2563EB',
     borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
   },
   outlineBtnText: {
     color: '#2563EB',
@@ -1550,10 +1554,13 @@ const styles = StyleSheet.create({
   },
   fillBtn: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     backgroundColor: '#2563EB',
     borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
   },
   fillBtnText: {
     color: '#fff',
@@ -1583,7 +1590,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   modalBtn: {
-    backgroundColor: '#FF7A1A',
+    backgroundColor: '#2563EB',
     padding: 15,
     borderRadius: 14,
     alignItems: 'center',
@@ -1629,7 +1636,7 @@ const styles = StyleSheet.create({
   },
   profileBizSub: {
     fontSize: 12,
-    color: '#FF7A1A',
+    color: '#2563EB',
     fontWeight: '700',
     marginTop: 2,
     marginBottom: 16,
@@ -1683,9 +1690,9 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   profileWarning: {
-    backgroundColor: '#fff8f0',
+    backgroundColor: '#F0F9FF',
     borderWidth: 1.5,
-    borderColor: '#FF7A1A',
+    borderColor: '#2563EB',
     borderRadius: 12,
     padding: 12,
     alignItems: 'center',
@@ -1693,7 +1700,7 @@ const styles = StyleSheet.create({
   },
   profileWarningText: {
     fontSize: 12,
-    color: '#FF7A1A',
+    color: '#2563EB',
     fontWeight: '700',
   },
   profileWarningSub: {
@@ -1703,7 +1710,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   profileCloseBtn: {
-    backgroundColor: '#FF7A1A',
+    backgroundColor: '#2563EB',
     padding: 13,
     borderRadius: 12,
     alignItems: 'center',
