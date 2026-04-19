@@ -7,8 +7,10 @@ import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState, memo } from 'react';
 import {
   Alert,
+  Animated,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
   ScrollView,
   StyleSheet,
@@ -436,6 +438,80 @@ const ReviewBillModal = memo(({
 });
 
 // ═══════════════════════════════════════════════════════════════
+// SWIPEABLE ACTIVE ORDER BUTTON
+// ═══════════════════════════════════════════════════════════════
+const SwipeableOrderButton = memo(({
+  session, idx, CARD_COLORS, onPress, onDelete,
+}: {
+  session: Session; idx: number; CARD_COLORS: any[]; onPress: () => void; onDelete: () => void;
+}) => {
+  const panX = new Animated.ValueXY();
+  const total = session.items.reduce((s, i) => s + i.price * i.qty, 0);
+  const cs = CARD_COLORS[idx % CARD_COLORS.length];
+
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderMove: (evt, gestureState) => {
+      if (gestureState.dx < 0) {
+        panX.x.setValue(Math.max(-80, gestureState.dx));
+      }
+    },
+    onPanResponderRelease: (evt, gestureState) => {
+      if (gestureState.dx < -40) {
+        Animated.spring(panX.x, {
+          toValue: -80,
+          useNativeDriver: false,
+        }).start();
+      } else {
+        Animated.spring(panX.x, {
+          toValue: 0,
+          useNativeDriver: false,
+        }).start();
+      }
+    },
+  });
+
+  return (
+    <View style={{ overflow: 'hidden', borderRadius: 14, marginBottom: 10 }}>
+      <Animated.View style={[{ transform: [{ translateX: panX.x }] }]} {...panResponder.panHandlers}>
+        <TouchableOpacity
+          style={[styles.activeOrderButton, { backgroundColor: cs.badgeBg }]}
+          onPress={onPress}
+          activeOpacity={0.7}
+        >
+          <View style={styles.aoLeft}>
+            <View style={[styles.aoIconBox, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Ionicons name="time-outline" size={24} color="#fff" />
+            </View>
+            <View style={{ marginLeft: 12, flex: 1 }}>
+              <Text style={styles.aoBadge}>Order #{idx + 1}</Text>
+              <Text style={styles.aoCustomerName} numberOfLines={1}>{session.customerName}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                <Text style={styles.aoItemCount}>{session.items.reduce((s, i) => s + i.qty, 0)} items</Text>
+                <Text style={{ color: '#fff', marginHorizontal: 6 }}>·</Text>
+                <Text style={styles.aoTotal}>₹{total.toLocaleString('en-IN')}</Text>
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* Delete button revealed on swipe */}
+      <TouchableOpacity
+        style={styles.deleteButton}
+        onPress={() => {
+          onDelete();
+          panX.flattenOffset();
+        }}
+      >
+        <Ionicons name="trash" size={20} color="#fff" />
+      </TouchableOpacity>
+    </View>
+  );
+});
+
+// ═══════════════════════════════════════════════════════════════
 // MAIN HOME SCREEN
 // ═══════════════════════════════════════════════════════════════
 export default function HomeScreen() {
@@ -515,6 +591,26 @@ export default function HomeScreen() {
   const openSession = (session: Session) => {
     setEditingSession(session);
     setLiveBillingVisible(true);
+  };
+
+  // ── Delete active order by swipe ──
+  const deleteActiveOrder = (sessionId: number) => {
+    Alert.alert(
+      'Delete Order',
+      'Are you sure you want to delete this order?',
+      [
+        { text: 'Cancel', onPress: () => {}, style: 'cancel' },
+        {
+          text: 'Delete',
+          onPress: () => {
+            RAM_SESSIONS = RAM_SESSIONS.filter(s => s.id !== sessionId);
+            setActiveSessions([...RAM_SESSIONS]);
+            showSuccess('Order deleted');
+          },
+          style: 'destructive',
+        },
+      ]
+    );
   };
 
   // ── Save & Go Back: upsert session in RAM → appears in Active Orders ──
@@ -692,43 +788,6 @@ export default function HomeScreen() {
 
       <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-        {/* ══ ACTIVE ORDERS ══ */}
-        <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Active Orders</Text>
-          {activeSessions.length > 0 && (
-            <Text style={styles.viewAllText}>{activeSessions.length} in progress</Text>
-          )}
-        </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
-          {activeSessions.map((session, idx) => {
-            const total = session.items.reduce((s, i) => s + i.price * i.qty, 0);
-            const cs = CARD_COLORS[idx % CARD_COLORS.length];
-            return (
-              <TouchableOpacity
-                key={session.id}
-                style={[styles.activeOrderCard, { backgroundColor: cs.bg, borderColor: cs.border }]}
-                onPress={() => openSession(session)}
-              >
-                <View style={[styles.orderBadge, { backgroundColor: cs.badgeBg }]}>
-                  <Text style={styles.orderBadgeText}>#{idx + 1}</Text>
-                </View>
-                <Text style={styles.orderCustomerName} numberOfLines={1}>{session.customerName}</Text>
-                <Text style={[styles.orderTotal, { color: cs.amtColor }]}>₹{total.toLocaleString('en-IN')}</Text>
-                <View style={styles.orderStatusRow}>
-                  <Ionicons name="time-outline" size={11} color="#888" />
-                  <Text style={styles.orderStatus}> In Progress</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-          {/* + New card */}
-          <TouchableOpacity style={styles.newOrderCard} onPress={startNewBilling}>
-            <Ionicons name="add" size={28} color="#2563EB" />
-            <Text style={styles.newOrderText}>New</Text>
-          </TouchableOpacity>
-        </ScrollView>
-
         {/* ══ QUICK ACTIONS ══ */}
         <Text style={styles.quickActionsTitle}>Quick Actions</Text>
         <View style={styles.quickActionsRow}>
@@ -760,6 +819,29 @@ export default function HomeScreen() {
             <Ionicons name="chevron-forward" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
+
+        {/* ══ ACTIVE ORDERS ══ */}
+        {activeSessions.length > 0 && (
+          <>
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionTitle}>Active Orders</Text>
+              <Text style={styles.viewAllText}>{activeSessions.length} in progress</Text>
+            </View>
+
+            <View style={styles.activeOrdersContainer}>
+              {activeSessions.map((session, idx) => (
+                <SwipeableOrderButton
+                  key={session.id}
+                  session={session}
+                  idx={idx}
+                  CARD_COLORS={CARD_COLORS}
+                  onPress={() => openSession(session)}
+                  onDelete={() => deleteActiveOrder(session.id)}
+                />
+              ))}
+            </View>
+          </>
+        )}
 
         {/* ══ TODAY'S BILLS ══ */}
         <View style={[styles.sectionRow, { marginTop: 16 }]}>
@@ -854,16 +936,17 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: '800', color: '#111' },
   viewAllText: { fontSize: 13, fontWeight: '700', color: '#2563EB' },
 
-  // Active order cards
-  activeOrderCard: { width: 150, minHeight: 110, borderRadius: 14, borderWidth: 1.5, padding: 12, marginRight: 10, marginBottom: 8 },
-  orderBadge: { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start', marginBottom: 8 },
-  orderBadgeText: { fontSize: 11, fontWeight: '800', color: '#fff' },
-  orderCustomerName: { fontSize: 15, fontWeight: '800', color: '#111', marginBottom: 4 },
-  orderTotal: { fontSize: 16, fontWeight: '900', marginBottom: 4 },
-  orderStatusRow: { flexDirection: 'row', alignItems: 'center' },
-  orderStatus: { fontSize: 11, color: '#888', fontWeight: '600' },
-  newOrderCard: { width: 80, minHeight: 110, borderRadius: 14, borderWidth: 1.5, borderColor: '#2563EB', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', marginBottom: 8, backgroundColor: '#fff' },
-  newOrderText: { fontSize: 13, fontWeight: '700', color: '#2563EB', marginTop: 4 },
+  // Active orders container and buttons
+  activeOrdersContainer: { marginBottom: 6, gap: 10 },
+  activeOrderButton: { borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4 },
+  aoLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  aoIconBox: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  aoBadge: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.7)' },
+  aoCustomerName: { fontSize: 15, fontWeight: '800', color: '#fff', marginTop: 3 },
+  aoItemCount: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.9)' },
+  aoTotal: { fontSize: 16, fontWeight: '900', color: '#fff' },
+  aoRight: { marginLeft: 12 },
+  deleteButton: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 60, alignItems: 'center', justifyContent: 'center' },
 
   // Quick actions
   quickActionsTitle: { fontSize: 16, fontWeight: '800', color: '#111', marginBottom: 10, marginTop: 6 },
