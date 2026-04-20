@@ -191,36 +191,12 @@ const SupplierDetailScreen = ({
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Summary Card */}
+        {/* Summary Card - Pending Amount Only */}
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>TOTAL PENDING</Text>
+          <Text style={styles.summaryLabel}>PENDING</Text>
           <Text style={[styles.summaryAmount, totalPending === 0 && { color: '#16A34A' }]}>
             {totalPending === 0 ? 'All Clear ✅' : fmt(totalPending)}
           </Text>
-          {totalPending > 0 && (
-            <Text style={styles.summaryNote}>
-              across {pendingBills.length} bill{pendingBills.length !== 1 ? 's' : ''}
-            </Text>
-          )}
-        </View>
-
-        {/* Action Buttons */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => setBillModal(true)}>
-            <Ionicons name="document-text-outline" size={17} color="#fff" style={{ marginRight: 6 }} />
-            <Text style={styles.primaryBtnText}>Add Bill</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.outlineBtn, pendingBills.length === 0 && { opacity: 0.4 }]}
-            onPress={() => {
-              if (pendingBills.length === 0) return;
-              setPayForm({ billId: pendingBills[0].id, amount: '' });
-              setPayModal(true);
-            }}
-          >
-            <Ionicons name="cash-outline" size={17} color="#2563EB" style={{ marginRight: 6 }} />
-            <Text style={styles.outlineBtnText}>Record Payment</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Bills Section */}
