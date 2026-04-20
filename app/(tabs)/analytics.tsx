@@ -940,7 +940,7 @@ export default function AnalyticsScreen() {
 
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/suppliers')}>
           <Ionicons name="people-outline" size={24} color="#9CA3AF" />
-          <Text style={styles.navLabel}>Customers</Text>
+          <Text style={styles.navLabel}>Suppliers</Text>
         </TouchableOpacity>
 
       </View>

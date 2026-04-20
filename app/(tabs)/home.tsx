@@ -893,14 +893,13 @@ export default function HomeScreen() {
           <Ionicons name="stats-chart" size={24} color="#9CA3AF" />
           <Text style={styles.navLabel}>Analytics</Text>
         </TouchableOpacity>
-        <View style={{ width: 60 }} />
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/products')}>
           <Ionicons name="pricetag" size={24} color="#9CA3AF" />
           <Text style={styles.navLabel}>Products</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/suppliers')}>
           <Ionicons name="people" size={24} color="#9CA3AF" />
-          <Text style={styles.navLabel}>Customers</Text>
+          <Text style={styles.navLabel}>Suppliers</Text>
         </TouchableOpacity>
       </View>
 

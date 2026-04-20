@@ -929,7 +929,7 @@ export default function SuppliersScreen() {
       <AddSupplierModal />
       
       {/* Header */}
-      <View style={[styles.mainHeader, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.mainHeader, { paddingTop: insets.top + 8 }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <Text style={styles.mainHeaderTitle}>Suppliers</Text>
           <TouchableOpacity onPress={() => setPaymentHistoryModalVisible(true)} style={styles.headerHistoryBtn}>
@@ -977,7 +977,7 @@ export default function SuppliersScreen() {
       </ScrollView>
       
       {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
+      <View style={[styles.bottomNav, { paddingBottom: insets.bottom || 8 }]}>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
           <Ionicons name="home" size={24} color="#64748B" />
           <Text style={styles.navLabel}>Home</Text>
@@ -1108,14 +1108,12 @@ const styles = StyleSheet.create({
   // Main Header
   mainHeader: {
     backgroundColor: '#2563EB',
-    padding: 16,
-    paddingBottom: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   mainHeaderTitle: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: 26,
     fontWeight: '900',
     letterSpacing: -0.5,
   },

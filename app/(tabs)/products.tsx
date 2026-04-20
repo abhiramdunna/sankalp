@@ -5,7 +5,9 @@ import React, { useEffect, useState } from 'react';
 import {
     Alert,
     FlatList,
+    KeyboardAvoidingView,
     Modal,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -471,58 +473,63 @@ export default function ProductsScreen() {
       visible={addProductVisible}
       onRequestClose={() => setAddProductVisible(false)}
     >
-      <TouchableOpacity 
-        style={styles.modalOverlay} 
-        activeOpacity={1} 
-        onPress={() => setAddProductVisible(false)}
+      <KeyboardAvoidingView 
+        style={styles.modalOverlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.addProductModal}>
-          <View style={styles.addProductModalHeader}>
-            <Text style={styles.addProductModalTitle}>➕ Add New Product</Text>
-            <TouchableOpacity onPress={() => setAddProductVisible(false)}>
-              <Text style={styles.pickerClose}>×</Text>
-            </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setAddProductVisible(false)}
+        >
+          <View style={styles.addProductModal}>
+            <View style={styles.addProductModalHeader}>
+              <Text style={styles.addProductModalTitle}>➕ Add New Product</Text>
+              <TouchableOpacity onPress={() => setAddProductVisible(false)}>
+                <Text style={styles.pickerClose}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.addProductModalContent}>
+              <Text style={styles.inputLabel}>Product Name</Text>
+              <TextInput
+                style={styles.addInput}
+                placeholder="Enter product name"
+                value={newProductName}
+                onChangeText={setNewProductName}
+              />
+
+              <Text style={styles.inputLabel}>Price (₹)</Text>
+              <TextInput
+                style={styles.addInput}
+                placeholder="Enter price"
+                value={newProductPrice}
+                onChangeText={setNewProductPrice}
+                keyboardType="numeric"
+              />
+
+              <Text style={styles.inputLabel}>Unit</Text>
+              <TouchableOpacity 
+                style={styles.unitSelectBtn}
+                onPress={() => setUnitPickerVisible(true)}
+              >
+                <Text style={styles.unitSelectText}>{newProductUnit}</Text>
+                <Ionicons name="chevron-down" size={18} color="#2563EB" />
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.saveBtn} 
+                onPress={() => {
+                  addProduct();
+                  setAddProductVisible(false);
+                }}
+              >
+                <Text style={styles.saveBtnText}>Save Product ✓</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-
-          <View style={styles.addProductModalContent}>
-            <Text style={styles.inputLabel}>Product Name</Text>
-            <TextInput
-              style={styles.addInput}
-              placeholder="Enter product name"
-              value={newProductName}
-              onChangeText={setNewProductName}
-            />
-
-            <Text style={styles.inputLabel}>Price (₹)</Text>
-            <TextInput
-              style={styles.addInput}
-              placeholder="Enter price"
-              value={newProductPrice}
-              onChangeText={setNewProductPrice}
-              keyboardType="numeric"
-            />
-
-            <Text style={styles.inputLabel}>Unit</Text>
-            <TouchableOpacity 
-              style={styles.unitSelectBtn}
-              onPress={() => setUnitPickerVisible(true)}
-            >
-              <Text style={styles.unitSelectText}>{newProductUnit}</Text>
-              <Ionicons name="chevron-down" size={18} color="#2563EB" />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.saveBtn} 
-              onPress={() => {
-                addProduct();
-                setAddProductVisible(false);
-              }}
-            >
-              <Text style={styles.saveBtnText}>Save Product ✓</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
     </Modal>
   );
 
@@ -534,46 +541,51 @@ export default function ProductsScreen() {
       visible={editModalVisible}
       onRequestClose={() => setEditModalVisible(false)}
     >
-      <TouchableOpacity 
-        style={styles.modalOverlay} 
-        activeOpacity={1} 
-        onPress={() => setEditModalVisible(false)}
+      <KeyboardAvoidingView 
+        style={styles.modalOverlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.addProductModal}>
-          <View style={styles.addProductModalHeader}>
-            <Text style={styles.addProductModalTitle}>✏️ Edit Product</Text>
-            <TouchableOpacity onPress={() => setEditModalVisible(false)}>
-              <Text style={styles.pickerClose}>×</Text>
-            </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setEditModalVisible(false)}
+        >
+          <View style={styles.addProductModal}>
+            <View style={styles.addProductModalHeader}>
+              <Text style={styles.addProductModalTitle}>✏️ Edit Product</Text>
+              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                <Text style={styles.pickerClose}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.addProductModalContent}>
+              <Text style={styles.inputLabel}>Product Name</Text>
+              <TextInput
+                style={styles.addInput}
+                placeholder="Enter product name"
+                value={editName}
+                onChangeText={setEditName}
+              />
+
+              <Text style={styles.inputLabel}>Price (₹)</Text>
+              <TextInput
+                style={styles.addInput}
+                placeholder="Enter price"
+                value={editPrice}
+                onChangeText={setEditPrice}
+                keyboardType="numeric"
+              />
+
+              <TouchableOpacity 
+                style={styles.saveBtn} 
+                onPress={saveEditedProduct}
+              >
+                <Text style={styles.saveBtnText}>Save Changes ✓</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-
-          <View style={styles.addProductModalContent}>
-            <Text style={styles.inputLabel}>Product Name</Text>
-            <TextInput
-              style={styles.addInput}
-              placeholder="Enter product name"
-              value={editName}
-              onChangeText={setEditName}
-            />
-
-            <Text style={styles.inputLabel}>Price (₹)</Text>
-            <TextInput
-              style={styles.addInput}
-              placeholder="Enter price"
-              value={editPrice}
-              onChangeText={setEditPrice}
-              keyboardType="numeric"
-            />
-
-            <TouchableOpacity 
-              style={styles.saveBtn} 
-              onPress={saveEditedProduct}
-            >
-              <Text style={styles.saveBtnText}>Save Changes ✓</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
     </Modal>
   );
 
@@ -745,7 +757,7 @@ export default function ProductsScreen() {
       </View>
 
       {/* Bottom Nav */}
-      <View style={styles.bottomNav}>
+      <View style={[styles.bottomNav, { paddingBottom: insets.bottom || 8 }]}>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
           <Ionicons name="home" size={24} color="#64748B" />
           <Text style={styles.navLabel}>Home</Text>
@@ -784,8 +796,10 @@ export default function ProductsScreen() {
       <EditProductModal />
       
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.headerTitle}>Products</Text>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <View>
+          <Text style={styles.headerTitle}>Products</Text>
+        </View>
       </View>
 
       {/* Product Catalogue Section */}
@@ -823,7 +837,7 @@ export default function ProductsScreen() {
       </View>
 
       {/* Bottom Nav */}
-      <View style={styles.bottomNav}>
+      <View style={[styles.bottomNav, { paddingBottom: insets.bottom || 8 }]}>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
           <Ionicons name="home" size={24} color="#64748B" />
           <Text style={styles.navLabel}>Home</Text>
@@ -855,14 +869,12 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#2563EB',
-    padding: 16,
-    paddingBottom: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   headerTitle: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: 26,
     fontWeight: '900',
     letterSpacing: -0.5,
   },
