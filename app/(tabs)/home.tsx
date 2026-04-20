@@ -797,7 +797,7 @@ export default function HomeScreen() {
           >
             <View style={styles.qaLeft}>
               <Ionicons name="document-text-outline" size={22} color="#fff" />
-              <View style={{ marginLeft: 10 }}>
+              <View style={{ marginLeft: 10, marginRight: 12 }}>
                 <Text style={styles.qaBtnTitle}>+ New Bill</Text>
                 <Text style={styles.qaBtnSub}>Add items & generate bill</Text>
               </View>
@@ -811,7 +811,7 @@ export default function HomeScreen() {
           >
             <View style={styles.qaLeft}>
               <Ionicons name="flash" size={22} color="#fff" />
-              <View style={{ marginLeft: 10 }}>
+              <View style={{ marginLeft: 10, marginRight: 12 }}>
                 <Text style={styles.qaBtnTitle}>+ Quick Entry</Text>
                 <Text style={styles.qaBtnSub}>Just name & amount</Text>
               </View>
@@ -893,13 +893,14 @@ export default function HomeScreen() {
           <Ionicons name="stats-chart" size={24} color="#9CA3AF" />
           <Text style={styles.navLabel}>Analytics</Text>
         </TouchableOpacity>
+        <View style={{ width: 60 }} />
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/products')}>
           <Ionicons name="pricetag" size={24} color="#9CA3AF" />
           <Text style={styles.navLabel}>Products</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/suppliers')}>
           <Ionicons name="people" size={24} color="#9CA3AF" />
-          <Text style={styles.navLabel}>Suppliers</Text>
+          <Text style={styles.navLabel}>Customers</Text>
         </TouchableOpacity>
       </View>
 
