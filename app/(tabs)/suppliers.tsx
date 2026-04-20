@@ -66,6 +66,19 @@ const todayStr = () => {
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 };
 
+// Helper to parse date string for sorting
+const parseDate = (dateStr: string): Date => {
+  const months: Record<string, number> = {
+    'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+    'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+  };
+  const parts = dateStr.split(' ');
+  const day = parseInt(parts[0]);
+  const month = months[parts[1]];
+  const year = parseInt(parts[2]);
+  return new Date(year, month, day);
+};
+
 // Supplier Detail Screen Component (inline)
 const SupplierDetailScreen = ({ 
   supplier, 
@@ -93,9 +106,7 @@ const SupplierDetailScreen = ({
   // Group cleared bills by date
   const clearedBillsByDate = (() => {
     const sorted = [...clearedBills].sort((a, b) => {
-      const dateA = new Date(a.date).getTime();
-      const dateB = new Date(b.date).getTime();
-      return dateB - dateA; // Most recent first
+      return parseDate(b.date).getTime() - parseDate(a.date).getTime();
     });
     const groups: Record<string, Bill[]> = {};
     sorted.forEach((bill) => {
@@ -283,7 +294,7 @@ const SupplierDetailScreen = ({
               )}
             </View>
             {pendingBills.length > 0 ? (
-              pendingBills.map((bill) => {
+              [...pendingBills].sort((a, b) => b.id - a.id).map((bill) => {
                 const remaining = bill.amount - bill.paid;
                 const progress = bill.amount > 0 ? bill.paid / bill.amount : 1;
                 const isCleared = remaining <= 0;
@@ -294,14 +305,9 @@ const SupplierDetailScreen = ({
                         <Text style={styles.billName}>{bill.name}</Text>
                         <Text style={styles.billDate}>{bill.date}</Text>
                       </View>
-                      {isCleared ? (
+                      {isCleared && (
                         <View style={styles.clearedPill}>
                           <Text style={styles.clearedPillText}>Cleared</Text>
-                        </View>
-                      ) : (
-                        <View>
-                          <Text style={styles.billRemaining}>{fmt(remaining)}</Text>
-                          <Text style={styles.billRemainingLabel}>remaining</Text>
                         </View>
                       )}
                     </View>
