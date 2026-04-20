@@ -95,6 +95,7 @@ const SupplierDetailScreen = ({
   const [billModal, setBillModal] = useState(false);
   const [payModal, setPayModal] = useState(false);
   const [clearedBillsModal, setClearedBillsModal] = useState(false);
+  const [historyModal, setHistoryModal] = useState(false);
   const [billForm, setBillForm] = useState({ name: '', amount: '', items: '' });
   const [payForm, setPayForm] = useState({ billId: 0, amount: '' });
 
@@ -225,28 +226,36 @@ const SupplierDetailScreen = ({
             <Text style={styles.appBarCategory}>{supplier.category}</Text>
           </View>
         </View>
-        <TouchableOpacity 
-          onPress={() => {
-            Alert.alert(
-              'Delete Supplier',
-              `Are you sure you want to delete ${supplier.name}?`,
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Delete',
-                  style: 'destructive',
-                  onPress: () => {
-                    onDelete(supplier);
-                    onBack();
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity 
+            onPress={() => {
+              Alert.alert(
+                'Delete Supplier',
+                `Are you sure you want to delete ${supplier.name}?`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => {
+                      onDelete(supplier);
+                      onBack();
+                    }
                   }
-                }
-              ]
-            );
-          }}
-          style={styles.deleteHeaderBtn}
-        >
-          <Ionicons name="trash-outline" size={22} color="#EF4444" />
-        </TouchableOpacity>
+                ]
+              );
+            }}
+            style={styles.deleteHeaderBtn}
+          >
+            <Ionicons name="trash-outline" size={22} color="#EF4444" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => setHistoryModal(true)}
+            style={styles.deleteHeaderBtn}
+          >
+            <Ionicons name="time-outline" size={22} color="#2563EB" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -364,76 +373,6 @@ const SupplierDetailScreen = ({
             <Text style={styles.emptyIcon}>🧾</Text>
             <Text style={styles.emptyTitle}>No bills added</Text>
             <Text style={styles.emptySub}>Tap "Add Bill" to start tracking</Text>
-          </View>
-        )}
-
-        {/* History Section */}
-        {historySections.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>History</Text>
-            <View style={styles.historyContainer}>
-              {historySections.map((section) => (
-                <View key={section.title}>
-                  <Text style={styles.historyDate}>{section.title}</Text>
-                  {section.data.map((tx, index) => (
-                    <View
-                      key={tx.id}
-                      style={[
-                        styles.historyItem,
-                        index < section.data.length - 1 && styles.historyItemBorder,
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.historyIcon,
-                          {
-                            backgroundColor:
-                              tx.type === 'payment' ? '#F0FDF4' : '#FFF7ED',
-                          },
-                        ]}
-                      >
-                        <Ionicons
-                          name={tx.type === 'payment' ? 'checkmark-circle' : 'document-text'}
-                          size={18}
-                          color={tx.type === 'payment' ? '#16A34A' : '#F97316'}
-                        />
-                      </View>
-
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.historyItemTitle}>
-                          {tx.type === 'payment' ? 'Payment' : 'Bill Added'} · {tx.billName}
-                        </Text>
-                        <Text style={styles.historyItemSub}>{tx.date}</Text>
-                      </View>
-
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Text
-                          style={[
-                            styles.historyAmount,
-                            {
-                              color: tx.type === 'payment' ? '#16A34A' : '#EF4444',
-                            },
-                          ]}
-                        >
-                          {tx.type === 'payment' ? '+' : '-'}
-                          {fmt(tx.amount)}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.historyStatus,
-                            {
-                              color: tx.type === 'payment' ? '#16A34A' : '#EF4444',
-                            },
-                          ]}
-                        >
-                          {tx.type === 'payment' ? 'Paid' : 'Pending'}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              ))}
-            </View>
           </View>
         )}
 
@@ -606,6 +545,101 @@ const SupplierDetailScreen = ({
             <TouchableOpacity 
               style={styles.clearedBillsCloseBtn}
               onPress={() => setClearedBillsModal(false)}
+            >
+              <Text style={styles.clearedBillsCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* History Modal */}
+      <Modal visible={historyModal} transparent animationType="slide" onRequestClose={() => setHistoryModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.clearedBillsSheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Transaction History</Text>
+              <TouchableOpacity onPress={() => setHistoryModal(false)}>
+                <Ionicons name="close" size={24} color="#0F172A" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+              <View style={styles.historyModalContainer}>
+                {historySections.length > 0 ? (
+                  historySections.map((section) => (
+                    <View key={section.title}>
+                      <Text style={styles.historyModalDate}>{section.title}</Text>
+                      {section.data.map((tx, index) => (
+                        <View
+                          key={tx.id}
+                          style={[
+                            styles.historyModalItem,
+                            index < section.data.length - 1 && styles.historyModalItemBorder,
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.historyModalIcon,
+                              {
+                                backgroundColor:
+                                  tx.type === 'payment' ? '#F0FDF4' : '#FFF7ED',
+                              },
+                            ]}
+                          >
+                            <Ionicons
+                              name={tx.type === 'payment' ? 'checkmark-circle' : 'document-text'}
+                              size={20}
+                              color={tx.type === 'payment' ? '#16A34A' : '#F97316'}
+                            />
+                          </View>
+
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.historyModalItemTitle}>
+                              {tx.type === 'payment' ? 'Payment' : 'Bill Added'}
+                            </Text>
+                            <Text style={styles.historyModalItemBillName}>{tx.billName}</Text>
+                            <Text style={styles.historyModalItemSub}>{tx.date}</Text>
+                          </View>
+
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text
+                              style={[
+                                styles.historyModalAmount,
+                                {
+                                  color: tx.type === 'payment' ? '#16A34A' : '#EF4444',
+                                },
+                              ]}
+                            >
+                              {tx.type === 'payment' ? '+' : '-'}
+                              {fmt(tx.amount)}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.historyModalStatus,
+                                {
+                                  color: tx.type === 'payment' ? '#16A34A' : '#EF4444',
+                                },
+                              ]}
+                            >
+                              {tx.type === 'payment' ? 'Paid' : 'Pending'}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.emptyCleared}>
+                    <Text style={styles.emptyIcon}>📋</Text>
+                    <Text style={styles.emptyText}>No transaction history yet</Text>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity 
+              style={styles.clearedBillsCloseBtn}
+              onPress={() => setHistoryModal(false)}
             >
               <Text style={styles.clearedBillsCloseBtnText}>Close</Text>
             </TouchableOpacity>
@@ -1611,6 +1645,68 @@ const styles = StyleSheet.create({
   navLabel: {
     fontSize: 9,
     color: '#64748B',
+    fontWeight: '700',
+    marginTop: 2,
+  },
+
+  // History Modal
+  historyModalContainer: {
+    padding: 20,
+    minHeight: 200,
+  },
+  historyModalDate: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 16,
+    marginBottom: 10,
+  },
+  historyModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  historyModalItemBorder: {
+    borderBottomWidth: 0,
+  },
+  historyModalIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  historyModalItemTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  historyModalItemBillName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 2,
+  },
+  historyModalItemSub: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  historyModalAmount: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  historyModalStatus: {
+    fontSize: 11,
     fontWeight: '700',
     marginTop: 2,
   },
