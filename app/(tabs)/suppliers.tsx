@@ -21,6 +21,7 @@ interface Bill {
   date: string;
   amount: number;
   paid: number;
+  items?: string[]; // Items/products in the bill
 }
 
 interface Transaction {
@@ -69,21 +70,40 @@ const todayStr = () => {
 const SupplierDetailScreen = ({ 
   supplier, 
   onBack, 
-  onUpdate 
+  onUpdate,
+  onDelete
 }: { 
   supplier: Supplier; 
   onBack: () => void; 
   onUpdate: (updated: Supplier) => void;
+  onDelete: (supplier: Supplier) => void;
 }) => {
   const insets = useSafeAreaInsets();
   const [billModal, setBillModal] = useState(false);
   const [payModal, setPayModal] = useState(false);
-  const [billForm, setBillForm] = useState({ name: '', amount: '' });
+  const [clearedBillsModal, setClearedBillsModal] = useState(false);
+  const [billForm, setBillForm] = useState({ name: '', amount: '', items: '' });
   const [payForm, setPayForm] = useState({ billId: 0, amount: '' });
 
   const totalPending = getPending(supplier);
   const accentColor = getAvatarColor(supplier.id);
   const pendingBills = supplier.bills.filter((b) => b.amount - b.paid > 0);
+  const clearedBills = supplier.bills.filter((b) => b.amount - b.paid <= 0);
+  
+  // Group cleared bills by date
+  const clearedBillsByDate = (() => {
+    const sorted = [...clearedBills].sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return dateB - dateA; // Most recent first
+    });
+    const groups: Record<string, Bill[]> = {};
+    sorted.forEach((bill) => {
+      if (!groups[bill.date]) groups[bill.date] = [];
+      groups[bill.date].push(bill);
+    });
+    return Object.entries(groups).map(([title, data]) => ({ title, data }));
+  })();
 
   // History sections (date-grouped)
   const historySections = (() => {
@@ -103,12 +123,18 @@ const SupplierDetailScreen = ({
       return;
     }
 
+    // Parse items if provided
+    const items = billForm.items.trim() 
+      ? billForm.items.split('\n').map(item => item.trim()).filter(item => item.length > 0)
+      : [];
+
     const newBill: Bill = {
       id: Date.now(),
       name: billForm.name.trim(),
       date: todayStr(),
       amount,
       paid: 0,
+      items: items.length > 0 ? items : undefined,
     };
 
     const newTx: Transaction = {
@@ -126,7 +152,7 @@ const SupplierDetailScreen = ({
       transactions: [...supplier.transactions, newTx],
     };
     onUpdate(updatedSupplier);
-    setBillForm({ name: '', amount: '' });
+    setBillForm({ name: '', amount: '', items: '' });
     setBillModal(false);
   };
 
@@ -188,6 +214,28 @@ const SupplierDetailScreen = ({
             <Text style={styles.appBarCategory}>{supplier.category}</Text>
           </View>
         </View>
+        <TouchableOpacity 
+          onPress={() => {
+            Alert.alert(
+              'Delete Supplier',
+              `Are you sure you want to delete ${supplier.name}?`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: () => {
+                    onDelete(supplier);
+                    onBack();
+                  }
+                }
+              ]
+            );
+          }}
+          style={styles.deleteHeaderBtn}
+        >
+          <Ionicons name="trash-outline" size={22} color="#EF4444" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -226,68 +274,82 @@ const SupplierDetailScreen = ({
         {/* Bills Section */}
         {supplier.bills.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Bills</Text>
-            {supplier.bills.map((bill) => {
-              const remaining = bill.amount - bill.paid;
-              const progress = bill.amount > 0 ? bill.paid / bill.amount : 1;
-              const isCleared = remaining <= 0;
-              return (
-                <View key={bill.id} style={styles.billCard}>
-                  <View style={styles.billHeader}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.billName}>{bill.name}</Text>
-                      <Text style={styles.billDate}>{bill.date}</Text>
-                    </View>
-                    {isCleared ? (
-                      <View style={styles.clearedPill}>
-                        <Text style={styles.clearedPillText}>Cleared</Text>
+            <View style={styles.billsHeader}>
+              <Text style={styles.sectionTitle}>Bills</Text>
+              {clearedBills.length > 0 && (
+                <TouchableOpacity onPress={() => setClearedBillsModal(true)}>
+                  <Text style={styles.seeAllBtn}>See All</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            {pendingBills.length > 0 ? (
+              pendingBills.map((bill) => {
+                const remaining = bill.amount - bill.paid;
+                const progress = bill.amount > 0 ? bill.paid / bill.amount : 1;
+                const isCleared = remaining <= 0;
+                return (
+                  <View key={bill.id} style={styles.billCard}>
+                    <View style={styles.billHeader}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.billName}>{bill.name}</Text>
+                        <Text style={styles.billDate}>{bill.date}</Text>
                       </View>
-                    ) : (
-                      <View>
-                        <Text style={styles.billRemaining}>{fmt(remaining)}</Text>
-                        <Text style={styles.billRemainingLabel}>remaining</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  <View style={styles.progressTrack}>
-                    <View
-                      style={[
-                        styles.progressFill,
-                        {
-                          width: `${Math.round(progress * 100)}%` as any,
-                          backgroundColor: isCleared ? '#16A34A' : '#2563EB',
-                        },
-                      ]}
-                    />
-                  </View>
-
-                  <View style={styles.billMeta}>
-                    <View style={styles.billMetaCell}>
-                      <Text style={styles.billMetaLabel}>Total Bill</Text>
-                      <Text style={styles.billMetaValue}>{fmt(bill.amount)}</Text>
+                      {isCleared ? (
+                        <View style={styles.clearedPill}>
+                          <Text style={styles.clearedPillText}>Cleared</Text>
+                        </View>
+                      ) : (
+                        <View>
+                          <Text style={styles.billRemaining}>{fmt(remaining)}</Text>
+                          <Text style={styles.billRemainingLabel}>remaining</Text>
+                        </View>
+                      )}
                     </View>
-                    <View style={[styles.billMetaCell, { alignItems: 'center' }]}>
-                      <Text style={styles.billMetaLabel}>Paid</Text>
-                      <Text style={[styles.billMetaValue, { color: '#16A34A' }]}>
-                        {fmt(bill.paid)}
-                      </Text>
-                    </View>
-                    <View style={[styles.billMetaCell, { alignItems: 'flex-end' }]}>
-                      <Text style={styles.billMetaLabel}>Pending</Text>
-                      <Text
+
+                    <View style={styles.progressTrack}>
+                      <View
                         style={[
-                          styles.billMetaValue,
-                          { color: isCleared ? '#16A34A' : '#EF4444' },
+                          styles.progressFill,
+                          {
+                            width: `${Math.round(progress * 100)}%` as any,
+                            backgroundColor: isCleared ? '#16A34A' : '#2563EB',
+                          },
                         ]}
-                      >
-                        {fmt(remaining)}
-                      </Text>
+                      />
+                    </View>
+
+                    <View style={styles.billMeta}>
+                      <View style={styles.billMetaCell}>
+                        <Text style={styles.billMetaLabel}>Total Bill</Text>
+                        <Text style={styles.billMetaValue}>{fmt(bill.amount)}</Text>
+                      </View>
+                      <View style={[styles.billMetaCell, { alignItems: 'center' }]}>
+                        <Text style={styles.billMetaLabel}>Paid</Text>
+                        <Text style={[styles.billMetaValue, { color: '#16A34A' }]}>
+                          {fmt(bill.paid)}
+                        </Text>
+                      </View>
+                      <View style={[styles.billMetaCell, { alignItems: 'flex-end' }]}>
+                        <Text style={styles.billMetaLabel}>Pending</Text>
+                        <Text
+                          style={[
+                            styles.billMetaValue,
+                            { color: isCleared ? '#16A34A' : '#EF4444' },
+                          ]}
+                        >
+                          {fmt(remaining)}
+                        </Text>
+                      </View>
                     </View>
                   </View>
-                </View>
-              );
-            })}
+                );
+              })
+            ) : (
+              <View style={styles.emptyActiveBills}>
+                <Text style={styles.emptyIcon}>✅</Text>
+                <Text style={styles.emptyText}>No pending bills</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -398,6 +460,16 @@ const SupplierDetailScreen = ({
             keyboardType="numeric"
           />
 
+          <Text style={styles.fieldLabel}>Items (Optional)</Text>
+          <TextInput
+            style={[styles.fieldInput, { height: 80, textAlignVertical: 'top' }]}
+            placeholder="Enter items, one per line&#10;e.g.&#10;Tomatoes - 2kg&#10;Onions - 1kg"
+            placeholderTextColor="#CBD5E1"
+            value={billForm.items}
+            onChangeText={(v) => setBillForm((p) => ({ ...p, items: v }))}
+            multiline
+          />
+
           <TouchableOpacity
             style={[styles.sheetPrimaryBtn, (!billForm.name.trim() || !billForm.amount) && { opacity: 0.4 }]}
             onPress={addBill}
@@ -469,6 +541,69 @@ const SupplierDetailScreen = ({
           <TouchableOpacity onPress={() => setPayModal(false)}>
             <Text style={styles.sheetCancelText}>Cancel</Text>
           </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* Cleared Bills Modal */}
+      <Modal visible={clearedBillsModal} transparent animationType="slide" onRequestClose={() => setClearedBillsModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.clearedBillsSheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Cleared Bills</Text>
+              <TouchableOpacity onPress={() => setClearedBillsModal(false)}>
+                <Ionicons name="close" size={24} color="#0F172A" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+              <View style={styles.clearedBillsContainer}>
+                {clearedBillsByDate.length > 0 ? (
+                  clearedBillsByDate.map((section) => (
+                    <View key={section.title}>
+                      <Text style={styles.clearedBillsDateHeader}>{section.title}</Text>
+                      {section.data.map((bill) => {
+                        return (
+                          <View key={bill.id} style={styles.clearedBillItem}>
+                            <View style={{ flex: 1 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                                <Text style={styles.clearedBillName}>{bill.name}</Text>
+                                <Ionicons name="checkmark-circle" size={18} color="#16A34A" style={{ marginLeft: 8 }} />
+                              </View>
+                              <Text style={styles.clearedBillAmount}>
+                                Bill: {fmt(bill.amount)} • Paid: {fmt(bill.paid)}
+                              </Text>
+                              {bill.items && bill.items.length > 0 && (
+                                <View style={{ marginTop: 8, backgroundColor: '#F1F5F9', borderRadius: 8, padding: 10 }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748B', marginBottom: 4 }}>Items:</Text>
+                                  {bill.items.map((item, idx) => (
+                                    <Text key={idx} style={{ fontSize: 11, color: '#0F172A', marginBottom: 2 }}>
+                                      • {item}
+                                    </Text>
+                                  ))}
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.emptyCleared}>
+                    <Text style={styles.emptyIcon}>📋</Text>
+                    <Text style={styles.emptyText}>No cleared bills yet</Text>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity 
+              style={styles.clearedBillsCloseBtn}
+              onPress={() => setClearedBillsModal(false)}
+            >
+              <Text style={styles.clearedBillsCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
     </View>
@@ -731,6 +866,7 @@ export default function SuppliersScreen() {
         supplier={selectedSupplier} 
         onBack={() => setSelectedSupplier(null)} 
         onUpdate={updateSupplier}
+        onDelete={deleteSupplier}
       />
     );
   }
@@ -748,71 +884,29 @@ export default function SuppliersScreen() {
       {/* Body */}
       <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
         {suppliers.map((supplier) => {
-          const { total, paid, pending, percentage } = getSupplierTotals(supplier);
+          const { pending } = getSupplierTotals(supplier);
           const isPaid = pending === 0;
           
           return (
             <TouchableOpacity 
               key={supplier.id} 
-              style={[styles.supplierCard, isPaid && styles.paidCard]}
+              style={styles.supplierCard}
               onPress={() => setSelectedSupplier(supplier)}
               activeOpacity={0.7}
             >
-              <View style={styles.supplierHeader}>
-                <View style={styles.supplierNameRow}>
-                  <View style={[styles.supplierAvatar, { backgroundColor: getAvatarColor(supplier.id) + '22' }]}>
-                    <Text style={[styles.supplierAvatarText, { color: getAvatarColor(supplier.id) }]}>
-                      {getInitials(supplier.name)}
-                    </Text>
-                  </View>
-                  <View>
-                    <Text style={styles.supplierName}>{supplier.name}</Text>
-                    <Text style={styles.supplierCategory}>{supplier.category}</Text>
-                  </View>
-                </View>
-                <View style={[styles.supplierBadge, isPaid ? styles.badgePaid : styles.badgePending]}>
-                  <Text style={styles.supplierBadgeText}>{isPaid ? '✓ Cleared' : 'Pending'}</Text>
-                </View>
-              </View>
-              
-              {/* Quick stats */}
-              <View style={styles.statsRow}>
-                <View style={styles.statCell}>
-                  <Text style={styles.statLabel}>Total Bills</Text>
-                  <Text style={styles.statValue}>₹{total.toLocaleString('en-IN')}</Text>
-                </View>
-                <View style={styles.statCell}>
-                  <Text style={styles.statLabel}>Paid</Text>
-                  <Text style={[styles.statValue, { color: '#22C55E' }]}>₹{paid.toLocaleString('en-IN')}</Text>
-                </View>
-                <View style={styles.statCell}>
-                  <Text style={styles.statLabel}>Pending</Text>
-                  <Text style={[styles.statValue, { color: pending === 0 ? '#22C55E' : '#EF4444' }]}>
-                    ₹{pending.toLocaleString('en-IN')}
+              <View style={styles.supplierNameRow}>
+                <View style={[styles.supplierAvatar, { backgroundColor: getAvatarColor(supplier.id) + '22' }]}>
+                  <Text style={[styles.supplierAvatarText, { color: getAvatarColor(supplier.id) }]}>
+                    {getInitials(supplier.name)}
                   </Text>
                 </View>
-              </View>
-              
-              {/* Progress Bar */}
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${percentage}%` }, isPaid && styles.progressDone]} />
-              </View>
-              
-              {/* Action Buttons */}
-              <View style={styles.cardActions}>
-                <TouchableOpacity 
-                  style={[styles.cardActionBtn, styles.cardActionOutline]} 
-                  onPress={() => addNewBillToSupplier(supplier)}
-                >
-                  <Text style={styles.cardActionOutlineText}>+ Add Bill</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.cardActionBtn, styles.cardActionDanger]} 
-                  onPress={() => deleteSupplier(supplier)}
-                >
-                  <Ionicons name="trash-outline" size={16} color="#EF4444" />
-                  <Text style={styles.cardActionDangerText}>Delete</Text>
-                </TouchableOpacity>
+                <Text style={styles.supplierName}>{supplier.name}</Text>
+                <View style={[styles.statusBadge, isPaid ? styles.statusBadgePaid : styles.statusBadgePending]}>
+                  <Text style={styles.statusBadgeText}>{isPaid ? '✓ Cleared' : 'Pending'}</Text>
+                </View>
+                <Text style={[styles.pendingAmount, pending === 0 && { color: '#22C55E' }]}>
+                  {pending === 0 ? 'All Clear ✅' : fmt(pending)}
+                </Text>
               </View>
             </TouchableOpacity>
           );
@@ -887,6 +981,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F1F5F9',
   },
   backBtn: { padding: 4, marginRight: 8 },
+  deleteHeaderBtn: { padding: 4 },
   appBarCenter: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   appBarAvatar: {
     width: 38,
@@ -946,6 +1041,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     color: '#0F172A',
+    flex: 1,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusBadgePending: {
+    backgroundColor: '#FFF7ED',
+  },
+  statusBadgePaid: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  pendingAmount: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#EF4444',
   },
   supplierCategory: {
     fontSize: 12,
@@ -1123,6 +1240,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 12,
   },
+  billsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  seeAllBtn: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2563EB',
+    textDecorationLine: 'underline',
+  },
   
   // Bill Card
   billCard: {
@@ -1183,9 +1312,11 @@ const styles = StyleSheet.create({
   
   // Empty State
   emptyBills: { alignItems: 'center', paddingVertical: 48 },
+  emptyActiveBills: { alignItems: 'center', paddingVertical: 32 },
   emptyIcon: { fontSize: 42, marginBottom: 10 },
   emptyTitle: { fontSize: 15, fontWeight: '700', color: '#0F172A', marginBottom: 4 },
   emptySub: { fontSize: 12, color: '#94A3B8', fontWeight: '500' },
+  emptyText: { fontSize: 14, color: '#94A3B8', fontWeight: '500' },
   
   // History
   historyContainer: {
@@ -1384,6 +1515,78 @@ const styles = StyleSheet.create({
     borderColor: '#FED7AA',
   },
   payBillInfoText: { fontSize: 12, fontWeight: '600', color: '#92400E' },
+  
+  // Cleared Bills Modal
+  clearedBillsSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+    flex: 1,
+    flexDirection: 'column',
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  clearedBillsContainer: {
+    padding: 20,
+    minHeight: 200,
+  },
+  clearedBillsDateHeader: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 16,
+    marginBottom: 10,
+  },
+  clearedBillItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  clearedBillName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  clearedBillAmount: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  emptyCleared: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  clearedBillsCloseBtn: {
+    backgroundColor: '#2563EB',
+    padding: 15,
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  clearedBillsCloseBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
   
   // Bottom Nav
   bottomNav: {
