@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -267,46 +267,38 @@ export default function ProductsScreen() {
     );
   };
 
-  // Edit product
-  const editProduct = (product: Product) => {
-    Alert.prompt(
-      'Edit Product',
-      'Product Name',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Next',
-          onPress: (name: string | undefined) => {
-            if (name && name.trim()) {
-              Alert.prompt(
-                'Edit Price',
-                'Product Price',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Save',
-                    onPress: async (priceStr: string | undefined) => {
-                      const price = parseFloat(priceStr || '');
-                      if (!isNaN(price) && price > 0) {
-                        const updated = products.map(p =>
-                          p.id === product.id ? { ...p, name: name.trim(), price } : p
-                        );
-                        setProducts(updated);
-                        await AsyncStorage.setItem('products', JSON.stringify(updated));
-                      }
-                    }
-                  }
-                ],
-                'plain-text',
-                product.price.toString()
-              );
-            }
-          }
-        }
-      ],
-      'plain-text',
-      product.name
+  // Edit product - simple modal approach
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editModalVisible, setEditModalVisible] = useState(false);
+
+  const startEditProduct = (product: Product) => {
+    setEditingProduct(product);
+    setEditName(product.name);
+    setEditPrice(product.price.toString());
+    setEditModalVisible(true);
+  };
+
+  const saveEditedProduct = async () => {
+    if (!editName.trim()) {
+      Alert.alert('Error', 'Product name cannot be empty');
+      return;
+    }
+    
+    const price = parseFloat(editPrice);
+    if (isNaN(price) || price <= 0) {
+      Alert.alert('Error', 'Please enter a valid price');
+      return;
+    }
+
+    const updated = products.map(p =>
+      p.id === editingProduct?.id ? { ...p, name: editName.trim(), price } : p
     );
+    setProducts(updated);
+    await AsyncStorage.setItem('products', JSON.stringify(updated));
+    setEditModalVisible(false);
+    Alert.alert('Success', 'Product updated!');
   };
 
   // Complete bill and collect payment
@@ -364,10 +356,9 @@ export default function ProductsScreen() {
       <View>
         <Text style={styles.productName}>{item.name}</Text>
         <Text style={styles.productPrice}>₹{item.price}</Text>
-        <Text style={styles.productSales}>Sold {item.sales} times today</Text>
       </View>
       <View style={styles.productActions}>
-        <TouchableOpacity style={styles.editBtn} onPress={() => editProduct(item)}>
+        <TouchableOpacity style={styles.editBtn} onPress={() => startEditProduct(item)}>
           <Text style={styles.editBtnText}>✏️</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteProduct(item.id)}>
@@ -528,6 +519,57 @@ export default function ProductsScreen() {
               }}
             >
               <Text style={styles.saveBtnText}>Save Product ✓</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  // Edit Product Modal
+  const EditProductModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={editModalVisible}
+      onRequestClose={() => setEditModalVisible(false)}
+    >
+      <TouchableOpacity 
+        style={styles.modalOverlay} 
+        activeOpacity={1} 
+        onPress={() => setEditModalVisible(false)}
+      >
+        <View style={styles.addProductModal}>
+          <View style={styles.addProductModalHeader}>
+            <Text style={styles.addProductModalTitle}>✏️ Edit Product</Text>
+            <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+              <Text style={styles.pickerClose}>×</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.addProductModalContent}>
+            <Text style={styles.inputLabel}>Product Name</Text>
+            <TextInput
+              style={styles.addInput}
+              placeholder="Enter product name"
+              value={editName}
+              onChangeText={setEditName}
+            />
+
+            <Text style={styles.inputLabel}>Price (₹)</Text>
+            <TextInput
+              style={styles.addInput}
+              placeholder="Enter price"
+              value={editPrice}
+              onChangeText={setEditPrice}
+              keyboardType="numeric"
+            />
+
+            <TouchableOpacity 
+              style={styles.saveBtn} 
+              onPress={saveEditedProduct}
+            >
+              <Text style={styles.saveBtnText}>Save Changes ✓</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -739,6 +781,7 @@ export default function ProductsScreen() {
       <PickerModal />
       <UnitPickerModal />
       <AddProductModal />
+      <EditProductModal />
       
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
