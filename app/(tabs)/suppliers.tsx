@@ -63,7 +63,9 @@ const getInitials = (name: string) =>
 const todayStr = () => {
   const d = new Date();
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} ${hours}:${minutes}`;
 };
 
 // Helper to parse date string for sorting
@@ -76,7 +78,9 @@ const parseDate = (dateStr: string): Date => {
   const day = parseInt(parts[0]);
   const month = months[parts[1]];
   const year = parseInt(parts[2]);
-  return new Date(year, month, day);
+  const hours = parts[3] ? parseInt(parts[3].split(':')[0]) : 0;
+  const minutes = parts[3] ? parseInt(parts[3].split(':')[1]) : 0;
+  return new Date(year, month, day, hours, minutes);
 };
 
 // Supplier Detail Screen Component (inline)
@@ -335,17 +339,10 @@ const SupplierDetailScreen = ({
 
                     <View style={styles.billMeta}>
                       <View style={styles.billMetaCell}>
-                        <Text style={styles.billMetaLabel}>Total Bill</Text>
                         <Text style={styles.billMetaValue}>{fmt(bill.amount)}</Text>
-                      </View>
-                      <View style={[styles.billMetaCell, { alignItems: 'center' }]}>
-                        <Text style={styles.billMetaLabel}>Paid</Text>
-                        <Text style={[styles.billMetaValue, { color: '#16A34A' }]}>
-                          {fmt(bill.paid)}
-                        </Text>
+                        <Text style={styles.billMetaName}>Total Bill</Text>
                       </View>
                       <View style={[styles.billMetaCell, { alignItems: 'flex-end' }]}>
-                        <Text style={styles.billMetaLabel}>Pending</Text>
                         <Text
                           style={[
                             styles.billMetaValue,
@@ -354,8 +351,18 @@ const SupplierDetailScreen = ({
                         >
                           {fmt(remaining)}
                         </Text>
+                        <Text style={styles.billMetaName}>Pending</Text>
                       </View>
                     </View>
+
+                    {bill.items && bill.items.length > 0 && (
+                      <View style={styles.billItems}>
+                        <Text style={styles.billItemsTitle}>Items:</Text>
+                        {bill.items.map((item, idx) => (
+                          <Text key={idx} style={styles.billItem}>• {item}</Text>
+                        ))}
+                      </View>
+                    )}
                   </View>
                 );
               })
@@ -606,22 +613,22 @@ const SupplierDetailScreen = ({
                               style={[
                                 styles.historyModalAmount,
                                 {
-                                  color: tx.type === 'payment' ? '#16A34A' : '#EF4444',
+                                  color: tx.type === 'payment' ? '#16A34A' : '#0F172A',
                                 },
                               ]}
                             >
-                              {tx.type === 'payment' ? '+' : '-'}
+                              {tx.type === 'payment' ? '+' : ''}
                               {fmt(tx.amount)}
                             </Text>
                             <Text
                               style={[
                                 styles.historyModalStatus,
                                 {
-                                  color: tx.type === 'payment' ? '#16A34A' : '#EF4444',
+                                  color: tx.type === 'payment' ? '#16A34A' : '#0F172A',
                                 },
                               ]}
                             >
-                              {tx.type === 'payment' ? 'Paid' : 'Pending'}
+                              {tx.type === 'payment' ? 'Paid' : 'Bill Amount'}
                             </Text>
                           </View>
                         </View>
@@ -657,6 +664,7 @@ export default function SuppliersScreen() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [addSupModalVisible, setAddSupModalVisible] = useState(false);
+  const [paymentHistoryModalVisible, setPaymentHistoryModalVisible] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState('');
   const [newSupplierCategory, setNewSupplierCategory] = useState('');
   const [newSupplierAmount, setNewSupplierAmount] = useState('');
@@ -719,7 +727,9 @@ export default function SuppliersScreen() {
     const now = new Date();
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const dateStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const dateStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()} ${hours}:${minutes}`;
     
     const newBill: Bill = {
       id: Date.now(),
@@ -793,7 +803,9 @@ export default function SuppliersScreen() {
                     const now = new Date();
                     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
                                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                    const dateStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+                    const hours = String(now.getHours()).padStart(2, '0');
+                    const minutes = String(now.getMinutes()).padStart(2, '0');
+                    const dateStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()} ${hours}:${minutes}`;
                     
                     const newBill: Bill = {
                       id: Date.now(),
@@ -918,7 +930,12 @@ export default function SuppliersScreen() {
       
       {/* Header */}
       <View style={[styles.mainHeader, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.mainHeaderTitle}>Suppliers</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          <Text style={styles.mainHeaderTitle}>Suppliers</Text>
+          <TouchableOpacity onPress={() => setPaymentHistoryModalVisible(true)} style={styles.headerHistoryBtn}>
+            <Ionicons name="time-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
       
       {/* Body */}
@@ -941,9 +958,6 @@ export default function SuppliersScreen() {
                   </Text>
                 </View>
                 <Text style={styles.supplierName}>{supplier.name}</Text>
-                <View style={[styles.statusBadge, isPaid ? styles.statusBadgePaid : styles.statusBadgePending]}>
-                  <Text style={styles.statusBadgeText}>{isPaid ? '✓ Cleared' : 'Pending'}</Text>
-                </View>
                 <Text style={[styles.pendingAmount, pending === 0 && { color: '#22C55E' }]}>
                   {pending === 0 ? 'All Clear ✅' : fmt(pending)}
                 </Text>
@@ -984,6 +998,102 @@ export default function SuppliersScreen() {
           <Text style={[styles.navLabel, { color: '#2563EB' }]}>Suppliers</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Payment History Modal */}
+      <Modal visible={paymentHistoryModalVisible} transparent animationType="slide" onRequestClose={() => setPaymentHistoryModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.clearedBillsSheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>All Payment History</Text>
+              <TouchableOpacity onPress={() => setPaymentHistoryModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#0F172A" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+              <View style={styles.historyModalContainer}>
+                {(() => {
+                  // Group all payments by supplier
+                  const allPayments: Record<string, { supplier: Supplier; transactions: Transaction[] }> = {};
+                  
+                  suppliers.forEach((supplier) => {
+                    const paymentTransactions = supplier.transactions.filter((tx) => tx.type === 'payment');
+                    if (paymentTransactions.length > 0) {
+                      allPayments[supplier.name] = {
+                        supplier,
+                        transactions: paymentTransactions.sort((a, b) => b.id - a.id),
+                      };
+                    }
+                  });
+
+                  const supplierNames = Object.keys(allPayments).sort();
+                  
+                  return supplierNames.length > 0 ? (
+                    supplierNames.map((supplierName) => {
+                      const { supplier, transactions } = allPayments[supplierName];
+                      const accentColor = getAvatarColor(supplier.id);
+                      
+                      return (
+                        <View key={supplier.id} style={{ marginBottom: 20 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingHorizontal: 20 }}>
+                            <View style={[styles.supplierAvatarSmall, { backgroundColor: accentColor + '22' }]}>
+                              <Text style={[styles.supplierAvatarSmallText, { color: accentColor }]}>
+                                {getInitials(supplier.name)}
+                              </Text>
+                            </View>
+                            <Text style={styles.paymentSupplierName}>{supplier.name}</Text>
+                          </View>
+                          {transactions.map((tx, index) => (
+                            <View key={tx.id} style={{ paddingHorizontal: 12 }}>
+                              <View
+                                style={[
+                                  styles.historyModalItem,
+                                  index < transactions.length - 1 && styles.historyModalItemBorder,
+                                ]}
+                              >
+                                <View style={[styles.historyModalIcon, { backgroundColor: '#F0FDF4' }]}>
+                                  <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
+                                </View>
+
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.historyModalItemTitle}>Payment Received</Text>
+                                  <Text style={styles.historyModalItemBillName}>{tx.billName}</Text>
+                                  <Text style={styles.historyModalItemSub}>{tx.date}</Text>
+                                </View>
+
+                                <View style={{ alignItems: 'flex-end' }}>
+                                  <Text style={[styles.historyModalAmount, { color: '#16A34A' }]}>
+                                    +{fmt(tx.amount)}
+                                  </Text>
+                                  <Text style={[styles.historyModalStatus, { color: '#16A34A' }]}>
+                                    Paid
+                                  </Text>
+                                </View>
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      );
+                    })
+                  ) : (
+                    <View style={styles.emptyCleared}>
+                      <Text style={styles.emptyIcon}>💳</Text>
+                      <Text style={styles.emptyText}>No payments recorded yet</Text>
+                    </View>
+                  );
+                })()}
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity 
+              style={styles.clearedBillsCloseBtn}
+              onPress={() => setPaymentHistoryModalVisible(false)}
+            >
+              <Text style={styles.clearedBillsCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1008,6 +1118,16 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
     letterSpacing: -0.5,
+  },
+
+  // Header History Button
+  headerHistoryBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
   
   // App Bar (Detail View)
@@ -1077,6 +1197,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
   },
+  supplierAvatarSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  supplierAvatarSmallText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  paymentSupplierName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
   supplierName: {
     fontSize: 16,
     fontWeight: '900',
@@ -1100,7 +1237,7 @@ const styles = StyleSheet.create({
     color: '#0F172A',
   },
   pendingAmount: {
-    fontSize: 16,
+    fontSize: 24,
     fontWeight: '900',
     color: '#EF4444',
   },
@@ -1348,7 +1485,33 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     marginBottom: 2,
   },
-  billMetaValue: { fontSize: 13, fontWeight: '800', color: '#0F172A' },
+  billMetaName: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  billMetaValue: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
+  
+  // Bill Items
+  billItems: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  billItemsTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+    marginBottom: 8,
+  },
+  billItem: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
   
   // Empty State
   emptyBills: { alignItems: 'center', paddingVertical: 48 },
