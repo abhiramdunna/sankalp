@@ -840,6 +840,27 @@ export default function AnalyticsScreen() {
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: '#9CA3AF', fontWeight: '700', fontSize: 14 }}>Loading...</Text>
         </View>
+        <View style={[styles.bottomNav, { paddingBottom: (insets.bottom || 0) + 4 }]}>
+          <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
+            <Ionicons name="home-outline" size={24} color="#9CA3AF" />
+            <Text style={styles.navLabel}>Home</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.navItem}>
+            <Ionicons name="stats-chart" size={24} color="#2563EB" />
+            <Text style={[styles.navLabel, { color: '#2563EB' }]}>Analytics</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.navItem} onPress={() => router.push('/products')}>
+            <Ionicons name="pricetag-outline" size={24} color="#9CA3AF" />
+            <Text style={styles.navLabel}>Products</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.navItem} onPress={() => router.push('/suppliers')}>
+            <Ionicons name="people-outline" size={24} color="#9CA3AF" />
+            <Text style={styles.navLabel}>Suppliers</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
