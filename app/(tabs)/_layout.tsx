@@ -23,13 +23,13 @@ export default function RootLayout() {
             backgroundColor: '#fff',
             borderTopWidth: 0.5,
             borderTopColor: '#E5E7EB',
-            height: 60,
+            height: 78,
             paddingBottom: 8,
             paddingTop: 8,
           },
           tabBarLabelStyle: {
-            fontSize: 10,
-            fontWeight: '700',
+            fontSize: 11,
+            fontWeight: '600',
             marginTop: 2,
           },
         })}
