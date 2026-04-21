@@ -825,13 +825,18 @@ export default function AnalyticsScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <LinearGradient
+          colors={['#4F46E5', '#7C3AED', '#9333EA']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.header, { paddingTop: insets.top + 8 }]}
+        >
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.headerTitle}>Analytics</Text>
             </View>
           </View>
-        </View>
+        </LinearGradient>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: '#9CA3AF', fontWeight: '700', fontSize: 14 }}>Loading...</Text>
         </View>

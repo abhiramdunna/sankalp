@@ -520,7 +520,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
 
-  const [bizName, setBizName] = useState('Sri Venkata Tiffins');
+  const [bizName, setBizName] = useState('');
   const [todayTotal, setTodayTotal] = useState(0);
   const [salesLog, setSalesLog] = useState<SaleLog[]>([]);
   const [currentDateTime, setCurrentDateTime] = useState('');
