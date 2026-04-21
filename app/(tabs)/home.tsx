@@ -899,7 +899,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/suppliers')}>
           <Ionicons name="people" size={24} color="#9CA3AF" />
-          <Text style={styles.navLabel}>Customers</Text>
+          <Text style={styles.navLabel}>Suppliers</Text>
         </TouchableOpacity>
       </View>
 

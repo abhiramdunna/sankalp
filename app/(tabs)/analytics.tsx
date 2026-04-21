@@ -417,13 +417,21 @@ interface ChartProps {
 }
 
 const LineChart: React.FC<ChartProps> = ({ data, labels, activeIdx, onPressIdx }) => {
+  if (!data || data.length === 0) {
+    return (
+      <View style={{ width: CHART_W, height: CHART_H, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#9CA3AF', fontWeight: '600', fontSize: 14 }}>No data available</Text>
+      </View>
+    );
+  }
+
   const max = Math.max(...data);
   const min = Math.min(...data);
   const range = max - min || 1;
 
   // Pixel coordinates for each data point
   const pts = data.map((v, i) => ({
-    x: (i / (data.length - 1)) * CHART_W,
+    x: data.length > 1 ? (i / (data.length - 1)) * CHART_W : CHART_W / 2,
     y: CHART_H - ((v - min) / range) * (CHART_H - 20) - 10,
   }));
 
@@ -601,21 +609,84 @@ export default function AnalyticsScreen() {
     })();
   }, []);
 
-  // Compute analytics from sales log
-  const analytics = useMemo(() => {
-    // All values set to 0 - no data yet
-    const totalRevenue = 0;
-    const totalBills = 0;
-    const pendingBills = 0;
-    const avgBill = 0;
-    const avgBillChange = 0;
-    const monthChange = 0;
-    const bestDay = 'N/A';
-    const bestDayAmount = 0;
+  // Helper: Filter sales by date range
+  const filterSalesByDateRange = (sales: SaleLog[], start: Date, end: Date) => {
+    const startOfDay = new Date(start);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(end);
+    endOfDay.setHours(23, 59, 59, 999);
 
-    // Product performance from actual sales log
+    return sales.filter(bill => {
+      if (!bill.date) return false;
+      // Parse date string like "21 Apr" to compare
+      const parts = bill.date.split(' ');
+      const day = parseInt(parts[0]);
+      const monthStr = parts[1];
+      const months: Record<string, number> = {
+        'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+        'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+      };
+      const billDate = new Date(new Date().getFullYear(), months[monthStr] || 0, day);
+      return billDate >= startOfDay && billDate <= endOfDay;
+    });
+  };
+
+  // Generate chart data for selected date range
+  const generateChartData = (sales: SaleLog[], start: Date, end: Date) => {
+    const filtered = filterSalesByDateRange(sales, start, end);
+    
+    // Group by date
+    const byDate: Record<string, number> = {};
+    filtered.forEach(bill => {
+      const date = bill.date || 'Unknown';
+      byDate[date] = (byDate[date] || 0) + bill.total;
+    });
+
+    // Generate all dates in range
+    const dates = [];
+    const labels = [];
+    const current = new Date(start);
+    while (current <= end) {
+      const d = current.getDate();
+      const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][current.getMonth()];
+      const dateStr = `${d} ${m}`;
+      dates.push(byDate[dateStr] || 0);
+      labels.push(dateStr);
+      current.setDate(current.getDate() + 1);
+    }
+
+    return { data: dates, labels };
+  };
+
+  // Get filtered data
+  const filteredSales = useMemo(() => filterSalesByDateRange(salesLog, startDate, endDate), 
+    [salesLog, startDate, endDate]);
+
+  // Compute analytics from filtered sales log
+  const analytics = useMemo(() => {
+    // Calculate from filtered sales log data
+    const totalRevenue = filteredSales.reduce((sum, bill) => sum + bill.total, 0);
+    const totalBills = filteredSales.length;
+    const avgBill = totalBills > 0 ? Math.round(totalRevenue / totalBills) : 0;
+    
+    // Group by date to find best day
+    const byDate: Record<string, number> = {};
+    filteredSales.forEach(bill => {
+      const date = bill.date || 'Unknown';
+      byDate[date] = (byDate[date] || 0) + bill.total;
+    });
+    
+    const dateEntries = Object.entries(byDate).sort((a, b) => b[1] - a[1]);
+    const bestDay = dateEntries[0]?.[0] || 'N/A';
+    const bestDayAmount = dateEntries[0]?.[1] || 0;
+    
+    const pendingBills = 0; // No pending data yet
+    const avgBillChange = 0; // Comparison data not available yet
+    const monthChange = 0; // Comparison data not available yet
+
+    // Product performance from filtered sales log
     const perf: Record<string, { qty: number; revenue: number }> = {};
-    salesLog.forEach(s =>
+    filteredSales.forEach(s =>
       s.items.forEach(it => {
         if (!perf[it.name]) perf[it.name] = { qty: 0, revenue: 0 };
         perf[it.name].qty += it.qty;
@@ -641,7 +712,11 @@ export default function AnalyticsScreen() {
       topProduct,
       topProducts,
     };
-  }, [salesLog]);
+  }, [filteredSales]);
+
+  // Generate chart data
+  const chartData = useMemo(() => generateChartData(salesLog, startDate, endDate), 
+    [salesLog, startDate, endDate]);
 
   const FILTERS: { key: FilterKey; label: string }[] = [
     { key: 'month', label: 'This Month' },
@@ -835,18 +910,24 @@ export default function AnalyticsScreen() {
 
             {/* The chart */}
             <LineChart
-              data={APRIL_DATA}
-              labels={APRIL_LABELS}
-              activeIdx={activeChartIdx}
+              data={chartData.data}
+              labels={chartData.labels}
+              activeIdx={Math.min(activeChartIdx, chartData.data.length - 1)}
               onPressIdx={setActiveChartIdx}
             />
           </View>
 
           {/* X-axis labels */}
           <View style={styles.xAxisRow}>
-            {['01 Apr', '05 Apr', '10 Apr', '15 Apr', '20 Apr', '25 Apr', '30 Apr'].map((l, i) => (
-              <Text key={i} style={styles.xAxisLabel}>{l}</Text>
-            ))}
+            {chartData.labels.length > 0 ? (
+              chartData.labels.filter((_, i) => i % Math.ceil(chartData.labels.length / 7) === 0 || i === chartData.labels.length - 1).map((l, i) => (
+                <Text key={i} style={styles.xAxisLabel}>{l}</Text>
+              ))
+            ) : (
+              ['No', 'Data', 'Available'].map((l, i) => (
+                <Text key={i} style={styles.xAxisLabel}>{l}</Text>
+              ))
+            )}
           </View>
 
         </View>
