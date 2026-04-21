@@ -942,7 +942,7 @@ const styles = StyleSheet.create({
   totalBar: { backgroundColor: '#fff', padding: 12, paddingHorizontal: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 0.5, borderBottomColor: '#E2E8F0' },
   totalLabel: { fontSize: 12, color: '#94A3B8', fontWeight: '700' },
   totalValue: { fontSize: 28, fontWeight: '900', color: '#2563EB', letterSpacing: -0.5 },
-  itemsArea: { flex: 1, padding: 12, maxHeight: 200 },
+  itemsArea: { padding: 12, maxHeight: 250 },
   emptyBill: { alignItems: 'center', padding: 30 },
   emptyBillText: { color: '#bbb', fontSize: 13 },
   emptyBillSub: { fontSize: 11, color: '#ccc', marginTop: 4 },
