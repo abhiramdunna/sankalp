@@ -841,24 +841,7 @@ export default function ProductsScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      <View style={[styles.bottomNav, { paddingBottom: insets.bottom || 8 }]}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
-          <Ionicons name="home" size={24} color="#64748B" />
-          <Text style={styles.navLabel}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/analytics')}>
-          <Ionicons name="stats-chart" size={24} color="#64748B" />
-          <Text style={styles.navLabel}>Analytics</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
-          <Ionicons name="pricetag" size={24} color="#2563EB" />
-          <Text style={[styles.navLabel, { color: '#2563EB' }]}>Products</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/suppliers')}>
-          <Ionicons name="people" size={24} color="#64748B" />
-          <Text style={styles.navLabel}>Suppliers</Text>
-        </TouchableOpacity>
-      </View>
+      
     </View>
   );
 }

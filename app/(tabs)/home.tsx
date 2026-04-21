@@ -889,24 +889,7 @@ export default function HomeScreen() {
       </ScrollView>
 
       {/* ══ BOTTOM NAV ══ */}
-      <View style={[styles.bottomNav, { paddingBottom: insets.bottom || 8 }]}>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="home" size={24} color="#4F46E5" />
-          <Text style={[styles.navLabel, { color: '#4F46E5' }]}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/analytics')}>
-          <Ionicons name="stats-chart" size={24} color="#9CA3AF" />
-          <Text style={styles.navLabel}>Analytics</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/products')}>
-          <Ionicons name="pricetag" size={24} color="#9CA3AF" />
-          <Text style={styles.navLabel}>Products</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/suppliers')}>
-          <Ionicons name="people" size={24} color="#9CA3AF" />
-          <Text style={styles.navLabel}>Suppliers</Text>
-        </TouchableOpacity>
-      </View>
+      
     </View>
   );
 }

@@ -983,27 +983,7 @@ export default function SuppliersScreen() {
       </ScrollView>
       
       {/* Bottom Navigation */}
-      <View style={[styles.bottomNav, { paddingBottom: insets.bottom || 8 }]}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
-          <Ionicons name="home" size={24} color="#64748B" />
-          <Text style={styles.navLabel}>Home</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/analytics')}>
-          <Ionicons name="stats-chart" size={24} color="#64748B" />
-          <Text style={styles.navLabel}>Analytics</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/products')}>
-          <Ionicons name="pricetag" size={24} color="#64748B" />
-          <Text style={styles.navLabel}>Products</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => {}}>
-          <Ionicons name="people" size={24} color="#2563EB" />
-          <Text style={[styles.navLabel, { color: '#2563EB' }]}>Suppliers</Text>
-        </TouchableOpacity>
-      </View>
+      
 
       {/* Payment History Modal */}
       <Modal visible={paymentHistoryModalVisible} transparent animationType="slide" onRequestClose={() => setPaymentHistoryModalVisible(false)}>
