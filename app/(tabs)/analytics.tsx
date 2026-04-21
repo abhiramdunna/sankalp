@@ -3,6 +3,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -844,8 +845,12 @@ export default function AnalyticsScreen() {
       {/* ══════════════════════════════════════
           HEADER
       ══════════════════════════════════════ */}
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-
+      <LinearGradient
+        colors={['#4F46E5', '#7C3AED', '#9333EA']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.header, { paddingTop: insets.top + 8 }]}
+      >
         {/* Title */}
         <View style={styles.headerRow}>
           <View>
@@ -891,7 +896,7 @@ export default function AnalyticsScreen() {
           }}
           onClose={() => setShowDateMenu(false)}
         />
-      </View>
+      </LinearGradient>
 
       {/* ══════════════════════════════════════
           SCROLL BODY
@@ -903,7 +908,12 @@ export default function AnalyticsScreen() {
       >
 
         {/* ── Monthly Collection Card ── */}
-        <View style={styles.collectionCard}>
+        <LinearGradient
+          colors={['#4F46E5', '#7C3AED', '#9333EA']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.collectionCard}
+        >
           <View style={styles.collectionInner}>
             <View style={{ flex: 1 }}>
               <Text style={styles.collectionLabel}>COLLECTION</Text>
@@ -932,7 +942,7 @@ export default function AnalyticsScreen() {
               <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>View</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </LinearGradient>
 
         {/* ── 3 Metric Cards ── */}
         <View style={styles.metricRow}>
@@ -1167,7 +1177,7 @@ const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-    backgroundColor: '#F0F2F8',
+    backgroundColor: '#F5F3FF',
   },
 
   // ── Header ──

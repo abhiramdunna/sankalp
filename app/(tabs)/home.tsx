@@ -3,6 +3,7 @@ import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState, memo } from 'react';
 import {
@@ -763,8 +764,13 @@ export default function HomeScreen() {
         total={reviewData.total}
       />
 
-      {/* ══ BLUE HEADER ══ */}
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+      {/* ══ GRADIENT HEADER ══ */}
+      <LinearGradient
+        colors={['#4F46E5', '#7C3AED', '#9333EA']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.header, { paddingTop: insets.top + 10 }]}
+      >
         <View style={styles.headerTop}>
           <View>
             <Text style={styles.shopName}>{bizName}</Text>
@@ -784,7 +790,7 @@ export default function HomeScreen() {
             <Ionicons name="wallet-outline" size={26} color="rgba(255,255,255,0.9)" />
           </View>
         </View>
-      </View>
+      </LinearGradient>
 
       <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
@@ -792,7 +798,7 @@ export default function HomeScreen() {
         <Text style={styles.quickActionsTitle}>Quick Actions</Text>
         <View style={styles.quickActionsRow}>
           <TouchableOpacity
-            style={[styles.qaBtn, { backgroundColor: '#2563EB', marginRight: 10 }]}
+            style={[styles.qaBtn, { backgroundColor: '#4F46E5', marginRight: 10 }]}
             onPress={startNewBilling}
           >
             <View style={styles.qaLeft}>
@@ -873,7 +879,6 @@ export default function HomeScreen() {
                 <Text style={styles.billTime}>{bill.time} · {bill.date}</Text>
               </View>
               <View style={styles.billRight}>
-                <View style={styles.paidBadge}><Text style={styles.paidBadgeText}>PAID</Text></View>
                 <Text style={styles.billAmount}>₹{bill.total.toLocaleString('en-IN')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color="#bbb" style={{ marginLeft: 6 }} />
@@ -886,8 +891,8 @@ export default function HomeScreen() {
       {/* ══ BOTTOM NAV ══ */}
       <View style={[styles.bottomNav, { paddingBottom: insets.bottom || 8 }]}>
         <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="home" size={24} color="#2563EB" />
-          <Text style={[styles.navLabel, { color: '#2563EB' }]}>Home</Text>
+          <Ionicons name="home" size={24} color="#4F46E5" />
+          <Text style={[styles.navLabel, { color: '#4F46E5' }]}>Home</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/analytics')}>
           <Ionicons name="stats-chart" size={24} color="#9CA3AF" />
@@ -902,11 +907,6 @@ export default function HomeScreen() {
           <Text style={styles.navLabel}>Suppliers</Text>
         </TouchableOpacity>
       </View>
-
-      {/* FAB */}
-      <TouchableOpacity style={[styles.fab, { bottom: (insets.bottom || 8) + 56 }]} onPress={startNewBilling}>
-        <Ionicons name="add" size={32} color="#fff" />
-      </TouchableOpacity>
     </View>
   );
 }
@@ -915,10 +915,10 @@ export default function HomeScreen() {
 // STYLES
 // ═══════════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F0F2F8' },
+  container: { flex: 1, backgroundColor: '#F5F3FF' },
 
   // Header
-  header: { backgroundColor: '#2563EB', paddingHorizontal: 16, paddingBottom: 22 },
+  header: { paddingHorizontal: 16, paddingBottom: 22 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
   shopName: { color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
   shopDateTime: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '600', marginTop: 2 },
@@ -964,7 +964,7 @@ const styles = StyleSheet.create({
   billRight: { alignItems: 'flex-end' },
   paidBadge: { backgroundColor: '#DCFCE7', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginBottom: 4 },
   paidBadgeText: { fontSize: 9, fontWeight: '800', color: '#16A34A', letterSpacing: 0.5 },
-  billAmount: { fontSize: 16, fontWeight: '900', color: '#2563EB' },
+  billAmount: { fontSize: 24, fontWeight: '900', color: '#2563EB' },
   emptyState: { alignItems: 'center', paddingVertical: 30 },
   emptyText: { color: '#bbb', fontSize: 13, fontWeight: '600' },
 
@@ -972,7 +972,7 @@ const styles = StyleSheet.create({
   bottomNav: { backgroundColor: '#fff', flexDirection: 'row', paddingTop: 8, borderTopWidth: 0.5, borderTopColor: '#E5E7EB' },
   navItem: { flex: 1, alignItems: 'center', paddingVertical: 4 },
   navLabel: { fontSize: 10, color: '#9CA3AF', fontWeight: '700', marginTop: 2 },
-  fab: { position: 'absolute', right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#2563EB', alignItems: 'center', justifyContent: 'center', elevation: 6, shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8 },
+  fab: { position: 'absolute', right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#4F46E5', alignItems: 'center', justifyContent: 'center', elevation: 6, shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8 },
 
   // Live Billing + Quick Entry shared header/layout
   liveBillingFullScreen: { flex: 1, backgroundColor: '#fff' },

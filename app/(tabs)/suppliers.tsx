@@ -1,5 +1,6 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -929,14 +930,19 @@ export default function SuppliersScreen() {
       <AddSupplierModal />
       
       {/* Header */}
-      <View style={[styles.mainHeader, { paddingTop: insets.top + 8 }]}>
+      <LinearGradient
+        colors={['#4F46E5', '#7C3AED', '#9333EA']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.mainHeader, { paddingTop: insets.top + 8 }]}
+      >
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <Text style={styles.mainHeaderTitle}>Suppliers</Text>
           <TouchableOpacity onPress={() => setPaymentHistoryModalVisible(true)} style={styles.headerHistoryBtn}>
             <Ionicons name="time-outline" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
-      </View>
+      </LinearGradient>
       
       {/* Body */}
       <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
@@ -1102,7 +1108,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F8FAFC' },
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F5F3FF',
   },
   
   // Main Header

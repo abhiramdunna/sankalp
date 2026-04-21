@@ -1,5 +1,6 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -757,7 +758,7 @@ export default function ProductsScreen() {
       </View>
 
       {/* Bottom Nav */}
-      <View style={[styles.bottomNav, { paddingBottom: insets.bottom || 8 }]}>
+      <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
           <Ionicons name="home" size={24} color="#64748B" />
           <Text style={styles.navLabel}>Home</Text>
@@ -796,14 +797,23 @@ export default function ProductsScreen() {
       <EditProductModal />
       
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <LinearGradient
+        colors={['#4F46E5', '#7C3AED', '#9333EA']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.header, { paddingTop: insets.top + 8 }]}
+      >
         <View>
           <Text style={styles.headerTitle}>Products</Text>
         </View>
-      </View>
+      </LinearGradient>
 
       {/* Product Catalogue Section */}
-      <View style={styles.catalogueSection}>
+      <ScrollView 
+        style={styles.catalogueSection} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 36 }}
+      >
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color="#94A3B8" style={styles.searchIcon} />
@@ -820,12 +830,9 @@ export default function ProductsScreen() {
           )}
         </View>
         
-        <FlatList
-          data={filteredProducts}
-          renderItem={renderProduct}
-          keyExtractor={(item) => item.id.toString()}
-          style={styles.productList}
-        />
+        <View style={styles.productList}>
+          {filteredProducts.map((item) => renderProduct({ item }))}
+        </View>
         
         <TouchableOpacity 
           style={styles.addProductButton}
@@ -834,7 +841,7 @@ export default function ProductsScreen() {
           <Ionicons name="add-circle" size={50} color="#2563EB" />
           <Text style={styles.addProductButtonText}>Add Product</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
 
       {/* Bottom Nav */}
       <View style={[styles.bottomNav, { paddingBottom: insets.bottom || 8 }]}>
@@ -865,7 +872,8 @@ export default function ProductsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F5F3FF',
+    flexDirection: 'column',
   },
   header: {
     backgroundColor: '#2563EB',
@@ -1220,7 +1228,7 @@ const styles = StyleSheet.create({
   catalogueSection: {
     flex: 1,
     padding: 14,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F5F3FF',
   },
   catalogueHeader: {
     marginBottom: 12,
@@ -1237,7 +1245,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   productList: {
-    flex: 1,
+    paddingBottom: 20,
   },
   searchContainer: {
     flexDirection: 'row',
