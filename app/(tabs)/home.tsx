@@ -573,8 +573,16 @@ export default function HomeScreen() {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          setSalesLog(parsed);
-          setTodayTotal(parsed.reduce((s: number, b: SaleLog) => s + b.total, 0));
+          // Get today's date in same format as bills (e.g., "21 Apr")
+          const now = new Date();
+          const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          const todayDateStr = `${now.getDate()} ${months[now.getMonth()]}`;
+          
+          // Filter to show only today's bills
+          const todaysBills = parsed.filter((bill: SaleLog) => bill.date === todayDateStr);
+          
+          setSalesLog(todaysBills);
+          setTodayTotal(todaysBills.reduce((s: number, b: SaleLog) => s + b.total, 0));
         }
       }
       // Sync RAM sessions into state
@@ -792,9 +800,8 @@ export default function HomeScreen() {
         </View>
       </LinearGradient>
 
-      <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-
-        {/* ══ QUICK ACTIONS ══ */}
+      {/* ══ QUICK ACTIONS (FIXED) ══ */}
+      <View style={styles.quickActionsContainer}>
         <Text style={styles.quickActionsTitle}>Quick Actions</Text>
         <View style={styles.quickActionsRow}>
           <TouchableOpacity
@@ -825,42 +832,39 @@ export default function HomeScreen() {
             <Ionicons name="chevron-forward" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
+      </View>
 
-        {/* ══ ACTIVE ORDERS ══ */}
-        {activeSessions.length > 0 && (
-          <>
-            <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Active Orders</Text>
-              <Text style={styles.viewAllText}>{activeSessions.length} in progress</Text>
-            </View>
-
-            <View style={styles.activeOrdersContainer}>
-              {activeSessions.map((session, idx) => (
-                <SwipeableOrderButton
-                  key={session.id}
-                  session={session}
-                  idx={idx}
-                  CARD_COLORS={CARD_COLORS}
-                  onPress={() => openSession(session)}
-                  onDelete={() => deleteActiveOrder(session.id)}
-                />
-              ))}
-            </View>
-          </>
-        )}
-
-        {/* ══ TODAY'S BILLS ══ */}
-        <View style={[styles.sectionRow, { marginTop: 16 }]}>
+      {/* ══ TODAY'S BILLS HEADER (FIXED) ══ */}
+      <View style={styles.billsHeaderContainer}>
+        <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>Today's Bills</Text>
           <TouchableOpacity><Text style={styles.viewAllText}>View All</Text></TouchableOpacity>
         </View>
+      </View>
 
-        {salesLog.length === 0 ? (
+      <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+        {/* ══ ALL BILLS (Active + Completed) ══ */}
+        {activeSessions.length === 0 && salesLog.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>No sales yet today</Text>
           </View>
         ) : (
-          salesLog.map((bill, index) => (
+          <>
+            {/* Show Active Orders first */}
+            {activeSessions.map((session, idx) => (
+              <SwipeableOrderButton
+                key={session.id}
+                session={session}
+                idx={idx}
+                CARD_COLORS={CARD_COLORS}
+                onPress={() => openSession(session)}
+                onDelete={() => deleteActiveOrder(session.id)}
+              />
+            ))}
+
+            {/* Then show Completed Bills */}
+            {salesLog.map((bill, index) => (
             <TouchableOpacity
               key={bill.id || index}
               style={styles.billCard}
@@ -871,10 +875,16 @@ export default function HomeScreen() {
               )}
             >
               <View style={styles.billAvatarBox}>
-                <Ionicons name="person" size={22} color="#2563EB" />
+                <Text style={styles.billAvatarText}>
+                  {bill.customerName
+                    .split(' ')
+                    .map(word => word[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2)}
+                </Text>
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.billNumber}>Bill #{salesLog.length - index}</Text>
                 <Text style={styles.billCustomer}>{bill.customerName}</Text>
                 <Text style={styles.billTime}>{bill.time} · {bill.date}</Text>
               </View>
@@ -883,7 +893,8 @@ export default function HomeScreen() {
               </View>
               <Ionicons name="chevron-forward" size={16} color="#bbb" style={{ marginLeft: 6 }} />
             </TouchableOpacity>
-          ))
+            ))}
+          </>
         )}
         <View style={{ height: 30 }} />
       </ScrollView>
@@ -913,7 +924,9 @@ const styles = StyleSheet.create({
   collectionIconBox: { width: 50, height: 50, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
 
   // Body
-  body: { flex: 1, paddingHorizontal: 16, paddingTop: 18 },
+  body: { flex: 1, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 20 },
+  quickActionsContainer: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, backgroundColor: '#F5F3FF' },
+  billsHeaderContainer: { paddingHorizontal: 16, paddingVertical: 6, backgroundColor: '#F5F3FF' },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { fontSize: 16, fontWeight: '800', color: '#111' },
   viewAllText: { fontSize: 13, fontWeight: '700', color: '#2563EB' },
@@ -941,9 +954,9 @@ const styles = StyleSheet.create({
   // Today's bills
   billCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', borderWidth: 0.5, borderColor: '#E5E7EB', elevation: 1 },
   billAvatarBox: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
-  billNumber: { fontSize: 12, fontWeight: '700', color: '#666' },
-  billCustomer: { fontSize: 15, fontWeight: '800', color: '#2563EB', marginTop: 1 },
-  billTime: { fontSize: 11, color: '#9CA3AF', marginTop: 2, fontWeight: '600' },
+  billAvatarText: { fontSize: 14, fontWeight: '800', color: '#2563EB' },
+  billCustomer: { fontSize: 18, fontWeight: '900', color: '#0F172A', marginTop: 0 },
+  billTime: { fontSize: 11, color: '#9CA3AF', marginTop: 4, fontWeight: '600' },
   billRight: { alignItems: 'flex-end' },
   paidBadge: { backgroundColor: '#DCFCE7', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginBottom: 4 },
   paidBadgeText: { fontSize: 9, fontWeight: '800', color: '#16A34A', letterSpacing: 0.5 },
