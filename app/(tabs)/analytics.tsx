@@ -283,9 +283,11 @@ interface DateFilterMenuProps {
   visible: boolean;
   onSelect: (key: string, start?: Date, end?: Date) => void;
   onClose: () => void;
+  currentStartDate?: Date;
+  currentEndDate?: Date;
 }
 
-const DateFilterMenu: React.FC<DateFilterMenuProps> = ({ visible, onSelect, onClose }) => {
+const DateFilterMenu: React.FC<DateFilterMenuProps> = ({ visible, onSelect, onClose, currentStartDate, currentEndDate }) => {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
@@ -309,6 +311,17 @@ const DateFilterMenu: React.FC<DateFilterMenuProps> = ({ visible, onSelect, onCl
   const weekStart = new Date(today);
   weekStart.setDate(weekStart.getDate() - today.getDay());
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+  // Format current custom range
+  const formatDate = (date: Date) => {
+    const d = String(date.getDate()).padStart(2, '0');
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    return `${d}/${m}`;
+  };
+
+  const customRangeDesc = currentStartDate && currentEndDate
+    ? `${formatDate(currentStartDate)} - ${formatDate(currentEndDate)}`
+    : 'Select Start & End Date';
 
   const menuItems = [
     {
@@ -350,8 +363,8 @@ const DateFilterMenu: React.FC<DateFilterMenuProps> = ({ visible, onSelect, onCl
     {
       key: 'custom',
       label: 'Custom Range',
-      desc: 'Select Start & End Date',
-      icon: 'settings',
+      desc: customRangeDesc,
+      icon: 'calendar-outline',
       color: '#EC4899',
       start: undefined,
       end: undefined,
@@ -594,6 +607,7 @@ export default function AnalyticsScreen() {
   const [startDate, setStartDate] = useState(new Date(2025, 3, 1)); // 01 Apr 2025
   const [endDate, setEndDate] = useState(new Date());
   const [filterLabel, setFilterLabel] = useState('This Month');
+  const [showTransactionsModal, setShowTransactionsModal] = useState(false);
 
   // Load sales from AsyncStorage
   useEffect(() => {
@@ -728,6 +742,84 @@ export default function AnalyticsScreen() {
   const Y_TICKS = [2500, 2000, 1500, 1000, 500, 0];
   const BAR_COLORS = ['#2563EB', '#6366F1', '#22C55E', '#F97316', '#EC4899'];
 
+  // ── Transactions Modal Component ──
+  const TransactionsModal = () => (
+    <Modal animationType="slide" transparent visible={showTransactionsModal} onRequestClose={() => setShowTransactionsModal(false)}>
+      <View style={{ flex: 1, backgroundColor: '#fff', paddingTop: insets.top }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' }}>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: '#111' }}>Transactions</Text>
+          <TouchableOpacity onPress={() => setShowTransactionsModal(false)}>
+            <Ionicons name="close" size={24} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Date Range Info */}
+        <View style={{ paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#F3F4F6' }}>
+          <Text style={{ fontSize: 12, fontWeight: '600', color: '#6B7280' }}>
+            {formatDateRange(startDate, endDate)} • {filteredSales.length} transaction{filteredSales.length !== 1 ? 's' : ''}
+          </Text>
+        </View>
+
+        {/* Transactions List */}
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+          {filteredSales.length === 0 ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 }}>
+              <Ionicons name="document-outline" size={48} color="#D1D5DB" />
+              <Text style={{ marginTop: 12, fontSize: 14, color: '#9CA3AF', fontWeight: '600' }}>No transactions found</Text>
+            </View>
+          ) : (
+            filteredSales.map((bill, idx) => (
+              <View key={idx} style={{ borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingHorizontal: 16, paddingVertical: 14 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#111', marginBottom: 2 }}>
+                      {bill.customerName || 'Walk-in Customer'}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#6B7280', fontWeight: '500' }}>
+                      {bill.date} • {bill.time}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: '#2563EB' }}>
+                    ₹{bill.total.toLocaleString('en-IN')}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {bill.items.slice(0, 3).map((item, i) => (
+                    <View key={i} style={{ backgroundColor: '#EEF2FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                      <Text style={{ fontSize: 11, color: '#2563EB', fontWeight: '600' }}>
+                        {item.name} x{item.qty}
+                      </Text>
+                    </View>
+                  ))}
+                  {bill.items.length > 3 && (
+                    <View style={{ backgroundColor: '#F3F4F6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                      <Text style={{ fontSize: 11, color: '#6B7280', fontWeight: '600' }}>
+                        +{bill.items.length - 3} more
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            ))
+          )}
+        </ScrollView>
+
+        {/* Footer */}
+        {filteredSales.length > 0 && (
+          <View style={{ borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingHorizontal: 16, paddingVertical: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: '#6B7280' }}>Total</Text>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: '#2563EB' }}>
+                ₹{filteredSales.reduce((sum, bill) => sum + bill.total, 0).toLocaleString('en-IN')}
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+
   // ── Loading state ──
   if (loading) {
     return (
@@ -784,6 +876,8 @@ export default function AnalyticsScreen() {
         {/* Date Filter Dropdown */}
         <DateFilterMenu
           visible={showDateMenu}
+          currentStartDate={startDate}
+          currentEndDate={endDate}
           onSelect={(key, start, end) => {
             setFilterLabel(key === 'month' ? 'This Month' : key === 'today' ? 'Today' : key === 'yesterday' ? 'Yesterday' : key === 'week' ? 'This Week' : 'Custom Range');
             if (key === 'custom') {
@@ -821,6 +915,22 @@ export default function AnalyticsScreen() {
                 <Text style={styles.collectionChangeSub}> vs. previous period</Text>
               </View>
             </View>
+            <TouchableOpacity
+              style={{
+                alignSelf: 'flex-end',
+                backgroundColor: '#2563EB',
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 8,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+              }}
+              onPress={() => setShowTransactionsModal(true)}
+            >
+              <Ionicons name="list" size={16} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>View</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -998,6 +1108,9 @@ export default function AnalyticsScreen() {
         )}
 
       </ScrollView>
+
+      {/* ── Transactions Modal ── */}
+      <TransactionsModal />
 
       {/* ══════════════════════════════════════
           BOTTOM NAV — identical to home.tsx
