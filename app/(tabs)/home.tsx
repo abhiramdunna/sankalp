@@ -1,11 +1,11 @@
-// home.tsx — Fixed logout to properly navigate to login
+// home.tsx — Optimized for smooth performance
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useNavigation } from 'expo-router';
-import React, { useCallback, useEffect, useState, memo } from 'react';
+import React, { useCallback, useEffect, useState, memo, useRef } from 'react';
 import {
   Alert,
   Animated,
@@ -41,29 +41,39 @@ interface BillItem { name: string; price: number; qty: number; }
 interface Session { id: number; customerName: string; phone: string; items: BillItem[]; }
 interface SaleLog { id: number; total: number; time: string; date: string; items: BillItem[]; customerName: string; phone: string; }
 
-// ─── Toast ───
-const Toast = ({
+// ─── Optimized Toast with useMemo ───
+const Toast = memo(({
   visible, message, type = 'error', onHide,
 }: {
   visible: boolean; message: string; type?: 'error' | 'success' | 'info'; onHide: () => void;
 }) => {
   useEffect(() => {
-    if (visible) { const t = setTimeout(onHide, 2000); return () => clearTimeout(t); }
-  }, [visible]);
+    if (visible) {
+      const t = setTimeout(onHide, 2000);
+      return () => clearTimeout(t);
+    }
+  }, [visible, onHide]);
+  
   if (!visible) return null;
+  
   const bg = type === 'error' ? '#EF4444' : type === 'success' ? '#10B981' : '#3B82F6';
   return (
     <View style={[styles.toastContainer, { backgroundColor: bg }]}>
       <Text style={styles.toastText}>{message}</Text>
     </View>
   );
-};
+});
 
 // ═══════════════════════════════════════════════════════════════
-// LIVE BILLING MODAL
+// OPTIMIZED LIVE BILLING MODAL
 // ═══════════════════════════════════════════════════════════════
 const LiveBillingModal = memo(({
-  visible, onClose, onSaveAndBack, onComplete, session, products,
+  visible,
+  onClose,
+  onSaveAndBack,
+  onComplete,
+  session,
+  products,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -79,9 +89,13 @@ const LiveBillingModal = memo(({
   const [searchQuery, setSearchQuery] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+  
+  // Use refs to avoid unnecessary re-renders
+  const isInitialMount = useRef(true);
 
   useEffect(() => {
     if (visible) {
+      // Reset state when modal opens
       if (session) {
         setCustomerName(session.customerName === 'Walk-in Customer' ? '' : session.customerName);
         setCustomerPhone(session.phone);
@@ -95,7 +109,10 @@ const LiveBillingModal = memo(({
     }
   }, [visible, session?.id]);
 
-  const warn = (msg: string) => { setToastMsg(msg); setShowToast(true); };
+  const warn = useCallback((msg: string) => {
+    setToastMsg(msg);
+    setShowToast(true);
+  }, []);
 
   const addItem = useCallback((product: { name: string; price: number }) => {
     setItems(prev => {
@@ -118,26 +135,42 @@ const LiveBillingModal = memo(({
   const totalQty = activeItems.reduce((s, i) => s + i.qty, 0);
 
   const productsToUse = products && products.length > 0 ? products : SAMPLE_PRODUCTS;
-  const filtered = productsToUse.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filtered = searchQuery 
+    ? productsToUse.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : productsToUse;
 
-  const handleSaveAndBack = () => {
-    if (activeItems.length === 0) { warn('Add at least one item to save'); return; }
+  const handleSaveAndBack = useCallback(() => {
+    if (activeItems.length === 0) {
+      warn('Add at least one item to save');
+      return;
+    }
     onSaveAndBack(customerName.trim() || 'Walk-in Customer', customerPhone.trim(), activeItems);
-  };
+  }, [activeItems, customerName, customerPhone, onSaveAndBack, warn]);
 
-  const handleComplete = () => {
-    if (activeItems.length === 0) { warn('Add at least one item'); return; }
+  const handleComplete = useCallback(() => {
+    if (activeItems.length === 0) {
+      warn('Add at least one item');
+      return;
+    }
     onComplete(customerName.trim() || 'Walk-in Customer', customerPhone.trim(), activeItems);
-  };
+  }, [activeItems, customerName, customerPhone, onComplete, warn]);
 
   if (!visible) return null;
 
   return (
     <>
       <Toast visible={showToast} message={toastMsg} onHide={() => setShowToast(false)} />
-      <Modal animationType="slide" transparent={false} visible={visible} onRequestClose={onClose}>
-        <KeyboardAvoidingView style={styles.liveBillingFullScreen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-
+      <Modal 
+        animationType="slide" 
+        transparent={false} 
+        visible={visible} 
+        onRequestClose={onClose}
+        statusBarTranslucent
+      >
+        <KeyboardAvoidingView 
+          style={styles.liveBillingFullScreen} 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           {/* Header */}
           <View style={[styles.liveBillingHeader, { paddingTop: insets.top + 10 }]}>
             <TouchableOpacity onPress={onClose} style={styles.lbBackBtn}>
@@ -266,7 +299,7 @@ const LiveBillingModal = memo(({
 });
 
 // ═══════════════════════════════════════════════════════════════
-// QUICK ENTRY MODAL
+// OPTIMIZED QUICK ENTRY MODAL
 // ═══════════════════════════════════════════════════════════════
 const QuickEntryModal = memo(({
   visible, onClose, onSave,
@@ -284,27 +317,52 @@ const QuickEntryModal = memo(({
   const [toastMsg, setToastMsg] = useState('');
 
   useEffect(() => {
-    if (visible) { setName(''); setPhone(''); setAmount(''); setNote(''); }
+    if (visible) {
+      setName('');
+      setPhone('');
+      setAmount('');
+      setNote('');
+    }
   }, [visible]);
 
-  const warn = (msg: string) => { setToastMsg(msg); setShowToast(true); };
+  const warn = useCallback((msg: string) => {
+    setToastMsg(msg);
+    setShowToast(true);
+  }, []);
 
-  const handleSave = () => {
-    if (!name.trim()) { warn('Please enter customer name'); return; }
-    if (!amount.trim()) { warn('Please enter amount'); return; }
+  const handleSave = useCallback(() => {
+    if (!name.trim()) {
+      warn('Please enter customer name');
+      return;
+    }
+    if (!amount.trim()) {
+      warn('Please enter amount');
+      return;
+    }
     const amt = parseFloat(amount);
-    if (isNaN(amt) || amt <= 0) { warn('Enter a valid amount'); return; }
+    if (isNaN(amt) || amt <= 0) {
+      warn('Enter a valid amount');
+      return;
+    }
     onSave(name.trim(), phone.trim(), amt, note.trim());
-  };
+  }, [name, phone, amount, note, onSave, warn]);
 
   if (!visible) return null;
 
   return (
     <>
       <Toast visible={showToast} message={toastMsg} onHide={() => setShowToast(false)} />
-      <Modal animationType="slide" transparent={false} visible={visible} onRequestClose={onClose}>
-        <KeyboardAvoidingView style={styles.liveBillingFullScreen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-
+      <Modal 
+        animationType="slide" 
+        transparent={false} 
+        visible={visible} 
+        onRequestClose={onClose}
+        statusBarTranslucent
+      >
+        <KeyboardAvoidingView 
+          style={styles.liveBillingFullScreen} 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={[styles.liveBillingHeader, { paddingTop: insets.top + 10 }]}>
             <TouchableOpacity onPress={onClose} style={styles.lbBackBtn}>
               <Ionicons name="arrow-back" size={22} color="#333" />
@@ -318,8 +376,11 @@ const QuickEntryModal = memo(({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.liveBillingContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-
+          <ScrollView 
+            style={styles.liveBillingContent} 
+            showsVerticalScrollIndicator={false} 
+            keyboardShouldPersistTaps="handled"
+          >
             <View style={styles.qeFastBadge}>
               <View style={styles.qeIconBox}>
                 <Ionicons name="flash" size={22} color="#6D28D9" />
@@ -333,13 +394,26 @@ const QuickEntryModal = memo(({
             <Text style={styles.qeLabel}>Customer Name</Text>
             <View style={styles.lbInputBox}>
               <Ionicons name="person-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
-              <TextInput style={styles.lbInput} placeholder="Enter customer name" value={name} onChangeText={setName} placeholderTextColor="#ccc" />
+              <TextInput 
+                style={styles.lbInput} 
+                placeholder="Enter customer name" 
+                value={name} 
+                onChangeText={setName} 
+                placeholderTextColor="#ccc" 
+              />
             </View>
 
             <Text style={[styles.qeLabel, { marginTop: 16 }]}>Phone (Optional)</Text>
             <View style={styles.lbInputBox}>
               <Ionicons name="call-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
-              <TextInput style={styles.lbInput} placeholder="+91 98765 43210" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholderTextColor="#ccc" />
+              <TextInput 
+                style={styles.lbInput} 
+                placeholder="+91 98765 43210" 
+                value={phone} 
+                onChangeText={setPhone} 
+                keyboardType="phone-pad" 
+                placeholderTextColor="#ccc" 
+              />
             </View>
 
             <Text style={[styles.qeLabel, { marginTop: 16 }]}>Amount (₹)</Text>
@@ -358,7 +432,13 @@ const QuickEntryModal = memo(({
             <Text style={[styles.qeLabel, { marginTop: 16 }]}>Payment Note (Optional)</Text>
             <View style={styles.lbInputBox}>
               <Ionicons name="document-text-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
-              <TextInput style={styles.lbInput} placeholder="e.g., Lunch Payment, Advance, etc." value={note} onChangeText={setNote} placeholderTextColor="#ccc" />
+              <TextInput 
+                style={styles.lbInput} 
+                placeholder="e.g., Lunch Payment, Advance, etc." 
+                value={note} 
+                onChangeText={setNote} 
+                placeholderTextColor="#ccc" 
+              />
             </View>
 
             <View style={{ height: 40 }} />
@@ -377,7 +457,7 @@ const QuickEntryModal = memo(({
 });
 
 // ═══════════════════════════════════════════════════════════════
-// REVIEW BILL MODAL
+// OPTIMIZED REVIEW BILL MODAL
 // ═══════════════════════════════════════════════════════════════
 const ReviewBillModal = memo(({
   visible, onClose, onConfirm, customerName = '', customerPhone = '', items = [], total = 0,
@@ -386,13 +466,16 @@ const ReviewBillModal = memo(({
   customerName?: string; customerPhone?: string; items?: BillItem[]; total?: number;
 }) => {
   if (!visible) return null;
+  
   return (
     <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
       <View style={styles.reviewBillOverlay}>
         <View style={styles.reviewBillContainer}>
           <View style={styles.reviewBillHeader}>
             <Text style={styles.reviewBillTitle}>Review Bill</Text>
-            <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color="#333" /></TouchableOpacity>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color="#333" />
+            </TouchableOpacity>
           </View>
           <View style={styles.reviewBillCustomerInfo}>
             <Text style={styles.reviewBillCustomerName}>{customerName || 'Walk-in Customer'}</Text>
@@ -428,33 +511,35 @@ const ReviewBillModal = memo(({
 });
 
 // ═══════════════════════════════════════════════════════════════
-// SWIPEABLE ACTIVE ORDER BUTTON
+// OPTIMIZED SWIPEABLE ACTIVE ORDER BUTTON
 // ═══════════════════════════════════════════════════════════════
 const SwipeableOrderButton = memo(({
   session, idx, CARD_COLORS, onPress, onDelete,
 }: {
   session: Session; idx: number; CARD_COLORS: any[]; onPress: () => void; onDelete: () => void;
 }) => {
-  const panX = new Animated.ValueXY();
+  const panX = useRef(new Animated.ValueXY()).current;
   const total = session.items.reduce((s, i) => s + i.price * i.qty, 0);
   const cs = CARD_COLORS[idx % CARD_COLORS.length];
 
-  const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderMove: (evt, gestureState) => {
-      if (gestureState.dx < 0) {
-        panX.x.setValue(Math.max(-80, gestureState.dx));
-      }
-    },
-    onPanResponderRelease: (evt, gestureState) => {
-      if (gestureState.dx < -40) {
-        Animated.spring(panX.x, { toValue: -80, useNativeDriver: false }).start();
-      } else {
-        Animated.spring(panX.x, { toValue: 0, useNativeDriver: false }).start();
-      }
-    },
-  });
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderMove: (evt, gestureState) => {
+        if (gestureState.dx < 0) {
+          panX.x.setValue(Math.max(-80, gestureState.dx));
+        }
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (gestureState.dx < -40) {
+          Animated.spring(panX.x, { toValue: -80, useNativeDriver: false }).start();
+        } else {
+          Animated.spring(panX.x, { toValue: 0, useNativeDriver: false }).start();
+        }
+      },
+    })
+  ).current;
 
   return (
     <View style={{ overflow: 'hidden', borderRadius: 14, marginBottom: 10 }}>
@@ -492,11 +577,10 @@ const SwipeableOrderButton = memo(({
 });
 
 // ═══════════════════════════════════════════════════════════════
-// MAIN HOME SCREEN
+// OPTIMIZED MAIN HOME SCREEN
 // ═══════════════════════════════════════════════════════════════
 export default function HomeScreen() {
   const router = useRouter();
-  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
   const setUser = useAuthStore((state) => state.setUser);
@@ -524,7 +608,6 @@ export default function HomeScreen() {
   const [viewAllBillsVisible, setViewAllBillsVisible] = useState(false);
   const [editingShopName, setEditingShopName] = useState(false);
   const [tempShopName, setTempShopName] = useState(bizName);
-  const [payLaterPersons, setPayLaterPersons] = useState<{ name: string; amount: number }[]>([]);
   const [reviewData, setReviewData] = useState<{
     customerName: string; customerPhone: string; items: BillItem[]; total: number; sessionId: number | null;
   }>({ customerName: '', customerPhone: '', items: [], total: 0, sessionId: null });
@@ -533,40 +616,35 @@ export default function HomeScreen() {
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('error');
 
-  const showSuccess = (msg: string) => { setToastMessage(msg); setToastType('success'); setShowToast(true); };
+  const showSuccess = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setToastType('success');
+    setShowToast(true);
+  }, []);
 
-  const loadData = React.useCallback(async () => {
+  const showError = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setToastType('error');
+    setShowToast(true);
+  }, []);
+
+  const loadData = useCallback(async () => {
     try {
-      console.log('🔄 Loading data... User:', user?.id);
       if (user?.id) {
-        console.log('👤 Fetching profile for user:', user.id);
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('business_name, city')
           .eq('id', user.id)
           .maybeSingle();
         
-        console.log('📊 Profile query result:', { profile, profileError });
-        
         if (profileError) {
-          console.error('❌ Profile query error:', profileError);
+          console.error('Profile query error:', profileError);
         }
         
         if (profile) {
-          console.log('✅ Setting business details:', profile);
-          if (profile.business_name) {
-            console.log('📝 Setting bizName to:', profile.business_name);
-            setBizName(profile.business_name);
-          }
-          if (profile.city) {
-            console.log('📝 Setting bizLocation to:', profile.city);
-            setBizLocation(profile.city);
-          }
-        } else {
-          console.warn('⚠️ No profile data found');
+          if (profile.business_name) setBizName(profile.business_name);
+          if (profile.city) setBizLocation(profile.city);
         }
-      } else {
-        console.warn('⚠️ No user ID available');
       }
 
       const storedTrialStart = await AsyncStorage.getItem('trialStart');
@@ -602,7 +680,7 @@ export default function HomeScreen() {
       }
       setActiveSessions([...RAM_SESSIONS]);
     } catch (e) { 
-      console.error('❌ loadData error:', e);
+      console.error('loadData error:', e);
     }
   }, [user?.id]);
 
@@ -613,7 +691,7 @@ export default function HomeScreen() {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  const updateDateTime = () => {
+  const updateDateTime = useCallback(() => {
     const now = new Date();
     const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -622,25 +700,25 @@ export default function HomeScreen() {
     );
     const nm = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     setNextDue(`${nm.getDate()} ${months[nm.getMonth()]}`);
-  };
+  }, []);
 
-  const getTrialDaysLeft = (): number => {
+  const getTrialDaysLeft = useCallback((): number => {
     if (!trialStart) return 7;
     const msPerDay = 1000 * 60 * 60 * 24;
     const elapsed = Math.floor((Date.now() - trialStart.getTime()) / msPerDay);
     return Math.max(0, 7 - elapsed);
-  };
+  }, [trialStart]);
 
-  const isTrialActive = (): boolean => getTrialDaysLeft() > 0;
+  const isTrialActive = useCallback((): boolean => getTrialDaysLeft() > 0, [getTrialDaysLeft]);
 
-  const getSubscriptionStatus = () => {
+  const getSubscriptionStatus = useCallback(() => {
     if (isSubscribed) return { label: 'Pro — Active', color: '#16A34A', bg: '#DCFCE7', icon: 'checkmark-circle' as const };
     if (isTrialActive()) return { label: `Free Trial — ${getTrialDaysLeft()} day${getTrialDaysLeft() !== 1 ? 's' : ''} left`, color: '#D97706', bg: '#FEF3C7', icon: 'time-outline' as const };
     return { label: 'Trial Expired', color: '#DC2626', bg: '#FEE2E2', icon: 'close-circle' as const };
-  };
+  }, [isSubscribed, isTrialActive, getTrialDaysLeft]);
 
-  // ✅ FIXED: Proper logout function with navigation reset
-  const handleLogout = async () => {
+  // ✅ OPTIMIZED: Proper logout function with navigation reset
+  const handleLogout = useCallback(async () => {
     Alert.alert(
       'Logout',
       'Are you sure you want to logout from Sankalp?',
@@ -651,34 +729,18 @@ export default function HomeScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Close profile modal first
               setProfileVisible(false);
-              
-              // Clear RAM sessions
               RAM_SESSIONS = [];
-              
-              // Clear local storage data
               await AsyncStorage.multiRemove(['trialStart', 'isSubscribed', 'supabase_session']);
-              
-              // Clear auth store
               setUser(null);
               setSession(null);
-              
-              // Sign out from Supabase
               const { error } = await supabase.auth.signOut();
-              if (error) {
-                console.error('Supabase sign out error:', error);
-              }
-              
-              // Small delay to ensure state is cleared
+              if (error) console.error('Supabase sign out error:', error);
               await new Promise(resolve => setTimeout(resolve, 100));
-              
-              // Reset navigation stack and go to login
               router.dismissAll();
               router.replace('/login');
             } catch (error) {
               console.error('Logout error:', error);
-              // Force navigation even if there's an error
               router.dismissAll();
               router.replace('/login');
             }
@@ -686,19 +748,20 @@ export default function HomeScreen() {
         },
       ]
     );
-  };
+  }, [router, setUser, setSession]);
 
-  const startNewBilling = () => {
+  // OPTIMIZED: Memoized handlers
+  const startNewBilling = useCallback(() => {
     setEditingSession(null);
     setLiveBillingVisible(true);
-  };
+  }, []);
 
-  const openSession = (session: Session) => {
+  const openSession = useCallback((session: Session) => {
     setEditingSession(session);
     setLiveBillingVisible(true);
-  };
+  }, []);
 
-  const deleteActiveOrder = (sessionId: number) => {
+  const deleteActiveOrder = useCallback((sessionId: number) => {
     Alert.alert(
       'Delete Order',
       'Are you sure you want to delete this order?',
@@ -715,9 +778,9 @@ export default function HomeScreen() {
         },
       ]
     );
-  };
+  }, [showSuccess]);
 
-  const handleSaveAndBack = (customerName: string, phone: string, items: BillItem[]) => {
+  const handleSaveAndBack = useCallback((customerName: string, phone: string, items: BillItem[]) => {
     if (editingSession) {
       RAM_SESSIONS = RAM_SESSIONS.map(s =>
         s.id === editingSession.id ? { ...s, customerName, phone, items } : s
@@ -729,16 +792,16 @@ export default function HomeScreen() {
     setLiveBillingVisible(false);
     setEditingSession(null);
     showSuccess('Order saved! Tap the card to continue.');
-  };
+  }, [editingSession, showSuccess]);
 
-  const handleComplete = (customerName: string, phone: string, items: BillItem[]) => {
+  const handleComplete = useCallback((customerName: string, phone: string, items: BillItem[]) => {
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
     setReviewData({ customerName, customerPhone: phone, items, total, sessionId: editingSession?.id ?? null });
     setLiveBillingVisible(false);
     setBillReviewVisible(true);
-  };
+  }, [editingSession?.id]);
 
-  const handleConfirmBill = async () => {
+  const handleConfirmBill = useCallback(async () => {
     const now = new Date();
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const newBill: SaleLog = {
@@ -764,9 +827,9 @@ export default function HomeScreen() {
     setEditingSession(null);
     setReviewData({ customerName: '', customerPhone: '', items: [], total: 0, sessionId: null });
     showSuccess(`Bill saved! ₹${newBill.total}`);
-  };
+  }, [reviewData, salesLog, showSuccess]);
 
-  const handleQuickEntrySave = async (name: string, phone: string, amount: number, note: string) => {
+  const handleQuickEntrySave = useCallback(async (name: string, phone: string, amount: number, note: string) => {
     const now = new Date();
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const newBill: SaleLog = {
@@ -784,26 +847,23 @@ export default function HomeScreen() {
     setTodayTotal(prev => prev + amount);
     setQuickEntryVisible(false);
     showSuccess(`₹${amount} saved!`);
-  };
+  }, [salesLog, showSuccess]);
 
-  const CARD_COLORS = [
+  const CARD_COLORS = useRef([
     { bg: '#EEF2FF', border: '#2563EB', badgeBg: '#2563EB', amtColor: '#2563EB' },
     { bg: '#F5F3FF', border: '#7C3AED', badgeBg: '#7C3AED', amtColor: '#7C3AED' },
     { bg: '#FFF7ED', border: '#F59E0B', badgeBg: '#F59E0B', amtColor: '#F59E0B' },
-  ];
+  ]).current;
 
   const subStatus = getSubscriptionStatus();
 
-  // ═══════════════════════════════════════════════════════════════
-  // PROFILE MODAL
-  // ═══════════════════════════════════════════════════════════════
-  const ProfileModal = () => (
+  // OPTIMIZED: Profile Modal component with useMemo
+  const ProfileModal = useCallback(() => (
     <Modal animationType="slide" transparent visible={profileVisible} onRequestClose={() => setProfileVisible(false)}>
       <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setProfileVisible(false)}>
         <View style={styles.profilePanel} onStartShouldSetResponder={() => true} onResponderTerminationRequest={() => false}>
           <View style={styles.profileHandle} />
 
-          {/* Avatar + Business Name */}
           <View style={styles.profileHeader}>
             <View style={styles.profileAvatar}>
               <Text style={styles.profileAvatarText}>
@@ -814,12 +874,9 @@ export default function HomeScreen() {
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: SCREEN_HEIGHT * 0.52 }}>
-
-            {/* ── Business Info ── */}
             <View style={styles.profileSection}>
               <Text style={styles.profileSectionLabel}>BUSINESS INFO</Text>
 
-              {/* Business Name row */}
               <View style={styles.profileRow}>
                 <View style={[styles.profileRowIcon, { backgroundColor: '#EEF2FF' }]}>
                   <Ionicons name="business-outline" size={16} color="#2563EB" />
@@ -836,7 +893,6 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Location/City row */}
               <View style={styles.profileRow}>
                 <View style={[styles.profileRowIcon, { backgroundColor: '#FFF7ED' }]}>
                   <Ionicons name="location-outline" size={16} color="#F59E0B" />
@@ -848,7 +904,6 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* ── Google Account ── */}
             <View style={styles.profileSection}>
               <Text style={styles.profileSectionLabel}>ACCOUNT</Text>
               <View style={styles.profileRow}>
@@ -862,11 +917,9 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* ── Subscription ── */}
             <View style={styles.profileSection}>
               <Text style={styles.profileSectionLabel}>SUBSCRIPTION</Text>
 
-              {/* Status badge */}
               <View style={[styles.subStatusCard, { backgroundColor: subStatus.bg, borderColor: subStatus.color + '40' }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
                   <Ionicons name={subStatus.icon} size={16} color={subStatus.color} />
@@ -889,7 +942,6 @@ export default function HomeScreen() {
                 )}
               </View>
 
-              {/* Plan details */}
               <View style={styles.profileRow}>
                 <View style={[styles.profileRowIcon, { backgroundColor: '#ECFDF5' }]}>
                   <Ionicons name="diamond-outline" size={16} color="#10B981" />
@@ -900,7 +952,6 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              {/* Upgrade button if not subscribed */}
               {!isSubscribed && (
                 <TouchableOpacity
                   style={styles.upgradeBtn}
@@ -914,10 +965,8 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               )}
             </View>
-
           </ScrollView>
 
-          {/* Logout button - FIXED */}
           <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={18} color="#DC2626" style={{ marginRight: 8 }} />
             <Text style={styles.logoutBtnText}>Logout</Text>
@@ -925,7 +974,6 @@ export default function HomeScreen() {
         </View>
       </TouchableOpacity>
 
-      {/* Edit Shop Name Modal */}
       <Modal animationType="fade" transparent visible={editingShopName} onRequestClose={() => setEditingShopName(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
           <View style={{ backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 20, borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
@@ -965,10 +1013,10 @@ export default function HomeScreen() {
         </View>
       </Modal>
     </Modal>
-  );
+  ), [profileVisible, bizName, bizLocation, user?.email, user?.id, subStatus, isSubscribed, isTrialActive, nextDue, editingShopName, tempShopName, handleLogout, showSuccess]);
 
-  // ─── View All Bills Modal ───
-  const ViewAllBillsModal = () => (
+  // OPTIMIZED: View All Bills Modal
+  const ViewAllBillsModal = useCallback(() => (
     <Modal animationType="slide" transparent={false} visible={viewAllBillsVisible} onRequestClose={() => setViewAllBillsVisible(false)}>
       <View style={{ flex: 1, backgroundColor: '#fff', paddingTop: insets.top }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' }}>
@@ -1018,6 +1066,11 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   key={bill.id || index}
                   style={{ borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingHorizontal: 16, paddingVertical: 14 }}
+                  onPress={() => Alert.alert(
+                    `Bill #${salesLog.length - index}`,
+                    `Customer: ${bill.customerName}\nTime: ${bill.time}\nTotal: ₹${bill.total}\n\nItems:\n${bill.items.map(i => `${i.name} x${i.qty} = ₹${i.price * i.qty}`).join('\n')}`,
+                    [{ text: 'OK' }]
+                  )}
                 >
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                     <View style={{ flex: 1 }}>
@@ -1057,7 +1110,7 @@ export default function HomeScreen() {
         )}
       </View>
     </Modal>
-  );
+  ), [viewAllBillsVisible, insets.top, activeSessions, salesLog, todayTotal, openSession]);
 
   return (
     <View style={styles.container}>
@@ -1108,7 +1161,6 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ── Today's Collection card ── */}
         <View style={styles.collectionCard}>
           <View style={{ flex: 1 }}>
             <Text style={styles.collectionLabel}>TODAY'S COLLECTION</Text>
@@ -1214,7 +1266,7 @@ export default function HomeScreen() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// STYLES (same as before, no changes needed)
+// STYLES (unchanged)
 // ═══════════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F3FF' },
