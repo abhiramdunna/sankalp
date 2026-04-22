@@ -40,6 +40,17 @@ interface SaleLog {
 }
 
 // ─────────────────────────────────────────────
+// PRODUCTS
+// ─────────────────────────────────────────────
+const AVAILABLE_PRODUCTS = [
+  { name: 'Puri Plate', price: 20 },
+  { name: 'Masala Puri', price: 25 },
+  { name: 'Tamarind Water', price: 10 },
+  { name: 'Special Plate', price: 40 },
+  { name: 'Idly 2pcs', price: 15 },
+];
+
+// ─────────────────────────────────────────────
 // DUMMY SALES DATA
 // ─────────────────────────────────────────────
 const DUMMY_SALES: SaleLog[] = [];
@@ -421,7 +432,7 @@ const DateFilterMenu: React.FC<DateFilterMenuProps> = ({ visible, onSelect, onCl
 };
 
 // ─────────────────────────────────────────────
-// LINE CHART — Pure React Native, no SVG lib
+// BAR CHART — Pure React Native, no SVG lib
 // ─────────────────────────────────────────────
 interface ChartProps {
   data: number[];
@@ -430,7 +441,7 @@ interface ChartProps {
   onPressIdx: (i: number) => void;
 }
 
-const LineChart: React.FC<ChartProps> = ({ data, labels, activeIdx, onPressIdx }) => {
+const BarChart: React.FC<ChartProps> = ({ data, labels, activeIdx, onPressIdx }) => {
   if (!data || data.length === 0) {
     return (
       <View style={{ width: CHART_W, height: CHART_H, justifyContent: 'center', alignItems: 'center' }}>
@@ -440,16 +451,11 @@ const LineChart: React.FC<ChartProps> = ({ data, labels, activeIdx, onPressIdx }
   }
 
   const max = Math.max(...data);
-  const min = Math.min(...data);
-  const range = max - min || 1;
+  const range = max || 1;
 
-  // Pixel coordinates for each data point
-  const pts = data.map((v, i) => ({
-    x: data.length > 1 ? (i / (data.length - 1)) * CHART_W : CHART_W / 2,
-    y: CHART_H - ((v - min) / range) * (CHART_H - 20) - 10,
-  }));
-
-  const ap = pts[activeIdx];
+  // Calculate bar width and spacing
+  const barWidth = Math.max(8, CHART_W / data.length * 0.6);
+  const spacing = CHART_W / data.length;
 
   return (
     <View style={{ width: CHART_W, height: CHART_H }}>
@@ -469,98 +475,39 @@ const LineChart: React.FC<ChartProps> = ({ data, labels, activeIdx, onPressIdx }
         />
       ))}
 
-      {/* Shaded area fill under line */}
-      {pts.slice(0, -1).map((p, i) => {
-        const nx = pts[i + 1];
-        const topY = Math.min(p.y, nx.y) - 2;
-        return (
-          <View
-            key={`area-${i}`}
-            style={{
-              position: 'absolute',
-              left: p.x,
-              width: nx.x - p.x + 1,
-              top: topY,
-              bottom: 0,
-              backgroundColor: 'rgba(37,99,235,0.07)',
-            }}
-          />
-        );
-      })}
-
-      {/* Line segments */}
-      {pts.slice(0, -1).map((p, i) => {
-        const nx = pts[i + 1];
-        const dx = nx.x - p.x;
-        const dy = nx.y - p.y;
-        const len = Math.sqrt(dx * dx + dy * dy);
-        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-        return (
-          <View
-            key={`seg-${i}`}
-            style={{
-              position: 'absolute',
-              left: p.x,
-              top: p.y - 1.25,
-              width: len,
-              height: 2.5,
-              backgroundColor: '#2563EB',
-              borderRadius: 2,
-              transform: [{ rotate: `${angle}deg` }],
-            }}
-          />
-        );
-      })}
-
-      {/* Tap zones + dots */}
-      {pts.map((p, i) => {
+      {/* Bars */}
+      {data.map((value, i) => {
         const isActive = i === activeIdx;
+        const barHeight = (value / range) * (CHART_H - 20);
+        const barX = (i * spacing) + (spacing - barWidth) / 2;
+
         return (
-          <TouchableOpacity
-            key={`tap-${i}`}
-            onPress={() => onPressIdx(i)}
-            hitSlop={{ top: 16, bottom: 16, left: 6, right: 6 }}
-            style={{
-              position: 'absolute',
-              left: p.x - (isActive ? 7 : 4),
-              top: p.y - (isActive ? 7 : 4),
-              width: isActive ? 14 : 8,
-              height: isActive ? 14 : 8,
-              borderRadius: isActive ? 7 : 4,
-              backgroundColor: isActive ? '#fff' : '#2563EB',
-              borderWidth: isActive ? 2.5 : 0,
-              borderColor: '#2563EB',
-              elevation: isActive ? 4 : 0,
-              shadowColor: '#2563EB',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: isActive ? 0.3 : 0,
-              shadowRadius: 4,
-            }}
-          />
+          <View key={`bar-${i}`} style={{ position: 'absolute', left: barX, bottom: 0 }}>
+            <TouchableOpacity
+              onPress={() => onPressIdx(i)}
+              style={{
+                width: barWidth,
+                height: barHeight,
+                backgroundColor: isActive ? '#2563EB' : '#3B82F6',
+                borderRadius: 4,
+                elevation: isActive ? 4 : 0,
+                shadowColor: '#2563EB',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: isActive ? 0.3 : 0,
+                shadowRadius: 4,
+              }}
+            />
+          </View>
         );
       })}
 
-      {/* Active vertical drop-line */}
-      {ap && (
+      {/* Tooltip on active bar */}
+      {activeIdx >= 0 && activeIdx < data.length && (
         <View
           style={{
             position: 'absolute',
-            left: ap.x - 0.75,
-            top: ap.y + 8,
-            bottom: 0,
-            width: 1.5,
-            backgroundColor: 'rgba(37,99,235,0.2)',
-          }}
-        />
-      )}
-
-      {/* Tooltip */}
-      {ap && (
-        <View
-          style={{
-            position: 'absolute',
-            left: Math.min(Math.max(ap.x - 52, 0), CHART_W - 115),
-            top: Math.max(ap.y - 60, 0),
+            left: Math.max(0, Math.min((activeIdx * spacing) + spacing / 2 - 60, CHART_W - 115)),
+            top: Math.max(10, CHART_H - (data[activeIdx] / range) * (CHART_H - 20) - 70),
             backgroundColor: '#1E3A8A',
             borderRadius: 10,
             paddingHorizontal: 12,
@@ -601,6 +548,7 @@ export default function AnalyticsScreen() {
   const [activeTrend, setActiveTrend] = useState<TrendKey>('Daily');
   const [showTrendMenu, setShowTrendMenu] = useState(false);
   const [activeChartIdx, setActiveChartIdx] = useState(19); // 20 Apr
+  const [availableProducts, setAvailableProducts] = useState<{ name: string; price: number }[]>([]);
   
   // Date selection states
   const [showDateMenu, setShowDateMenu] = useState(false);
@@ -616,6 +564,15 @@ export default function AnalyticsScreen() {
       try {
         const stored = await AsyncStorage.getItem('salesLog');
         setSalesLog(stored ? JSON.parse(stored) : DUMMY_SALES);
+        
+        // Load products from AsyncStorage
+        const storedProducts = await AsyncStorage.getItem('products');
+        if (storedProducts) {
+          const parsedProducts = JSON.parse(storedProducts);
+          if (Array.isArray(parsedProducts)) {
+            setAvailableProducts(parsedProducts.map(p => ({ name: p.name, price: p.price })));
+          }
+        }
       } catch {
         setSalesLog(DUMMY_SALES);
       } finally {
@@ -677,6 +634,13 @@ export default function AnalyticsScreen() {
   const filteredSales = useMemo(() => filterSalesByDateRange(salesLog, startDate, endDate), 
     [salesLog, startDate, endDate]);
 
+  // Get current month sales (for top products calculation)
+  const currentMonthSales = useMemo(() => {
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const monthEnd = new Date();
+    return filterSalesByDateRange(salesLog, monthStart, monthEnd);
+  }, [salesLog]);
+
   // Compute analytics from filtered sales log
   const analytics = useMemo(() => {
     // Calculate from filtered sales log data
@@ -699,9 +663,16 @@ export default function AnalyticsScreen() {
     const avgBillChange = 0; // Comparison data not available yet
     const monthChange = 0; // Comparison data not available yet
 
-    // Product performance from filtered sales log
+    // Product performance from CURRENT MONTH sales only (not filtered range)
     const perf: Record<string, { qty: number; revenue: number }> = {};
-    filteredSales.forEach(s =>
+    
+    // Initialize all products with 0 revenue
+    (availableProducts.length > 0 ? availableProducts : AVAILABLE_PRODUCTS).forEach(product => {
+      perf[product.name] = { qty: 0, revenue: 0 };
+    });
+    
+    // Update with actual sales data
+    currentMonthSales.forEach(s =>
       s.items.forEach(it => {
         if (!perf[it.name]) perf[it.name] = { qty: 0, revenue: 0 };
         perf[it.name].qty += it.qty;
@@ -727,7 +698,7 @@ export default function AnalyticsScreen() {
       topProduct,
       topProducts,
     };
-  }, [filteredSales]);
+  }, [filteredSales, currentMonthSales, availableProducts]);
 
   // Generate chart data
   const chartData = useMemo(() => generateChartData(salesLog, startDate, endDate), 
@@ -934,7 +905,7 @@ export default function AnalyticsScreen() {
             <TouchableOpacity
               style={{
                 alignSelf: 'flex-end',
-                backgroundColor: '#2563EB',
+                backgroundColor: 'transparent',
                 paddingHorizontal: 12,
                 paddingVertical: 8,
                 borderRadius: 8,
@@ -1035,7 +1006,7 @@ export default function AnalyticsScreen() {
             </View>
 
             {/* The chart */}
-            <LineChart
+            <BarChart
               data={chartData.data}
               labels={chartData.labels}
               activeIdx={Math.min(activeChartIdx, chartData.data.length - 1)}
@@ -1101,8 +1072,8 @@ export default function AnalyticsScreen() {
             <Text style={styles.topProductsTitle}>TOP PRODUCTS</Text>
             <Text style={styles.topProductsSub}>By revenue this month</Text>
             {analytics.topProducts.slice(0, 5).map((p, i) => {
-              const maxRev = analytics.topProducts[0]?.revenue || 1;
-              const pct = (p.revenue / maxRev) * 100;
+              const maxRev = Math.max(...analytics.topProducts.map(prod => prod.revenue), 1);
+              const pct = maxRev > 0 ? (p.revenue / maxRev) * 100 : 0;
               return (
                 <View key={i} style={styles.productBarItem}>
                   <View style={styles.productBarLabelRow}>

@@ -2,7 +2,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -19,22 +19,26 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const router = useRouter();
+  const [appReady, setAppReady] = useState(false);
 
   useEffect(() => {
     async function prepare() {
       try {
         configureGoogleSignIn();
+        
+        // Small delay to ensure everything is initialized
+        await new Promise(resolve => setTimeout(resolve, 500));
       } catch (error) {
         console.error('Error configuring Google Sign In:', error);
       } finally {
-        // Always hide the splash screen once we're done initializing
+        setAppReady(true);
         await SplashScreen.hideAsync();
       }
     }
     
     prepare();
 
-    // ✅ Listen for auth state changes
+    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('🔐 Auth state changed:', event, 'session:', !!session);
       
@@ -51,6 +55,11 @@ export default function RootLayout() {
     };
   }, [router]);
 
+  // Don't render anything until app is ready
+  if (!appReady) {
+    return null;
+  }
+
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
@@ -59,7 +68,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: true, title: 'Modal' }} />
       </Stack>
-      <StatusBar style="auto" />
+      <StatusBar style="light" />
     </ThemeProvider>
   );
 }

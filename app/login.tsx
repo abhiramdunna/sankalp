@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { signInWithGoogle, type AuthMode } from '@/lib/auth';
 import { useAuthStore } from '@/lib/store';
@@ -30,7 +31,7 @@ export default function Login() {
   const [authMode, setAuthMode] = useState<'signup' | 'login' | null>(null);
   const [loadingTitle, setLoadingTitle] = useState('Signing in with Google...');
   const [loadingSub, setLoadingSub] = useState('Please wait a moment');
-  const [isCheckingSession, setIsCheckingSession] = useState(true); // ✅ NEW: Track if we're checking startup session
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
 
   // Listen for Supabase session changes (for web OAuth redirect back)
   useEffect(() => {
@@ -39,7 +40,6 @@ export default function Login() {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
           if (session) {
             try {
-              // ✅ Persist session to AsyncStorage on web too
               const sessionJSON = JSON.stringify({
                 access_token: session.access_token,
                 refresh_token: session.refresh_token,
@@ -78,7 +78,6 @@ export default function Login() {
     let subscription: any = null;
     
     if (Platform.OS !== 'web') {
-      // ✅ Also set up auth state listener to catch session changes on native
       const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         if (event === 'SIGNED_IN' && session) {
           console.log('🔐 Auth state listener detected SIGNED_IN, saving session...');
@@ -101,24 +100,9 @@ export default function Login() {
         try {
           console.log('🔍 ========== STARTUP SESSION CHECK START ==========');
           
-          // ✅ First, let's see what's ACTUALLY in AsyncStorage
-          console.log('🔹 Checking all AsyncStorage keys...');
-          try {
-            const allKeys = await AsyncStorage.getAllKeys();
-            console.log('📦 All AsyncStorage keys:', allKeys);
-            
-            for (const key of allKeys) {
-              const value = await AsyncStorage.getItem(key);
-              console.log(`  📦 ${key}: ${value?.substring(0, 100)}...` || 'empty');
-            }
-          } catch (err) {
-            console.error('❌ Error reading AsyncStorage keys:', err);
-          }
-          
           let session = null;
           let user = null;
           
-          // ✅ Try getUser() as alternative to getSession()
           console.log('🔹 Step A: Trying getUser()...');
           try {
             const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
@@ -131,7 +115,6 @@ export default function Login() {
             console.error('❌ getUser() threw error:', err);
           }
           
-          // ✅ Now try getSession()
           console.log('🔹 Step B: Trying getSession()...');
           const sessionResult = await supabase.auth.getSession();
           console.log('🔹 getSession() response:', {
@@ -147,21 +130,16 @@ export default function Login() {
             console.warn('⚠️ Session error:', sessionError);
           }
           
-          console.log('🔹 Supabase session available?', !!supabaseSession);
-          console.log('🔹 Supabase session user:', supabaseSession?.user?.email);
-          
           if (supabaseSession) {
             console.log('✅ Session found in Supabase:', supabaseSession.user.email);
             session = supabaseSession;
           } else {
             console.log('ℹ️ No session in Supabase, checking AsyncStorage for any auth data...');
-            // ✅ If no Supabase session, try to find whatever Supabase stored
             try {
               console.log('🔹 Reading from AsyncStorage...');
               const allKeys = await AsyncStorage.getAllKeys();
               console.log('📦 Available keys:', allKeys);
               
-              // Look for supabase-related keys that might contain session data
               const supabaseKeys = allKeys.filter(key => key.includes('supabase') || key.includes('auth'));
               console.log('📦 Supabase-related keys:', supabaseKeys);
               
@@ -193,7 +171,6 @@ export default function Login() {
                         });
                         await new Promise(r => setTimeout(r, 1500));
                         
-                        // ✅ Try getUser() first (might be faster than getSession())
                         const { data: { user: restoredUserData } } = await supabase.auth.getUser();
                         if (restoredUserData) {
                           console.log('✅ User restored via getUser():', restoredUserData.email);
@@ -206,7 +183,6 @@ export default function Login() {
                           break;
                         }
                         
-                        // ✅ Fallback: Decode JWT to extract user ID
                         console.log('⚠️ getUser() returned null, extracting from JWT...');
                         try {
                           const tokenParts = parsedData.access_token.split('.');
@@ -214,7 +190,6 @@ export default function Login() {
                             const decoded = JSON.parse(atob(tokenParts[1]));
                             console.log('🔹 Decoded JWT - sub:', decoded.sub);
                             if (decoded.sub) {
-                              // ✅ We have the user ID from JWT
                               user = { 
                                 id: decoded.sub, 
                                 email: decoded.email || '',
@@ -247,14 +222,12 @@ export default function Login() {
             }
           }
           
-          // ✅ Determine which user ID to use for profile fetch
           let userId = session?.user?.id || user?.id;
           console.log('🔹 Determined user ID for profile fetch:', userId);
           
           if (userId && (session || user)) {
             console.log('✅ Have user/session, fetching profile...');
             
-            // ✅ If we have session, restorit to ensure queries work
             if (session && !supabaseSession) {
               console.log('🔐 Restoring session for queries...');
               await supabase.auth.setSession({
@@ -275,13 +248,11 @@ export default function Login() {
 
             if (profile?.business_name && profile?.city) {
               console.log('✅ Profile exists, going to home');
-              // Store user in Zustand
               setUser({
                 id: userId,
                 email: session?.user?.email || user?.email || '',
               });
               
-              // Store session if we have it
               if (session) {
                 setSession({
                   access_token: session.access_token,
@@ -292,7 +263,6 @@ export default function Login() {
               router.replace('/(tabs)/home');
             } else {
               console.log('📝 Profile incomplete, going to onboarding');
-              // Still store user for onboarding
               setUser({
                 id: userId,
                 email: session?.user?.email || user?.email || '',
@@ -311,18 +281,15 @@ export default function Login() {
         } catch (err) {
           console.error('❌ Existing session check error:', err);
         } finally {
-          // ✅ Always finish the session check, even if there was an error
           setIsCheckingSession(false);
         }
       };
       
       checkExistingSession();
     } else {
-      // ✅ On web, don't do the startup check here (it's handled by the session listener)
       setIsCheckingSession(false);
     }
     
-    // ✅ Return cleanup function to unsubscribe from auth state listener
     return () => {
       subscription?.unsubscribe();
     };
@@ -363,7 +330,6 @@ export default function Login() {
     setAuthMode(mode);
 
     if (Platform.OS === 'web') {
-      // ✅ WEB: Use Supabase OAuth flow
       try {
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
@@ -390,7 +356,6 @@ export default function Login() {
         Alert.alert('Sign-In Error', msg);
       }
     } else {
-      // ✅ NATIVE (Android/iOS): Use @react-native-google-signin directly
       try {
           const data = await signInWithGoogle(mode);
 
@@ -399,7 +364,6 @@ export default function Login() {
 
           console.log('✅ Authentication successful, user:', user.email);
           
-          // ✅ WAIT for profile to be ready
           await new Promise(resolve => setTimeout(resolve, 1000));
 
           console.log('📋 Fetching user profile...');
@@ -418,18 +382,15 @@ export default function Login() {
           setIsLoading(false);
           setAuthMode(null);
 
-          // ✅ Store user in Zustand
           setUser({
             id: user.id,
             email: user.email || '',
             user_metadata: user.user_metadata,
           });
 
-          // ✅ Wait for Supabase to auto-persist the session
           console.log('💤 Waiting for Supabase to persist session automatically...');
           await new Promise(r => setTimeout(r, 2000));
           
-          // ✅ Check what Supabase actually stored in AsyncStorage
           console.log('🔹 Checking AsyncStorage after auth...');
           try {
             const allKeys = await AsyncStorage.getAllKeys();
@@ -444,13 +405,11 @@ export default function Login() {
             console.error('❌ Error reading AsyncStorage after auth:', err);
           }
 
-          // ✅ Also try to manually get session and verify
           console.log('🔹 Getting current session to verify...');
           const { data: sessionCheckData } = await supabase.auth.getSession();
           console.log('🔹 Current session available?', !!sessionCheckData?.session);
           console.log('🔹 Current session user:', sessionCheckData?.session?.user?.email);
 
-          // ✅ Check if profile is COMPLETE (not just exists)
           const isProfileComplete = profile?.business_name && 
                                    profile?.business_name.trim() !== '' && 
                                    profile?.city && 
@@ -488,101 +447,99 @@ export default function Login() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.bgTop} />
-      <Animated.View style={[styles.bgOrb, { transform: [{ scale: orbScale }] }]} />
-      <View style={styles.bgBottomArc} />
-
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.inner}>
-        {isCheckingSession ? (
-          // ✅ Show splash/loading while checking session on startup
-          <View style={styles.splashContainer}>
-            <View style={styles.splashLogo}>
-              <Text style={styles.splashLogoText}>24</Text>
+    <LinearGradient
+      colors={['#4F46E5', '#7C3AED', '#9333EA']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.container}
+    >
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.inner}>
+          {isCheckingSession ? (
+            <View style={styles.splashContainer}>
+              <View style={styles.splashLogo}>
+                <Text style={styles.splashLogoText}>24</Text>
+              </View>
+              <Text style={styles.splashBrand}>Sankalp</Text>
+              <Text style={styles.splashSubtitle}>Loading...</Text>
+              <ActivityIndicator size="large" color="#ffffff" style={styles.splashSpinner} />
             </View>
-            <Text style={styles.splashBrand}>Sankalp</Text>
-            <Text style={styles.splashSubtitle}>Loading...</Text>
-            <ActivityIndicator size="large" color="#f97316" style={styles.splashSpinner} />
-          </View>
-        ) : !isLoading ? (
-          // ✅ Show login form when not loading and session check is done
-          <>
-            <Animated.View style={[styles.hero, { opacity: heroFade, transform: [{ translateY: heroRise }] }]}>
-              <View style={styles.logoTile}>
-                <Text style={styles.logoText}>24</Text>
-              </View>
-              <Text style={styles.brand}>Sankalp</Text>
-              <Text style={styles.subtitle}>Your business, your way</Text>
-            </Animated.View>
+          ) : !isLoading ? (
+            <>
+              <Animated.View style={[styles.hero, { opacity: heroFade, transform: [{ translateY: heroRise }] }]}>
+                <View style={styles.logoTile}>
+                  <Text style={styles.logoText}>24</Text>
+                </View>
+                <Text style={styles.brand}>Sankalp</Text>
+                <Text style={styles.subtitle}>Your business, your way</Text>
+              </Animated.View>
 
-            <Animated.View style={[styles.card, { opacity: cardFade, transform: [{ translateY: cardRise }] }]}>
-              <Text style={styles.title}>Welcome!</Text>
-              <Text style={styles.message}>Sign in to manage your business, anytime, anywhere.</Text>
+              <Animated.View style={[styles.card, { opacity: cardFade, transform: [{ translateY: cardRise }] }]}>
+                <Text style={styles.title}>Welcome!</Text>
+                <Text style={styles.message}>Sign in to manage your business, anytime, anywhere.</Text>
 
-              <Pressable
-                style={({ pressed }) => [styles.googleBtn, pressed && styles.pressed]}
-                onPress={() => {
-                  setLoadingTitle('Creating your account...');
-                  setLoadingSub('Opening Google login...');
-                  handleLogin('signup');
-                }}
-                disabled={isLoading}
-              >
-                <Text style={styles.g}>G</Text>
-                <Text style={styles.googleBtnText}>Sign up with Google</Text>
-              </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.googleBtn, pressed && styles.pressed]}
+                  onPress={() => {
+                    setLoadingTitle('Creating your account...');
+                    setLoadingSub('Opening Google login...');
+                    handleLogin('signup');
+                  }}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.g}>G</Text>
+                  <Text style={styles.googleBtnText}>Sign up with Google</Text>
+                </Pressable>
 
-              <View style={styles.dividerRow}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>Already have an account?</Text>
-                <View style={styles.dividerLine} />
-              </View>
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>Already have an account?</Text>
+                  <View style={styles.dividerLine} />
+                </View>
 
-              <Pressable
-                style={({ pressed }) => [styles.googleBtn, pressed && styles.pressed]}
-                onPress={() => {
-                  setLoadingTitle('Signing in...');
-                  setLoadingSub('Opening Google login...');
-                  handleLogin('login');
-                }}
-                disabled={isLoading}
-              >
-                <Text style={styles.g}>G</Text>
-                <Text style={styles.googleBtnText}>Login</Text>
-              </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.googleBtn, pressed && styles.pressed]}
+                  onPress={() => {
+                    setLoadingTitle('Signing in...');
+                    setLoadingSub('Opening Google login...');
+                    handleLogin('login');
+                  }}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.g}>G</Text>
+                  <Text style={styles.googleBtnText}>Login</Text>
+                </Pressable>
 
-              <Text style={styles.terms}>By continuing, you agree to our Terms of Service and Privacy Policy</Text>
-            </Animated.View>
-          </>
-        ) : (
-          // ✅ Show loading screen when logging in
-          <View style={styles.loadingCard}>
-            <Text style={[styles.g, { fontSize: 20 }]}>G</Text>
-            <Text style={styles.loadingTitle}>{loadingTitle}</Text>
-            <Text style={styles.loadingSub}>{loadingSub}</Text>
-            <ActivityIndicator size="large" color="#f97316" style={styles.loadingIndicator} />
-          </View>
-        )}
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+                <Text style={styles.terms}>By continuing, you agree to our Terms of Service and Privacy Policy</Text>
+              </Animated.View>
+            </>
+          ) : (
+            <View style={styles.loadingCard}>
+              <Text style={[styles.g, { fontSize: 20 }]}>G</Text>
+              <Text style={styles.loadingTitle}>{loadingTitle}</Text>
+              <Text style={styles.loadingSub}>{loadingSub}</Text>
+              <ActivityIndicator size="large" color="#ffffff" style={styles.loadingIndicator} />
+            </View>
+          )}
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f6f7' },
-  bgTop: { position: 'absolute', left: 0, right: 0, top: 0, height: '74%', backgroundColor: '#ff8a2a' },
-  bgOrb: { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: '#ffa758', top: 42, right: -38 },
-  bgBottomArc: { position: 'absolute', width: 260, height: 260, borderRadius: 130, backgroundColor: '#ffd9b3', bottom: -90, left: -95, opacity: 0.6 },
+  container: { flex: 1 },
+  safeArea: { flex: 1 },
   inner: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 28, paddingBottom: 20 },
   hero: { alignItems: 'center', marginTop: 18 },
-  logoTile: { width: 84, height: 84, borderRadius: 26, backgroundColor: '#ececee', alignItems: 'center', justifyContent: 'center', elevation: 5 },
-  logoText: { fontSize: 28, fontWeight: '900', color: '#334155', letterSpacing: 1 },
+  logoTile: { width: 84, height: 84, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', elevation: 5 },
+  logoText: { fontSize: 28, fontWeight: '900', color: '#ffffff', letterSpacing: 1 },
   brand: { marginTop: 20, fontSize: 48, fontWeight: '900', color: '#ffffff', letterSpacing: 0.2 },
   subtitle: { marginTop: 4, fontSize: 20, lineHeight: 26, color: '#fff6e8', fontWeight: '700', textAlign: 'center' },
-  card: { backgroundColor: '#f3f3f4', borderRadius: 24, paddingHorizontal: 20, paddingVertical: 22, borderWidth: 1, borderColor: '#ececec', marginBottom: 14 },
+  card: { backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 24, paddingHorizontal: 20, paddingVertical: 22, marginBottom: 14 },
   title: { fontSize: 36, lineHeight: 42, fontWeight: '900', color: '#111827' },
   message: { marginTop: 6, marginBottom: 18, color: '#7a818c', fontSize: 24, lineHeight: 30, fontWeight: '600' },
-  googleBtn: { height: 56, borderRadius: 12, borderWidth: 1, borderColor: '#dadada', backgroundColor: '#f2f2f2', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10 },
+  googleBtn: { height: 56, borderRadius: 12, borderWidth: 1, borderColor: '#dadada', backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10 },
   disabledBtn: { opacity: 0.55 },
   pressed: { opacity: 0.78 },
   g: { fontWeight: '900', color: '#4285f4', fontSize: 18 },
@@ -592,12 +549,12 @@ const styles = StyleSheet.create({
   dividerText: { fontSize: 12, fontWeight: '700', color: '#b4b8bf' },
   terms: { marginTop: 14, color: '#8e96a3', fontSize: 12, lineHeight: 18, textAlign: 'center', fontWeight: '600' },
   loadingCard: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 26 },
-  loadingTitle: { fontSize: 34, fontWeight: '900', color: '#111827', textAlign: 'center' },
-  loadingSub: { fontSize: 20, color: '#adb2ba', fontWeight: '700', marginBottom: 12 },
+  loadingTitle: { fontSize: 34, fontWeight: '900', color: '#ffffff', textAlign: 'center' },
+  loadingSub: { fontSize: 20, color: 'rgba(255,255,255,0.8)', fontWeight: '700', marginBottom: 12 },
   loadingIndicator: { marginTop: 8, transform: [{ scale: 1.2 }] },
   splashContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20 },
-  splashLogo: { width: 100, height: 100, borderRadius: 30, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', elevation: 5, opacity: 0.95 },
-  splashLogoText: { fontSize: 36, fontWeight: '900', color: '#334155', letterSpacing: 1 },
+  splashLogo: { width: 100, height: 100, borderRadius: 30, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', elevation: 5 },
+  splashLogoText: { fontSize: 36, fontWeight: '900', color: '#ffffff', letterSpacing: 1 },
   splashBrand: { fontSize: 48, fontWeight: '900', color: '#ffffff', letterSpacing: 0.2 },
   splashSubtitle: { fontSize: 18, color: '#fff6e8', fontWeight: '600' },
   splashSpinner: { marginTop: 12, transform: [{ scale: 1.3 }] },

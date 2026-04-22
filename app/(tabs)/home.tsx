@@ -1,10 +1,10 @@
-// home.tsx — Fixed: active orders in RAM, sticky summary bar, quick entry full-screen, no custom item btn
+// home.tsx — Fixed logout to properly navigate to login
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import React, { useCallback, useEffect, useState, memo } from 'react';
 import {
   Alert,
@@ -26,8 +26,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // ─── Module-level RAM store for active sessions ───
-// Lives in JS memory. Survives re-renders, cleared on app kill.
-// When a bill is completed it is written to AsyncStorage (DB stub).
 let RAM_SESSIONS: Session[] = [];
 
 const SAMPLE_PRODUCTS = [
@@ -63,20 +61,16 @@ const Toast = ({
 
 // ═══════════════════════════════════════════════════════════════
 // LIVE BILLING MODAL
-// Fixes:
-//   1. Grand Total bar is OUTSIDE ScrollView — always visible at bottom
-//   2. Removed "Add Custom Item" button
-//   3. Save & Go Back properly saves session and it appears in Active Orders
-//   4. Re-opening an existing session loads its saved items
 // ═══════════════════════════════════════════════════════════════
 const LiveBillingModal = memo(({
-  visible, onClose, onSaveAndBack, onComplete, session,
+  visible, onClose, onSaveAndBack, onComplete, session, products,
 }: {
   visible: boolean;
   onClose: () => void;
   onSaveAndBack: (customerName: string, phone: string, items: BillItem[]) => void;
   onComplete: (customerName: string, phone: string, items: BillItem[]) => void;
   session: Session | null;
+  products?: { name: string; price: number }[];
 }) => {
   const insets = useSafeAreaInsets();
   const [customerName, setCustomerName] = useState('');
@@ -86,16 +80,13 @@ const LiveBillingModal = memo(({
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
-  // Load session data each time the modal opens
   useEffect(() => {
     if (visible) {
       if (session) {
-        // Continue existing session — restore saved items
         setCustomerName(session.customerName === 'Walk-in Customer' ? '' : session.customerName);
         setCustomerPhone(session.phone);
         setItems(session.items.map(i => ({ ...i })));
       } else {
-        // Brand new session
         setCustomerName('');
         setCustomerPhone('');
         setItems([]);
@@ -125,7 +116,9 @@ const LiveBillingModal = memo(({
   const activeItems = items.filter(i => i.qty > 0);
   const billTotal = activeItems.reduce((s, i) => s + i.price * i.qty, 0);
   const totalQty = activeItems.reduce((s, i) => s + i.qty, 0);
-  const filtered = SAMPLE_PRODUCTS.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  const productsToUse = products && products.length > 0 ? products : SAMPLE_PRODUCTS;
+  const filtered = productsToUse.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const handleSaveAndBack = () => {
     if (activeItems.length === 0) { warn('Add at least one item to save'); return; }
@@ -201,7 +194,7 @@ const LiveBillingModal = memo(({
               </View>
             </View>
 
-            {/* Add Items — no "Add Custom Item" button */}
+            {/* Add Items */}
             <View style={styles.addItemsSection}>
               <Text style={styles.addItemsTitle}>Add Items</Text>
               <View style={styles.searchBox}>
@@ -240,7 +233,7 @@ const LiveBillingModal = memo(({
             <View style={{ height: 8 }} />
           </ScrollView>
 
-          {/* ── STICKY GRAND TOTAL BAR — outside ScrollView, always at bottom ── */}
+          {/* STICKY GRAND TOTAL BAR */}
           <View style={styles.billSummaryBar}>
             <View style={styles.summaryLeft}>
               <Ionicons name="document-text-outline" size={26} color="#2563EB" />
@@ -273,7 +266,7 @@ const LiveBillingModal = memo(({
 });
 
 // ═══════════════════════════════════════════════════════════════
-// QUICK ENTRY MODAL — full-screen, same style as Live Billing
+// QUICK ENTRY MODAL
 // ═══════════════════════════════════════════════════════════════
 const QuickEntryModal = memo(({
   visible, onClose, onSave,
@@ -312,7 +305,6 @@ const QuickEntryModal = memo(({
       <Modal animationType="slide" transparent={false} visible={visible} onRequestClose={onClose}>
         <KeyboardAvoidingView style={styles.liveBillingFullScreen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
 
-          {/* Header — same structure as Live Billing */}
           <View style={[styles.liveBillingHeader, { paddingTop: insets.top + 10 }]}>
             <TouchableOpacity onPress={onClose} style={styles.lbBackBtn}>
               <Ionicons name="arrow-back" size={22} color="#333" />
@@ -328,7 +320,6 @@ const QuickEntryModal = memo(({
 
           <ScrollView style={styles.liveBillingContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-            {/* Fast & Simple badge */}
             <View style={styles.qeFastBadge}>
               <View style={styles.qeIconBox}>
                 <Ionicons name="flash" size={22} color="#6D28D9" />
@@ -339,7 +330,6 @@ const QuickEntryModal = memo(({
               </View>
             </View>
 
-            {/* Form */}
             <Text style={styles.qeLabel}>Customer Name</Text>
             <View style={styles.lbInputBox}>
               <Ionicons name="person-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
@@ -374,7 +364,6 @@ const QuickEntryModal = memo(({
             <View style={{ height: 40 }} />
           </ScrollView>
 
-          {/* Purple save button at bottom */}
           <View style={[styles.qeBottomBar, { paddingBottom: insets.bottom || 14 }]}>
             <TouchableOpacity style={styles.qeSaveBtn} onPress={handleSave}>
               <Ionicons name="wallet-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
@@ -460,15 +449,9 @@ const SwipeableOrderButton = memo(({
     },
     onPanResponderRelease: (evt, gestureState) => {
       if (gestureState.dx < -40) {
-        Animated.spring(panX.x, {
-          toValue: -80,
-          useNativeDriver: false,
-        }).start();
+        Animated.spring(panX.x, { toValue: -80, useNativeDriver: false }).start();
       } else {
-        Animated.spring(panX.x, {
-          toValue: 0,
-          useNativeDriver: false,
-        }).start();
+        Animated.spring(panX.x, { toValue: 0, useNativeDriver: false }).start();
       }
     },
   });
@@ -498,13 +481,9 @@ const SwipeableOrderButton = memo(({
         </TouchableOpacity>
       </Animated.View>
 
-      {/* Delete button revealed on swipe */}
       <TouchableOpacity
         style={styles.deleteButton}
-        onPress={() => {
-          onDelete();
-          panX.flattenOffset();
-        }}
+        onPress={() => { onDelete(); panX.flattenOffset(); }}
       >
         <Ionicons name="trash" size={20} color="#fff" />
       </TouchableOpacity>
@@ -517,24 +496,35 @@ const SwipeableOrderButton = memo(({
 // ═══════════════════════════════════════════════════════════════
 export default function HomeScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
+  const setUser = useAuthStore((state) => state.setUser);
+  const setSession = useAuthStore((state) => state.setSession);
 
   const [bizName, setBizName] = useState('');
+  const [bizLocation, setBizLocation] = useState('');
   const [todayTotal, setTodayTotal] = useState(0);
   const [salesLog, setSalesLog] = useState<SaleLog[]>([]);
   const [currentDateTime, setCurrentDateTime] = useState('');
   const [nextDue, setNextDue] = useState('');
   const [profileVisible, setProfileVisible] = useState(false);
+  const [products, setProducts] = useState<{ name: string; price: number }[]>([]);
 
-  // Active sessions live in RAM (RAM_SESSIONS). State is a mirror for re-renders.
+  // Subscription state
+  const [trialStart, setTrialStart] = useState<Date | null>(null);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+
   const [activeSessions, setActiveSessions] = useState<Session[]>([]);
 
-  // Modal states
   const [liveBillingVisible, setLiveBillingVisible] = useState(false);
   const [editingSession, setEditingSession] = useState<Session | null>(null);
   const [quickEntryVisible, setQuickEntryVisible] = useState(false);
   const [billReviewVisible, setBillReviewVisible] = useState(false);
+  const [viewAllBillsVisible, setViewAllBillsVisible] = useState(false);
+  const [editingShopName, setEditingShopName] = useState(false);
+  const [tempShopName, setTempShopName] = useState(bizName);
+  const [payLaterPersons, setPayLaterPersons] = useState<{ name: string; amount: number }[]>([]);
   const [reviewData, setReviewData] = useState<{
     customerName: string; customerPhone: string; items: BillItem[]; total: number; sessionId: number | null;
   }>({ customerName: '', customerPhone: '', items: [], total: 0, sessionId: null });
@@ -545,12 +535,83 @@ export default function HomeScreen() {
 
   const showSuccess = (msg: string) => { setToastMessage(msg); setToastType('success'); setShowToast(true); };
 
+  const loadData = React.useCallback(async () => {
+    try {
+      console.log('🔄 Loading data... User:', user?.id);
+      if (user?.id) {
+        console.log('👤 Fetching profile for user:', user.id);
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('business_name, city')
+          .eq('id', user.id)
+          .maybeSingle();
+        
+        console.log('📊 Profile query result:', { profile, profileError });
+        
+        if (profileError) {
+          console.error('❌ Profile query error:', profileError);
+        }
+        
+        if (profile) {
+          console.log('✅ Setting business details:', profile);
+          if (profile.business_name) {
+            console.log('📝 Setting bizName to:', profile.business_name);
+            setBizName(profile.business_name);
+          }
+          if (profile.city) {
+            console.log('📝 Setting bizLocation to:', profile.city);
+            setBizLocation(profile.city);
+          }
+        } else {
+          console.warn('⚠️ No profile data found');
+        }
+      } else {
+        console.warn('⚠️ No user ID available');
+      }
+
+      const storedTrialStart = await AsyncStorage.getItem('trialStart');
+      const storedSubscribed = await AsyncStorage.getItem('isSubscribed');
+      if (storedTrialStart) setTrialStart(new Date(storedTrialStart));
+      if (storedSubscribed === 'true') setIsSubscribed(true);
+
+      if (!storedTrialStart) {
+        const now = new Date();
+        await AsyncStorage.setItem('trialStart', now.toISOString());
+        setTrialStart(now);
+      }
+
+      const storedProducts = await AsyncStorage.getItem('products');
+      if (storedProducts) {
+        const parsedProducts = JSON.parse(storedProducts);
+        if (Array.isArray(parsedProducts)) {
+          setProducts(parsedProducts.map((p: any) => ({ name: p.name, price: p.price })));
+        }
+      }
+
+      const stored = await AsyncStorage.getItem('salesLog');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          const now = new Date();
+          const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          const todayDateStr = `${now.getDate()} ${months[now.getMonth()]}`;
+          const todaysBills = parsed.filter((bill: SaleLog) => bill.date === todayDateStr);
+          setSalesLog(todaysBills);
+          setTodayTotal(todaysBills.reduce((s: number, b: SaleLog) => s + b.total, 0));
+        }
+      }
+      setActiveSessions([...RAM_SESSIONS]);
+    } catch (e) { 
+      console.error('❌ loadData error:', e);
+    }
+  }, [user?.id]);
+
   useEffect(() => {
     loadData();
     updateDateTime();
     const interval = setInterval(updateDateTime, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [loadData]);
 
   const updateDateTime = () => {
     const now = new Date();
@@ -563,46 +624,80 @@ export default function HomeScreen() {
     setNextDue(`${nm.getDate()} ${months[nm.getMonth()]}`);
   };
 
-  const loadData = async () => {
-    try {
-      if (user?.id) {
-        const { data: profile } = await supabase.from('profiles').select('business_name').eq('id', user.id).maybeSingle();
-        if (profile?.business_name) setBizName(profile.business_name);
-      }
-      const stored = await AsyncStorage.getItem('salesLog');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          // Get today's date in same format as bills (e.g., "21 Apr")
-          const now = new Date();
-          const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-          const todayDateStr = `${now.getDate()} ${months[now.getMonth()]}`;
-          
-          // Filter to show only today's bills
-          const todaysBills = parsed.filter((bill: SaleLog) => bill.date === todayDateStr);
-          
-          setSalesLog(todaysBills);
-          setTodayTotal(todaysBills.reduce((s: number, b: SaleLog) => s + b.total, 0));
-        }
-      }
-      // Sync RAM sessions into state
-      setActiveSessions([...RAM_SESSIONS]);
-    } catch (e) { console.error(e); }
+  const getTrialDaysLeft = (): number => {
+    if (!trialStart) return 7;
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const elapsed = Math.floor((Date.now() - trialStart.getTime()) / msPerDay);
+    return Math.max(0, 7 - elapsed);
   };
 
-  // ── Start a brand new billing session ──
+  const isTrialActive = (): boolean => getTrialDaysLeft() > 0;
+
+  const getSubscriptionStatus = () => {
+    if (isSubscribed) return { label: 'Pro — Active', color: '#16A34A', bg: '#DCFCE7', icon: 'checkmark-circle' as const };
+    if (isTrialActive()) return { label: `Free Trial — ${getTrialDaysLeft()} day${getTrialDaysLeft() !== 1 ? 's' : ''} left`, color: '#D97706', bg: '#FEF3C7', icon: 'time-outline' as const };
+    return { label: 'Trial Expired', color: '#DC2626', bg: '#FEE2E2', icon: 'close-circle' as const };
+  };
+
+  // ✅ FIXED: Proper logout function with navigation reset
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout from Sankalp?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Close profile modal first
+              setProfileVisible(false);
+              
+              // Clear RAM sessions
+              RAM_SESSIONS = [];
+              
+              // Clear local storage data
+              await AsyncStorage.multiRemove(['trialStart', 'isSubscribed', 'supabase_session']);
+              
+              // Clear auth store
+              setUser(null);
+              setSession(null);
+              
+              // Sign out from Supabase
+              const { error } = await supabase.auth.signOut();
+              if (error) {
+                console.error('Supabase sign out error:', error);
+              }
+              
+              // Small delay to ensure state is cleared
+              await new Promise(resolve => setTimeout(resolve, 100));
+              
+              // Reset navigation stack and go to login
+              router.dismissAll();
+              router.replace('/login');
+            } catch (error) {
+              console.error('Logout error:', error);
+              // Force navigation even if there's an error
+              router.dismissAll();
+              router.replace('/login');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const startNewBilling = () => {
     setEditingSession(null);
     setLiveBillingVisible(true);
   };
 
-  // ── Tap an active order card → re-open that session ──
   const openSession = (session: Session) => {
     setEditingSession(session);
     setLiveBillingVisible(true);
   };
 
-  // ── Delete active order by swipe ──
   const deleteActiveOrder = (sessionId: number) => {
     Alert.alert(
       'Delete Order',
@@ -622,24 +717,20 @@ export default function HomeScreen() {
     );
   };
 
-  // ── Save & Go Back: upsert session in RAM → appears in Active Orders ──
   const handleSaveAndBack = (customerName: string, phone: string, items: BillItem[]) => {
     if (editingSession) {
-      // Update existing session in RAM
       RAM_SESSIONS = RAM_SESSIONS.map(s =>
         s.id === editingSession.id ? { ...s, customerName, phone, items } : s
       );
     } else {
-      // Create new session in RAM
       RAM_SESSIONS = [...RAM_SESSIONS, { id: Date.now(), customerName, phone, items }];
     }
-    setActiveSessions([...RAM_SESSIONS]); // trigger re-render
+    setActiveSessions([...RAM_SESSIONS]);
     setLiveBillingVisible(false);
     setEditingSession(null);
     showSuccess('Order saved! Tap the card to continue.');
   };
 
-  // ── Complete Bill → show review ──
   const handleComplete = (customerName: string, phone: string, items: BillItem[]) => {
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
     setReviewData({ customerName, customerPhone: phone, items, total, sessionId: editingSession?.id ?? null });
@@ -647,7 +738,6 @@ export default function HomeScreen() {
     setBillReviewVisible(true);
   };
 
-  // ── Confirm & Save: write to AsyncStorage (DB stub) + purge from RAM ──
   const handleConfirmBill = async () => {
     const now = new Date();
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -660,18 +750,11 @@ export default function HomeScreen() {
       customerName: reviewData.customerName,
       phone: reviewData.customerPhone || '',
     };
-
-    // ── DB STUB ──
-    // When Supabase table is ready, replace the two lines below with:
-    //   await supabase.from('bills').insert({ ...newBill, user_id: user?.id });
-    // and remove the AsyncStorage write.
     const updatedBills = [newBill, ...salesLog];
     setSalesLog(updatedBills);
     await AsyncStorage.setItem('salesLog', JSON.stringify(updatedBills));
-
     setTodayTotal(prev => prev + reviewData.total);
 
-    // Remove session from RAM
     if (reviewData.sessionId) {
       RAM_SESSIONS = RAM_SESSIONS.filter(s => s.id !== reviewData.sessionId);
       setActiveSessions([...RAM_SESSIONS]);
@@ -683,7 +766,6 @@ export default function HomeScreen() {
     showSuccess(`Bill saved! ₹${newBill.total}`);
   };
 
-  // ── Quick Entry Save ──
   const handleQuickEntrySave = async (name: string, phone: string, amount: number, note: string) => {
     const now = new Date();
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -696,7 +778,6 @@ export default function HomeScreen() {
       customerName: name,
       phone,
     };
-    // ── DB STUB: replace with supabase insert when ready ──
     const updated = [newBill, ...salesLog];
     setSalesLog(updated);
     await AsyncStorage.setItem('salesLog', JSON.stringify(updated));
@@ -711,35 +792,270 @@ export default function HomeScreen() {
     { bg: '#FFF7ED', border: '#F59E0B', badgeBg: '#F59E0B', amtColor: '#F59E0B' },
   ];
 
-  // Profile Modal (inline for access to state)
+  const subStatus = getSubscriptionStatus();
+
+  // ═══════════════════════════════════════════════════════════════
+  // PROFILE MODAL
+  // ═══════════════════════════════════════════════════════════════
   const ProfileModal = () => (
     <Modal animationType="slide" transparent visible={profileVisible} onRequestClose={() => setProfileVisible(false)}>
       <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setProfileVisible(false)}>
-        <View style={styles.profilePanel}>
+        <View style={styles.profilePanel} onStartShouldSetResponder={() => true} onResponderTerminationRequest={() => false}>
           <View style={styles.profileHandle} />
+
+          {/* Avatar + Business Name */}
           <View style={styles.profileHeader}>
-            <Text style={styles.profileBizName}>{bizName}</Text>
-            <Text style={styles.profileBizSub}>🏪 Active since 2024</Text>
-            <Text style={styles.profileEmail}>📧 {user?.email || 'Not available'}</Text>
+            <View style={styles.profileAvatar}>
+              <Text style={styles.profileAvatarText}>
+                {bizName ? bizName.charAt(0).toUpperCase() : 'S'}
+              </Text>
+            </View>
+            <Text style={styles.profileBizName}>{bizName || 'Your Business'}</Text>
           </View>
-          <View style={styles.profileGrid}>
-            {[
-              { label: 'Total Bills', value: String(salesLog.length) },
-              { label: 'Today Revenue', value: `₹${todayTotal}`, color: '#2563EB' },
-              { label: 'Active Orders', value: String(activeSessions.length), color: '#10B981' },
-              { label: 'Next Due', value: nextDue, color: '#A32D2D' },
-            ].map(cell => (
-              <View key={cell.label} style={styles.profileCell}>
-                <Text style={styles.profileLabel}>{cell.label}</Text>
-                <Text style={[styles.profileValue, cell.color ? { color: cell.color } : {}]}>{cell.value}</Text>
+
+          <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: SCREEN_HEIGHT * 0.52 }}>
+
+            {/* ── Business Info ── */}
+            <View style={styles.profileSection}>
+              <Text style={styles.profileSectionLabel}>BUSINESS INFO</Text>
+
+              {/* Business Name row */}
+              <View style={styles.profileRow}>
+                <View style={[styles.profileRowIcon, { backgroundColor: '#EEF2FF' }]}>
+                  <Ionicons name="business-outline" size={16} color="#2563EB" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.profileRowLabel}>Business Name</Text>
+                  <Text style={styles.profileRowValue}>{bizName || '—'}</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => { setEditingShopName(true); setTempShopName(bizName); }}
+                  style={styles.profileEditBtn}
+                >
+                  <Ionicons name="pencil" size={14} color="#2563EB" />
+                </TouchableOpacity>
               </View>
-            ))}
-          </View>
-          <TouchableOpacity style={styles.profileCloseBtn} onPress={() => setProfileVisible(false)}>
-            <Text style={styles.profileCloseText}>Close</Text>
+
+              {/* Location/City row */}
+              <View style={styles.profileRow}>
+                <View style={[styles.profileRowIcon, { backgroundColor: '#FFF7ED' }]}>
+                  <Ionicons name="location-outline" size={16} color="#F59E0B" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.profileRowLabel}>City</Text>
+                  <Text style={styles.profileRowValue}>{bizLocation || '—'}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* ── Google Account ── */}
+            <View style={styles.profileSection}>
+              <Text style={styles.profileSectionLabel}>ACCOUNT</Text>
+              <View style={styles.profileRow}>
+                <View style={[styles.profileRowIcon, { backgroundColor: '#FEF2F2' }]}>
+                  <Ionicons name="mail" size={16} color="#EA4335" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.profileRowLabel}>Google Account</Text>
+                  <Text style={styles.profileRowValue} numberOfLines={1}>{user?.email || 'Not connected'}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* ── Subscription ── */}
+            <View style={styles.profileSection}>
+              <Text style={styles.profileSectionLabel}>SUBSCRIPTION</Text>
+
+              {/* Status badge */}
+              <View style={[styles.subStatusCard, { backgroundColor: subStatus.bg, borderColor: subStatus.color + '40' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                  <Ionicons name={subStatus.icon} size={16} color={subStatus.color} />
+                  <Text style={[styles.subStatusLabel, { color: subStatus.color, marginLeft: 6 }]}>{subStatus.label}</Text>
+                </View>
+                {!isSubscribed && isTrialActive() && (
+                  <Text style={styles.subStatusNote}>
+                    After trial ends, upgrade to Pro at ₹29/month to keep all features.
+                  </Text>
+                )}
+                {!isSubscribed && !isTrialActive() && (
+                  <Text style={styles.subStatusNote}>
+                    Your free trial has ended. Upgrade to Pro at ₹29/month to continue.
+                  </Text>
+                )}
+                {isSubscribed && (
+                  <Text style={styles.subStatusNote}>
+                    Next billing on {nextDue} · ₹29/month
+                  </Text>
+                )}
+              </View>
+
+              {/* Plan details */}
+              <View style={styles.profileRow}>
+                <View style={[styles.profileRowIcon, { backgroundColor: '#ECFDF5' }]}>
+                  <Ionicons name="diamond-outline" size={16} color="#10B981" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.profileRowLabel}>Plan</Text>
+                  <Text style={styles.profileRowValue}>{isSubscribed ? 'Pro — ₹29/month' : '7-Day Free Trial → ₹29/month'}</Text>
+                </View>
+              </View>
+
+              {/* Upgrade button if not subscribed */}
+              {!isSubscribed && (
+                <TouchableOpacity
+                  style={styles.upgradeBtn}
+                  onPress={() => Alert.alert('Upgrade to Pro', 'Sankalp Pro at just ₹29/month.\n\nUnlock unlimited bills, analytics, and priority support.', [
+                    { text: 'Maybe Later', style: 'cancel' },
+                    { text: 'Subscribe Now', onPress: () => showSuccess('Redirecting to payment...') },
+                  ])}
+                >
+                  <Ionicons name="sparkles" size={16} color="#fff" style={{ marginRight: 6 }} />
+                  <Text style={styles.upgradeBtnText}>Upgrade to Pro — ₹29/month</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+          </ScrollView>
+
+          {/* Logout button - FIXED */}
+          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={18} color="#DC2626" style={{ marginRight: 8 }} />
+            <Text style={styles.logoutBtnText}>Logout</Text>
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
+
+      {/* Edit Shop Name Modal */}
+      <Modal animationType="fade" transparent visible={editingShopName} onRequestClose={() => setEditingShopName(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 20, borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#111', marginBottom: 16 }}>Edit Shop Name</Text>
+            <TextInput
+              style={{ borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, marginBottom: 16, color: '#111' }}
+              placeholder="Enter shop name"
+              value={tempShopName}
+              onChangeText={setTempShopName}
+              placeholderTextColor="#999"
+            />
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#E5E7EB', paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
+                onPress={() => setEditingShopName(false)}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#6B7280' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#2563EB', paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
+                onPress={async () => {
+                  setBizName(tempShopName);
+                  setEditingShopName(false);
+                  if (user?.id) {
+                    await supabase
+                      .from('profiles')
+                      .update({ business_name: tempShopName })
+                      .eq('id', user.id);
+                  }
+                  showSuccess('Shop name updated!');
+                }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#fff' }}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </Modal>
+  );
+
+  // ─── View All Bills Modal ───
+  const ViewAllBillsModal = () => (
+    <Modal animationType="slide" transparent={false} visible={viewAllBillsVisible} onRequestClose={() => setViewAllBillsVisible(false)}>
+      <View style={{ flex: 1, backgroundColor: '#fff', paddingTop: insets.top }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' }}>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: '#111' }}>Today's Bills</Text>
+          <TouchableOpacity onPress={() => setViewAllBillsVisible(false)}>
+            <Ionicons name="close" size={24} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#F3F4F6' }}>
+          <Text style={{ fontSize: 12, fontWeight: '600', color: '#6B7280' }}>
+            {activeSessions.length + salesLog.length} transaction{(activeSessions.length + salesLog.length) !== 1 ? 's' : ''} • ₹{todayTotal.toLocaleString('en-IN')}
+          </Text>
+        </View>
+
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+          {activeSessions.length === 0 && salesLog.length === 0 ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 }}>
+              <Ionicons name="document-outline" size={48} color="#D1D5DB" />
+              <Text style={{ marginTop: 12, fontSize: 14, color: '#9CA3AF', fontWeight: '600' }}>No bills today</Text>
+            </View>
+          ) : (
+            <>
+              {activeSessions.map((session) => (
+                <TouchableOpacity
+                  key={session.id}
+                  style={{ borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingHorizontal: 16, paddingVertical: 14 }}
+                  onPress={() => openSession(session)}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#111', marginBottom: 2 }}>
+                        {session.customerName || 'Walk-in Customer'}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: '#F97316', fontWeight: '600' }}>
+                        🔄 Pending ({session.items.length} item{session.items.length !== 1 ? 's' : ''})
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#2563EB' }}>
+                      ₹{session.items.reduce((sum, item) => sum + item.price * item.qty, 0).toLocaleString('en-IN')}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+
+              {salesLog.map((bill, index) => (
+                <TouchableOpacity
+                  key={bill.id || index}
+                  style={{ borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingHorizontal: 16, paddingVertical: 14 }}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#111', marginBottom: 2 }}>
+                        {bill.customerName || 'Walk-in Customer'}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: '#6B7280', fontWeight: '500' }}>{bill.time}</Text>
+                    </View>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#22C55E' }}>
+                      ₹{bill.total.toLocaleString('en-IN')}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {bill.items.map((item, i) => (
+                      <View key={i} style={{ backgroundColor: '#EEF2FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                        <Text style={{ fontSize: 11, color: '#2563EB', fontWeight: '600' }}>
+                          {item.name} x{item.qty}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </>
+          )}
+        </ScrollView>
+
+        {(activeSessions.length > 0 || salesLog.length > 0) && (
+          <View style={{ borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingHorizontal: 16, paddingVertical: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: '#6B7280' }}>Total Today</Text>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: '#2563EB' }}>
+                ₹{todayTotal.toLocaleString('en-IN')}
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
     </Modal>
   );
 
@@ -754,6 +1070,7 @@ export default function HomeScreen() {
         onSaveAndBack={handleSaveAndBack}
         onComplete={handleComplete}
         session={editingSession}
+        products={products}
       />
 
       <QuickEntryModal
@@ -772,6 +1089,8 @@ export default function HomeScreen() {
         total={reviewData.total}
       />
 
+      <ViewAllBillsModal />
+
       {/* ══ GRADIENT HEADER ══ */}
       <LinearGradient
         colors={['#4F46E5', '#7C3AED', '#9333EA']}
@@ -788,19 +1107,18 @@ export default function HomeScreen() {
             <Ionicons name="person" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
+
+        {/* ── Today's Collection card ── */}
         <View style={styles.collectionCard}>
           <View style={{ flex: 1 }}>
             <Text style={styles.collectionLabel}>TODAY'S COLLECTION</Text>
             <Text style={styles.collectionValue}>₹{todayTotal.toLocaleString('en-IN')}</Text>
             <Text style={styles.collectionSub}>{salesLog.length} bill{salesLog.length !== 1 ? 's' : ''} today</Text>
           </View>
-          <View style={styles.collectionIconBox}>
-            <Ionicons name="wallet-outline" size={26} color="rgba(255,255,255,0.9)" />
-          </View>
         </View>
       </LinearGradient>
 
-      {/* ══ QUICK ACTIONS (FIXED) ══ */}
+      {/* ══ QUICK ACTIONS ══ */}
       <View style={styles.quickActionsContainer}>
         <Text style={styles.quickActionsTitle}>Quick Actions</Text>
         <View style={styles.quickActionsRow}>
@@ -834,24 +1152,23 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* ══ TODAY'S BILLS HEADER (FIXED) ══ */}
+      {/* ══ TODAY'S BILLS HEADER ══ */}
       <View style={styles.billsHeaderContainer}>
         <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>Today's Bills</Text>
-          <TouchableOpacity><Text style={styles.viewAllText}>View All</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => setViewAllBillsVisible(true)}>
+            <Text style={styles.viewAllText}>View All</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-
-        {/* ══ ALL BILLS (Active + Completed) ══ */}
         {activeSessions.length === 0 && salesLog.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>No sales yet today</Text>
           </View>
         ) : (
           <>
-            {/* Show Active Orders first */}
             {activeSessions.map((session, idx) => (
               <SwipeableOrderButton
                 key={session.id}
@@ -863,55 +1180,44 @@ export default function HomeScreen() {
               />
             ))}
 
-            {/* Then show Completed Bills */}
             {salesLog.map((bill, index) => (
-            <TouchableOpacity
-              key={bill.id || index}
-              style={styles.billCard}
-              onPress={() => Alert.alert(
-                `Bill #${salesLog.length - index}`,
-                `Customer: ${bill.customerName}\nTime: ${bill.time}\nTotal: ₹${bill.total}\n\nItems:\n${bill.items.map(i => `${i.name} x${i.qty} = ₹${i.price * i.qty}`).join('\n')}`,
-                [{ text: 'OK' }]
-              )}
-            >
-              <View style={styles.billAvatarBox}>
-                <Text style={styles.billAvatarText}>
-                  {bill.customerName
-                    .split(' ')
-                    .map(word => word[0])
-                    .join('')
-                    .toUpperCase()
-                    .slice(0, 2)}
-                </Text>
-              </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.billCustomer}>{bill.customerName}</Text>
-                <Text style={styles.billTime}>{bill.time} · {bill.date}</Text>
-              </View>
-              <View style={styles.billRight}>
-                <Text style={styles.billAmount}>₹{bill.total.toLocaleString('en-IN')}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color="#bbb" style={{ marginLeft: 6 }} />
-            </TouchableOpacity>
+              <TouchableOpacity
+                key={bill.id || index}
+                style={styles.billCard}
+                onPress={() => Alert.alert(
+                  `Bill #${salesLog.length - index}`,
+                  `Customer: ${bill.customerName}\nTime: ${bill.time}\nTotal: ₹${bill.total}\n\nItems:\n${bill.items.map(i => `${i.name} x${i.qty} = ₹${i.price * i.qty}`).join('\n')}`,
+                  [{ text: 'OK' }]
+                )}
+              >
+                <View style={styles.billAvatarBox}>
+                  <Text style={styles.billAvatarText}>
+                    {bill.customerName.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.billCustomer}>{bill.customerName}</Text>
+                  <Text style={styles.billTime}>{bill.time} · {bill.date}</Text>
+                </View>
+                <View style={styles.billRight}>
+                  <Text style={styles.billAmount}>₹{bill.total.toLocaleString('en-IN')}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#bbb" style={{ marginLeft: 6 }} />
+              </TouchableOpacity>
             ))}
           </>
         )}
         <View style={{ height: 30 }} />
       </ScrollView>
-
-      {/* ══ BOTTOM NAV ══ */}
-      
     </View>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════
-// STYLES
+// STYLES (same as before, no changes needed)
 // ═══════════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F3FF' },
-
-  // Header
   header: { paddingHorizontal: 16, paddingBottom: 22 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
   shopName: { color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
@@ -921,18 +1227,12 @@ const styles = StyleSheet.create({
   collectionLabel: { fontSize: 10, color: 'rgba(255,255,255,0.8)', fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
   collectionValue: { fontSize: 38, fontWeight: '900', color: '#fff', letterSpacing: -2, marginTop: 2 },
   collectionSub: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 4, fontWeight: '600' },
-  collectionIconBox: { width: 50, height: 50, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-
-  // Body
   body: { flex: 1, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 20 },
   quickActionsContainer: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, backgroundColor: '#F5F3FF' },
   billsHeaderContainer: { paddingHorizontal: 16, paddingVertical: 6, backgroundColor: '#F5F3FF' },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { fontSize: 16, fontWeight: '800', color: '#111' },
   viewAllText: { fontSize: 13, fontWeight: '700', color: '#2563EB' },
-
-  // Active orders container and buttons
-  activeOrdersContainer: { marginBottom: 6, gap: 10 },
   activeOrderButton: { borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4 },
   aoLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   aoIconBox: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
@@ -942,35 +1242,21 @@ const styles = StyleSheet.create({
   aoTotal: { fontSize: 16, fontWeight: '900', color: '#fff' },
   aoRight: { marginLeft: 12 },
   deleteButton: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 60, alignItems: 'center', justifyContent: 'center' },
-
-  // Quick actions
   quickActionsTitle: { fontSize: 16, fontWeight: '800', color: '#111', marginBottom: 10, marginTop: 6 },
   quickActionsRow: { flexDirection: 'row', marginBottom: 4 },
   qaBtn: { flex: 1, borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4 },
   qaLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   qaBtnTitle: { fontSize: 14, fontWeight: '800', color: '#fff' },
   qaBtnSub: { fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginTop: 1 },
-
-  // Today's bills
   billCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', borderWidth: 0.5, borderColor: '#E5E7EB', elevation: 1 },
   billAvatarBox: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
   billAvatarText: { fontSize: 14, fontWeight: '800', color: '#2563EB' },
   billCustomer: { fontSize: 18, fontWeight: '900', color: '#0F172A', marginTop: 0 },
   billTime: { fontSize: 11, color: '#9CA3AF', marginTop: 4, fontWeight: '600' },
   billRight: { alignItems: 'flex-end' },
-  paidBadge: { backgroundColor: '#DCFCE7', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginBottom: 4 },
-  paidBadgeText: { fontSize: 9, fontWeight: '800', color: '#16A34A', letterSpacing: 0.5 },
   billAmount: { fontSize: 24, fontWeight: '900', color: '#2563EB' },
   emptyState: { alignItems: 'center', paddingVertical: 30 },
   emptyText: { color: '#bbb', fontSize: 13, fontWeight: '600' },
-
-  // Bottom nav + FAB
-  bottomNav: { backgroundColor: '#fff', flexDirection: 'row', paddingTop: 8, borderTopWidth: 0.5, borderTopColor: '#E5E7EB' },
-  navItem: { flex: 1, alignItems: 'center', paddingVertical: 4 },
-  navLabel: { fontSize: 10, color: '#9CA3AF', fontWeight: '700', marginTop: 2 },
-  fab: { position: 'absolute', right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#4F46E5', alignItems: 'center', justifyContent: 'center', elevation: 6, shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8 },
-
-  // Live Billing + Quick Entry shared header/layout
   liveBillingFullScreen: { flex: 1, backgroundColor: '#fff' },
   liveBillingHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   lbBackBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
@@ -978,16 +1264,12 @@ const styles = StyleSheet.create({
   liveBillingTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
   liveBillingSub: { fontSize: 12, color: '#9CA3AF', fontWeight: '600', marginTop: 1 },
   liveBillingContent: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
-
-  // Customer inputs
   customerSection: { marginBottom: 20 },
   customerAvatarRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   customerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
   customerSectionTitle: { fontSize: 15, fontWeight: '800', color: '#111', marginLeft: 10 },
   lbInputBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 2 },
   lbInput: { flex: 1, padding: 12, fontSize: 14, fontWeight: '600', color: '#333' },
-
-  // Items list
   addItemsSection: { marginBottom: 12 },
   addItemsTitle: { fontSize: 15, fontWeight: '800', color: '#111', marginBottom: 12 },
   searchBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', borderRadius: 12, paddingHorizontal: 12, marginBottom: 10 },
@@ -999,8 +1281,6 @@ const styles = StyleSheet.create({
   qtyBtn: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
   qtyText: { fontSize: 14, fontWeight: '800', color: '#111', minWidth: 18, textAlign: 'center' },
   lineTotal: { fontSize: 13, fontWeight: '800', color: '#333', minWidth: 55, textAlign: 'right' },
-
-  // Sticky summary bar — placed BETWEEN scroll and buttons
   billSummaryBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#EEF2FF', paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#D1D5DB' },
   summaryLeft: { flexDirection: 'row', alignItems: 'center' },
   summaryItemsLabel: { fontSize: 11, color: '#555', fontWeight: '600' },
@@ -1008,15 +1288,11 @@ const styles = StyleSheet.create({
   summaryRight: { alignItems: 'flex-end' },
   summaryTotalLabel: { fontSize: 11, color: '#555', fontWeight: '600' },
   summaryTotalValue: { fontSize: 22, fontWeight: '900', color: '#111', marginTop: 2 },
-
-  // Action buttons row
   lbBottomButtons: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 12, gap: 12, backgroundColor: '#fff' },
   saveGoBackBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#2563EB', borderRadius: 12, paddingVertical: 13 },
   saveGoBackText: { color: '#2563EB', fontSize: 14, fontWeight: '800' },
   completeBillBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', borderRadius: 12, paddingVertical: 13, elevation: 2 },
   completeBillText: { color: '#fff', fontSize: 14, fontWeight: '800' },
-
-  // Quick Entry specifics
   qeFastBadge: { backgroundColor: '#F5F3FF', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
   qeIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#EDE9FE', alignItems: 'center', justifyContent: 'center' },
   qeFastTitle: { fontSize: 15, fontWeight: '800', color: '#6D28D9' },
@@ -1025,23 +1301,29 @@ const styles = StyleSheet.create({
   qeBottomBar: { paddingHorizontal: 16, paddingTop: 12, backgroundColor: '#fff' },
   qeSaveBtn: { backgroundColor: '#6D28D9', borderRadius: 14, paddingVertical: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', elevation: 3 },
   qeSaveBtnText: { color: '#fff', fontSize: 16, fontWeight: '900' },
-
-  // Profile
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  profilePanel: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22 },
+  profilePanel: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
   profileHandle: { width: 40, height: 4, backgroundColor: '#eee', borderRadius: 4, alignSelf: 'center', marginBottom: 20 },
-  profileHeader: { alignItems: 'center', marginBottom: 16 },
-  profileBizName: { fontSize: 22, fontWeight: '900', color: '#222' },
-  profileBizSub: { fontSize: 12, color: '#2563EB', fontWeight: '700', marginTop: 2, marginBottom: 10 },
-  profileEmail: { fontSize: 12, color: '#666', fontWeight: '600', marginBottom: 12 },
-  profileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 18 },
-  profileCell: { flex: 1, minWidth: '45%', backgroundColor: '#f9f9f9', borderRadius: 12, padding: 12, alignItems: 'center' },
-  profileLabel: { fontSize: 10, color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  profileValue: { fontSize: 14, fontWeight: '800', color: '#222', marginTop: 3 },
-  profileCloseBtn: { backgroundColor: '#2563EB', padding: 13, borderRadius: 12, alignItems: 'center' },
-  profileCloseText: { color: '#fff', fontSize: 14, fontWeight: '800' },
-
-  // Review Bill
+  profileHeader: { alignItems: 'center', marginBottom: 20 },
+  profileAvatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#4F46E5', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  profileAvatarText: { fontSize: 26, fontWeight: '900', color: '#fff' },
+  profileBizName: { fontSize: 20, fontWeight: '900', color: '#111', textAlign: 'center' },
+  profileBizTypeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EEF2FF', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, marginTop: 6, gap: 4 },
+  profileBizTypeText: { fontSize: 12, fontWeight: '700', color: '#2563EB' },
+  profileSection: { marginBottom: 18 },
+  profileSectionLabel: { fontSize: 10, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.8, marginBottom: 8, textTransform: 'uppercase' },
+  profileRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#F3F4F6' },
+  profileRowIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  profileRowLabel: { fontSize: 10, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.4 },
+  profileRowValue: { fontSize: 14, fontWeight: '700', color: '#111', marginTop: 2 },
+  profileEditBtn: { width: 28, height: 28, borderRadius: 8, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
+  subStatusCard: { borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1 },
+  subStatusLabel: { fontSize: 14, fontWeight: '800' },
+  subStatusNote: { fontSize: 12, color: '#6B7280', fontWeight: '500', lineHeight: 18 },
+  upgradeBtn: { backgroundColor: '#4F46E5', borderRadius: 12, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 4, elevation: 2 },
+  upgradeBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#FEE2E2', backgroundColor: '#FFF5F5', borderRadius: 12, paddingVertical: 13, marginTop: 6 },
+  logoutBtnText: { color: '#DC2626', fontSize: 14, fontWeight: '800' },
   reviewBillOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
   reviewBillContainer: { backgroundColor: '#fff', borderRadius: 16, width: '100%', maxHeight: '85%' },
   reviewBillHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
@@ -1061,8 +1343,6 @@ const styles = StyleSheet.create({
   reviewBillBackBtnText: { color: '#2563EB', fontWeight: '800', fontSize: 14 },
   reviewBillDoneBtn: { flex: 1, paddingVertical: 12, backgroundColor: '#2563EB', borderRadius: 10, alignItems: 'center' },
   reviewBillDoneBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-
-  // Toast
   toastContainer: { position: 'absolute', bottom: 100, left: 20, right: 20, padding: 12, borderRadius: 10, alignItems: 'center', zIndex: 9999 },
   toastText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 });
