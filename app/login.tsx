@@ -39,6 +39,8 @@ export default function Login() {
       try {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
           if (session) {
+            setUser(session.user);
+            setSession(session);
             try {
               const sessionJSON = JSON.stringify({
                 access_token: session.access_token,
@@ -362,6 +364,8 @@ export default function Login() {
           const user = data?.user;
           if (!user) throw new Error('No user returned from Supabase after auth.');
 
+          setUser(user);
+          setSession(data?.session ?? null);
           console.log('✅ Authentication successful, user:', user.email);
           
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -379,8 +383,7 @@ export default function Login() {
 
           console.log('✅ Profile data:', profile);
 
-          setIsLoading(false);
-          setAuthMode(null);
+          
 
           setUser({
             id: user.id,
@@ -388,6 +391,7 @@ export default function Login() {
             user_metadata: user.user_metadata,
           });
 
+          // DELETE these 3 lines:
           console.log('💤 Waiting for Supabase to persist session automatically...');
           await new Promise(r => setTimeout(r, 2000));
           
@@ -419,6 +423,8 @@ export default function Login() {
 
           if (isProfileComplete) {
             console.log('🏠 Navigating to home...');
+            setIsLoading(false);
+            setAuthMode(null);
             router.replace('/(tabs)/home');
           } else {
             console.log('📝 Navigating to onboarding...');
