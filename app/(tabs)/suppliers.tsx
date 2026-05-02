@@ -11,6 +11,10 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
+    TouchableWithoutFeedback,
+    Keyboard,
+    KeyboardAvoidingView,
+    Platform,
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -867,48 +871,93 @@ export default function SuppliersScreen() {
     );
   };
 
-  // Add Supplier Modal
+  // Add Supplier Modal - Moves up with keyboard on mobile
   const AddSupplierModal = () => (
     <Modal
       animationType="slide"
-      transparent={true}
+      transparent
       visible={addSupModalVisible}
       onRequestClose={() => setAddSupModalVisible(false)}
     >
-      <TouchableOpacity 
-        style={styles.modalOverlay} 
-        activeOpacity={1} 
-        onPress={() => setAddSupModalVisible(false)}
-      >
-        <View style={styles.addModalBox}>
-          <Text style={styles.addModalTitle}>➕ Add Supplier</Text>
-          <TextInput
-            style={styles.addModalInput}
-            placeholder="Supplier name"
-            value={newSupplierName}
-            onChangeText={setNewSupplierName}
-          />
-          <TextInput
-            style={styles.addModalInput}
-            placeholder="Category (e.g. Vegetables)"
-            value={newSupplierCategory}
-            onChangeText={setNewSupplierCategory}
-          />
-          <TextInput
-            style={styles.addModalInput}
-            placeholder="First bill amount ₹"
-            value={newSupplierAmount}
-            onChangeText={setNewSupplierAmount}
-            keyboardType="numeric"
-          />
-          <TouchableOpacity style={styles.addModalBtn} onPress={addSupplier}>
-            <Text style={styles.addModalBtnText}>Add Supplier</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setAddSupModalVisible(false)}>
-            <Text style={styles.addModalCancel}>Cancel</Text>
-          </TouchableOpacity>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalContainer}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+          >
+            <ScrollView 
+              style={{ flex: 1 }} 
+              contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
+              scrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.addSupplierModal}>
+                <View style={styles.addSupplierModalHeader}>
+                  <Text style={styles.addSupplierModalTitle}>➕ Add Supplier</Text>
+                  <TouchableOpacity onPress={() => setAddSupModalVisible(false)}>
+                    <Text style={styles.modalClose}>×</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.addSupplierModalContent}>
+                  <View>
+                    <Text style={styles.inputLabel}>Supplier Name</Text>
+                    <View style={styles.inputBox}>
+                      <Ionicons name="person-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                      <TextInput
+                        style={styles.inputField}
+                        placeholder="Enter supplier name"
+                        value={newSupplierName}
+                        onChangeText={setNewSupplierName}
+                        placeholderTextColor="#999"
+                        autoCorrect={false}
+                        returnKeyType="next"
+                      />
+                    </View>
+                  </View>
+
+                  <View>
+                    <Text style={styles.inputLabel}>Category</Text>
+                    <View style={styles.inputBox}>
+                      <Ionicons name="pricetag-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                      <TextInput
+                        style={styles.inputField}
+                        placeholder="e.g., Vegetables"
+                        value={newSupplierCategory}
+                        onChangeText={setNewSupplierCategory}
+                        placeholderTextColor="#999"
+                        autoCorrect={false}
+                        returnKeyType="next"
+                      />
+                    </View>
+                  </View>
+
+                  <View>
+                    <Text style={styles.inputLabel}>First Bill Amount (₹)</Text>
+                    <View style={styles.inputBox}>
+                      <Ionicons name="cash-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                      <TextInput
+                        style={styles.inputField}
+                        placeholder="Enter amount"
+                        value={newSupplierAmount}
+                        onChangeText={setNewSupplierAmount}
+                        keyboardType="numeric"
+                        placeholderTextColor="#999"
+                        returnKeyType="done"
+                      />
+                    </View>
+                  </View>
+
+                  <TouchableOpacity style={styles.addSupplierBtn} onPress={addSupplier}>
+                    <Text style={styles.addSupplierBtnText}>Add Supplier ✓</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </View>
-      </TouchableOpacity>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 
@@ -1572,53 +1621,18 @@ const styles = StyleSheet.create({
   },
   
   // Modals
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
-  addModalBox: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-  },
-  addModalTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#0F172A',
-    marginBottom: 16,
-  },
-  addModalInput: {
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#fafafa',
-    borderRadius: 12,
-    padding: 13,
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 10,
-  },
-  addModalBtn: {
-    backgroundColor: '#2563EB',
-    padding: 15,
-    borderRadius: 14,
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  addModalBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  addModalCancel: {
-    textAlign: 'center',
-    padding: 10,
-    color: '#64748B',
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 8,
-  },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  modalContainer: { flex: 1 },
+  addSupplierModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 },
+  addSupplierModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  addSupplierModalTitle: { fontSize: 18, fontWeight: '900', color: '#0F172A', marginBottom: 0 },
+  modalClose: { fontSize: 28, fontWeight: '600', color: '#999' },
+  addSupplierModalContent: { gap: 16 },
+  inputLabel: { fontSize: 12, fontWeight: '700', color: '#64748B', marginBottom: 8 },
+  inputBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', borderRadius: 12, paddingHorizontal: 12, height: 50 },
+  inputField: { flex: 1, fontSize: 14, fontWeight: '600', color: '#333', height: 50, paddingVertical: 0 },
+  addSupplierBtn: { backgroundColor: '#4F46E5', padding: 15, borderRadius: 14, alignItems: 'center', marginTop: 10 },
+  addSupplierBtnText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   
   // Sheet Modal
   overlay: {

@@ -1,37 +1,53 @@
+// store.ts
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-interface AuthUser {
+interface User {
   id: string;
   email: string;
-  user_metadata?: Record<string, any>;
+  user_metadata?: any;
+  hasCompleteProfile?: boolean;
 }
 
-interface AuthSession {
+interface Session {
   access_token: string;
   refresh_token: string;
 }
 
-interface AuthStore {
-  user: AuthUser | null;
-  session: AuthSession | null;
-  setUser: (user: AuthUser | null) => void;
-  setSession: (session: AuthSession | null) => void;
+interface AuthState {
+  user: User | null;
+  session: Session | null;
+  isLoading: boolean;
+  setUser: (user: User | null) => void;
+  setSession: (session: Session | null) => void;
+  setLoading: (isLoading: boolean) => void;
+  updateProfileStatus: (hasCompleteProfile: boolean) => void;
   clearAuth: () => void;
 }
 
-export const useAuthStore = create<AuthStore>((set) => ({
-  user: null,
-  session: null,
-  setUser: (user) => {
-    console.log('📦 Storing user in Zustand:', user?.email);
-    set({ user });
-  },
-  setSession: (session) => {
-    console.log('🔐 Storing session in Zustand');
-    set({ session });
-  },
-  clearAuth: () => {
-    console.log('🗑️ Clearing auth from Zustand');
-    set({ user: null, session: null });
-  },
-}));
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      session: null,
+      isLoading: true,
+      setUser: (user) => set({ user }),
+      setSession: (session) => set({ session }),
+      setLoading: (isLoading) => set({ isLoading }),
+      updateProfileStatus: (hasCompleteProfile) =>
+        set((state) => ({
+          user: state.user ? { ...state.user, hasCompleteProfile } : null,
+        })),
+      clearAuth: () => {
+        console.log('🧹 Clearing all auth state');
+        set({ user: null, session: null, isLoading: false });
+      },
+    }),
+    {
+      name: 'auth-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({ user: state.user, session: state.session }),
+    }
+  )
+);

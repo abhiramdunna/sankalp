@@ -1,3 +1,4 @@
+// auth.ts
 import {
   GoogleSignin,
   isSuccessResponse,
@@ -6,105 +7,153 @@ import { supabase } from './supabase';
 
 export type AuthMode = 'signup' | 'login';
 
+export type AuthResult = {
+  user: any;
+  session: any;
+  isNewUser: boolean;
+  hasCompleteProfile: boolean;
+};
+
 export function configureGoogleSignIn() {
   GoogleSignin.configure({
-    // ⚠️ IMPORTANT: Use the WEB CLIENT ID from Google Cloud Console
-    // NOT the Android client ID from google-services.json
-    webClientId: "91434556988-fribkfk8bimfo75318rldjsq7g4hh8kc.apps.googleusercontent.com",
+    webClientId: '91434556988-fribkfk8bimfo75318rldjsq7g4hh8kc.apps.googleusercontent.com',
     offlineAccess: true,
     scopes: ['profile', 'email'],
   });
 }
 
-export async function signInWithGoogle(mode: AuthMode) {
+// PHASE 1: Get Google credential
+export async function getGoogleCredential(): Promise<{
+  idToken: string;
+  userInfo: { email: string; name: string; photo: string | null };
+}> {
+  await GoogleSignin.hasPlayServices();
+
   try {
-    await GoogleSignin.hasPlayServices();
-    
-    const response = await GoogleSignin.signIn();
-    
-    if (!isSuccessResponse(response)) {
-      throw new Error('CANCELLED');
-    }
-    
-    const idToken = response.data?.idToken;
-    
-    if (!idToken) {
-      throw new Error('No ID token received from Google');
-    }
-    
-    console.log('✅ ID Token received, length:', idToken.length);
-    
-    const { data, error } = await supabase.auth.signInWithIdToken({
-      provider: 'google',
-      token: idToken,
-    });
-    
-    if (error) {
-      console.error('❌ Supabase Auth Error:', {
-        message: error.message,
-        status: error.status,
-        fullError: error,
-      });
-      throw new Error(`Authentication failed: ${error.message}`);
-    }
-    
-    if (!data?.session) {
-      console.warn('⚠️ No session in response, but auth state changed - this is OK on native');
-    }
-    
-    if (!data?.user) {
-      throw new Error('No user returned from Supabase after auth.');
-    }
-    
-    console.log('✅ User authenticated:', data.user.email);
-    
-    // ✅ FIX: On native, Supabase keeps session in memory even if getSession() returns null
-    // The auth state listener confirms SIGNED_IN, so we're authenticated
-    // Just wait a bit for any async operations to complete
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    console.log('✅ Authentication complete, ready to proceed');
-    
-    // On signup, check if user already existed
-    if (mode === 'signup' && data?.user?.id) {
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', data.user.id)
-        .maybeSingle();
-      
-      if (existingProfile) {
-        throw new Error('USER_ALREADY_EXISTS');
-      }
-    }
-    
-    return data;
-  } catch (error) {
-    console.error('❌ signInWithGoogle error:', error);
-    throw error;
+    await GoogleSignin.revokeAccess();
+  } catch (_) {
+    // ignore — revokeAccess fails if user was never signed in before
   }
+
+  const response = await GoogleSignin.signIn();
+
+  if (!isSuccessResponse(response)) {
+    throw new Error('CANCELLED');
+  }
+
+  const idToken = response.data?.idToken;
+  if (!idToken) {
+    throw new Error('No ID token received from Google');
+  }
+
+  return {
+    idToken,
+    userInfo: {
+      email: response.data?.user?.email || '',
+      name: response.data?.user?.name || '',
+      photo: response.data?.user?.photo || null,
+    },
+  };
 }
 
-// Keep this for web OAuth flow
-export async function signInWithGoogleIdToken(idToken: string, mode: AuthMode) {
+// PHASE 2: Check if user profile row exists by email
+export async function checkUserExistsInDatabase(email: string): Promise<boolean> {
+  if (!email) return false;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error checking user existence:', error);
+    return false;
+  }
+
+  return !!data;
+}
+
+/**
+ * Main auth function.
+ *
+ * IMPORTANT: This function does NOT update the Zustand store.
+ * The _layout.tsx onAuthStateChange listener handles store updates
+ * automatically when Supabase fires SIGNED_IN.
+ *
+ * login.tsx should call this and only handle error states.
+ * Navigation is handled entirely by _layout.tsx useProtectedRoute.
+ */
+export async function signInWithGoogle(mode: AuthMode): Promise<AuthResult> {
+  // Phase 1: Google credential
+  const { idToken, userInfo } = await getGoogleCredential();
+  console.log('📱 Got Google credential for:', userInfo.email);
+
+  // Phase 2: Mode-based existence check
+  if (mode === 'login') {
+    const exists = await checkUserExistsInDatabase(userInfo.email);
+    if (!exists) throw new Error('NO_ACCOUNT_FOUND');
+  }
+
+  if (mode === 'signup') {
+    const exists = await checkUserExistsInDatabase(userInfo.email);
+    if (exists) throw new Error('ACCOUNT_EXISTS');
+  }
+
+  // Phase 3: Supabase authentication
   const { data, error } = await supabase.auth.signInWithIdToken({
     provider: 'google',
     token: idToken,
   });
-  
-  if (error) throw error;
-  
-  if (mode === 'signup' && data?.user?.id) {
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', data.user.id)
-      .maybeSingle();
-    
-    if (existingProfile) {
-      throw new Error('USER_ALREADY_EXISTS');
-    }
+
+  if (error) {
+    console.error('❌ Supabase Auth Error:', error);
+    throw new Error(error.message);
   }
-  
-  return data;
+
+  if (!data?.user) {
+    throw new Error('No user returned from Supabase after auth.');
+  }
+
+  const userId = data.user.id;
+  const userEmail = data.user.email || '';
+  console.log('✅ Supabase auth success:', userEmail);
+
+  // Phase 4: Profile handling
+  if (mode === 'signup') {
+    // Create profile row for brand new user (upsert is safe)
+    const { error: profileError } = await supabase.from('profiles').upsert({
+      id: userId,
+      email: userEmail,
+    });
+
+    if (profileError) {
+      console.error('❌ Profile creation error:', profileError);
+    } else {
+      console.log('✅ Profile row created');
+    }
+
+    return {
+      user: data.user,
+      session: data.session,
+      isNewUser: true,
+      hasCompleteProfile: false,
+    };
+  }
+
+  // Login mode — check profile completeness
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('business_name, city')
+    .eq('id', userId)
+    .maybeSingle();
+
+  const hasCompleteProfile = !!(profile?.business_name && profile?.city);
+
+  return {
+    user: data.user,
+    session: data.session,
+    isNewUser: false,
+    hasCompleteProfile,
+  };
 }

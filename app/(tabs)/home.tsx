@@ -1,10 +1,11 @@
-// home.tsx — Optimized for smooth performance
+// home.tsx — Complete working version with session persistence, business details, and profile fixes
+
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, useNavigation } from 'expo-router';
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState, memo, useRef } from 'react';
 import {
   Alert,
@@ -13,11 +14,14 @@ import {
   Modal,
   PanResponder,
   Platform,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
+  Keyboard,
   View,
   Dimensions,
 } from 'react-native';
@@ -25,7 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// ─── Module-level RAM store for active sessions ───
+// Module-level RAM store for active sessions
 let RAM_SESSIONS: Session[] = [];
 
 const SAMPLE_PRODUCTS = [
@@ -36,12 +40,12 @@ const SAMPLE_PRODUCTS = [
   { name: 'Idly 2pcs', price: 15 },
 ];
 
-// ─── Types ───
+// Types
 interface BillItem { name: string; price: number; qty: number; }
 interface Session { id: number; customerName: string; phone: string; items: BillItem[]; }
 interface SaleLog { id: number; total: number; time: string; date: string; items: BillItem[]; customerName: string; phone: string; }
 
-// ─── Optimized Toast with useMemo ───
+// Toast Component
 const Toast = memo(({
   visible, message, type = 'error', onHide,
 }: {
@@ -64,9 +68,7 @@ const Toast = memo(({
   );
 });
 
-// ═══════════════════════════════════════════════════════════════
-// OPTIMIZED LIVE BILLING MODAL
-// ═══════════════════════════════════════════════════════════════
+// Live Billing Modal
 const LiveBillingModal = memo(({
   visible,
   onClose,
@@ -89,13 +91,9 @@ const LiveBillingModal = memo(({
   const [searchQuery, setSearchQuery] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
-  
-  // Use refs to avoid unnecessary re-renders
-  const isInitialMount = useRef(true);
 
   useEffect(() => {
     if (visible) {
-      // Reset state when modal opens
       if (session) {
         setCustomerName(session.customerName === 'Walk-in Customer' ? '' : session.customerName);
         setCustomerPhone(session.phone);
@@ -171,7 +169,6 @@ const LiveBillingModal = memo(({
           style={styles.liveBillingFullScreen} 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          {/* Header */}
           <View style={[styles.liveBillingHeader, { paddingTop: insets.top + 10 }]}>
             <TouchableOpacity onPress={onClose} style={styles.lbBackBtn}>
               <Ionicons name="arrow-back" size={22} color="#333" />
@@ -185,13 +182,11 @@ const LiveBillingModal = memo(({
             </TouchableOpacity>
           </View>
 
-          {/* Scrollable product list */}
           <ScrollView
             style={styles.liveBillingContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Customer section */}
             <View style={styles.customerSection}>
               <View style={styles.customerAvatarRow}>
                 <View style={styles.customerAvatar}>
@@ -227,7 +222,6 @@ const LiveBillingModal = memo(({
               </View>
             </View>
 
-            {/* Add Items */}
             <View style={styles.addItemsSection}>
               <Text style={styles.addItemsTitle}>Add Items</Text>
               <View style={styles.searchBox}>
@@ -266,7 +260,6 @@ const LiveBillingModal = memo(({
             <View style={{ height: 8 }} />
           </ScrollView>
 
-          {/* STICKY GRAND TOTAL BAR */}
           <View style={styles.billSummaryBar}>
             <View style={styles.summaryLeft}>
               <Ionicons name="document-text-outline" size={26} color="#2563EB" />
@@ -281,7 +274,6 @@ const LiveBillingModal = memo(({
             </View>
           </View>
 
-          {/* Bottom Buttons */}
           <View style={[styles.lbBottomButtons, { paddingBottom: insets.bottom || 14 }]}>
             <TouchableOpacity style={styles.saveGoBackBtn} onPress={handleSaveAndBack}>
               <Ionicons name="save-outline" size={18} color="#2563EB" style={{ marginRight: 6 }} />
@@ -298,9 +290,7 @@ const LiveBillingModal = memo(({
   );
 });
 
-// ═══════════════════════════════════════════════════════════════
-// OPTIMIZED QUICK ENTRY MODAL
-// ═══════════════════════════════════════════════════════════════
+// Quick Entry Modal
 const QuickEntryModal = memo(({
   visible, onClose, onSave,
 }: {
@@ -456,9 +446,7 @@ const QuickEntryModal = memo(({
   );
 });
 
-// ═══════════════════════════════════════════════════════════════
-// OPTIMIZED REVIEW BILL MODAL
-// ═══════════════════════════════════════════════════════════════
+// Review Bill Modal
 const ReviewBillModal = memo(({
   visible, onClose, onConfirm, customerName = '', customerPhone = '', items = [], total = 0,
 }: {
@@ -510,9 +498,7 @@ const ReviewBillModal = memo(({
   );
 });
 
-// ═══════════════════════════════════════════════════════════════
-// OPTIMIZED SWIPEABLE ACTIVE ORDER BUTTON
-// ═══════════════════════════════════════════════════════════════
+// Swipeable Order Button
 const SwipeableOrderButton = memo(({
   session, idx, CARD_COLORS, onPress, onDelete,
 }: {
@@ -576,9 +562,7 @@ const SwipeableOrderButton = memo(({
   );
 });
 
-// ═══════════════════════════════════════════════════════════════
-// OPTIMIZED MAIN HOME SCREEN
-// ═══════════════════════════════════════════════════════════════
+// Main Home Screen Component
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -588,30 +572,27 @@ export default function HomeScreen() {
 
   const [bizName, setBizName] = useState('');
   const [bizLocation, setBizLocation] = useState('');
+  const [editProfileModalVisible, setEditProfileModalVisible] = useState(false);
+  const [editingBizName, setEditingBizName] = useState('');
+  const [editingBizLocation, setEditingBizLocation] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [todayTotal, setTodayTotal] = useState(0);
   const [salesLog, setSalesLog] = useState<SaleLog[]>([]);
   const [currentDateTime, setCurrentDateTime] = useState('');
   const [nextDue, setNextDue] = useState('');
   const [profileVisible, setProfileVisible] = useState(false);
   const [products, setProducts] = useState<{ name: string; price: number }[]>([]);
-
-  // Subscription state
   const [trialStart, setTrialStart] = useState<Date | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
-
   const [activeSessions, setActiveSessions] = useState<Session[]>([]);
-
   const [liveBillingVisible, setLiveBillingVisible] = useState(false);
   const [editingSession, setEditingSession] = useState<Session | null>(null);
   const [quickEntryVisible, setQuickEntryVisible] = useState(false);
   const [billReviewVisible, setBillReviewVisible] = useState(false);
   const [viewAllBillsVisible, setViewAllBillsVisible] = useState(false);
-  const [editingShopName, setEditingShopName] = useState(false);
-  const [tempShopName, setTempShopName] = useState(bizName);
   const [reviewData, setReviewData] = useState<{
     customerName: string; customerPhone: string; items: BillItem[]; total: number; sessionId: number | null;
   }>({ customerName: '', customerPhone: '', items: [], total: 0, sessionId: null });
-
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('error');
@@ -628,25 +609,91 @@ export default function HomeScreen() {
     setShowToast(true);
   }, []);
 
-  const loadData = useCallback(async () => {
-    try {
-      if (user?.id) {
-        const { data: profile, error: profileError } = await supabase
+  // Load business details from Supabase
+  const loadBusinessDetails = useCallback(async () => {
+    if (user?.id) {
+      try {
+        console.log('📋 Loading business details for user:', user.id);
+        const { data, error } = await supabase
           .from('profiles')
           .select('business_name, city')
           .eq('id', user.id)
           .maybeSingle();
-        
-        if (profileError) {
-          console.error('Profile query error:', profileError);
+
+        if (error) {
+          console.error('❌ Error loading business details:', error);
+          return;
         }
-        
-        if (profile) {
-          if (profile.business_name) setBizName(profile.business_name);
-          if (profile.city) setBizLocation(profile.city);
+
+        if (data) {
+          console.log('✅ Business details loaded:', data);
+          setBizName(data.business_name || '');
+          setBizLocation(data.city || '');
+        } else {
+          console.log('⚠️ No profile found, creating one...');
+          const { error: insertError } = await supabase
+            .from('profiles')
+            .insert({
+              id: user.id,
+              email: user.email,
+            });
+          
+          if (insertError) {
+            console.error('❌ Failed to create profile:', insertError);
+          }
         }
+      } catch (err) {
+        console.error('Error in loadBusinessDetails:', err);
+      }
+    }
+  }, [user?.id, user?.email]);
+
+  // Open edit profile modal
+  const openEditProfile = () => {
+    setEditingBizName(bizName);
+    setEditingBizLocation(bizLocation);
+    setEditProfileModalVisible(true);
+  };
+
+  // Save profile changes to Supabase
+  const saveProfileChanges = async () => {
+    if (!editingBizName.trim() || !editingBizLocation.trim()) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    setIsSavingProfile(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user?.id,
+          business_name: editingBizName.trim(),
+          city: editingBizLocation.trim(),
+        });
+
+      if (error) {
+        console.error('❌ Error saving profile:', error);
+        Alert.alert('Error', 'Failed to save profile changes');
+        setIsSavingProfile(false);
+        return;
       }
 
+      console.log('✅ Profile saved successfully');
+      setBizName(editingBizName.trim());
+      setBizLocation(editingBizLocation.trim());
+      setEditProfileModalVisible(false);
+      setIsSavingProfile(false);
+    } catch (err) {
+      console.error('Error saving profile:', err);
+      Alert.alert('Error', 'An unexpected error occurred');
+      setIsSavingProfile(false);
+    }
+  };
+
+  // Load data from storage
+  const loadData = useCallback(async () => {
+    try {
       const storedTrialStart = await AsyncStorage.getItem('trialStart');
       const storedSubscribed = await AsyncStorage.getItem('isSubscribed');
       if (storedTrialStart) setTrialStart(new Date(storedTrialStart));
@@ -682,14 +729,13 @@ export default function HomeScreen() {
     } catch (e) { 
       console.error('loadData error:', e);
     }
-  }, [user?.id]);
+  }, []);
 
-  useEffect(() => {
-    loadData();
-    updateDateTime();
-    const interval = setInterval(updateDateTime, 30000);
-    return () => clearInterval(interval);
-  }, [loadData]);
+  // Save business details to Supabase
+  const saveBusinessDetails = useCallback(async () => {
+    // This is kept for reference but no longer used
+    // Business details are now handled on the complete-profile screen
+  }, []);
 
   const updateDateTime = useCallback(() => {
     const now = new Date();
@@ -717,7 +763,7 @@ export default function HomeScreen() {
     return { label: 'Trial Expired', color: '#DC2626', bg: '#FEE2E2', icon: 'close-circle' as const };
   }, [isSubscribed, isTrialActive, getTrialDaysLeft]);
 
-  // ✅ OPTIMIZED: Proper logout function with navigation reset
+  // Handle logout
   const handleLogout = useCallback(async () => {
     Alert.alert(
       'Logout',
@@ -731,26 +777,31 @@ export default function HomeScreen() {
             try {
               setProfileVisible(false);
               RAM_SESSIONS = [];
-              await AsyncStorage.multiRemove(['trialStart', 'isSubscribed', 'supabase_session']);
+              await AsyncStorage.multiRemove(['trialStart', 'isSubscribed', 'supabase_session', 'salesLog']);
               setUser(null);
               setSession(null);
-              const { error } = await supabase.auth.signOut();
+             const { error } = await supabase.auth.signOut();
               if (error) console.error('Supabase sign out error:', error);
-              await new Promise(resolve => setTimeout(resolve, 100));
-              router.dismissAll();
               router.replace('/login');
-            } catch (error) {
-              console.error('Logout error:', error);
-              router.dismissAll();
-              router.replace('/login');
-            }
+              } catch (error) {
+                console.error('Logout error:', error);
+                router.replace('/login');
+              }
           },
         },
       ]
     );
   }, [router, setUser, setSession]);
 
-  // OPTIMIZED: Memoized handlers
+  // Initialize data on mount
+  useEffect(() => {
+    loadData();
+    loadBusinessDetails();
+    updateDateTime();
+    const interval = setInterval(updateDateTime, 30000);
+    return () => clearInterval(interval);
+  }, [loadData, loadBusinessDetails, updateDateTime]);
+
   const startNewBilling = useCallback(() => {
     setEditingSession(null);
     setLiveBillingVisible(true);
@@ -857,8 +908,73 @@ export default function HomeScreen() {
 
   const subStatus = getSubscriptionStatus();
 
-  // OPTIMIZED: Profile Modal component with useMemo
-  const ProfileModal = useCallback(() => (
+  // Edit Profile Modal Component
+// Edit Profile Modal Component
+const EditProfileModal = useCallback(() => (
+  <Modal animationType="slide" transparent visible={editProfileModalVisible} onRequestClose={() => setEditProfileModalVisible(false)}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.modalOverlay}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.profilePanel} onStartShouldSetResponder={() => true}>
+              <View style={styles.profileHandle} />
+
+              <View style={[styles.profileHeader, { marginBottom: 24 }]}>
+                <Text style={styles.profileBizName}>Edit Business Details</Text>
+              </View>
+
+              <View style={styles.editProfileForm}>
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Business Name</Text>
+                  <View style={styles.formInputBox}>
+                    <Ionicons name="business-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="Enter business name"
+                      value={editingBizName}
+                      onChangeText={setEditingBizName}
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>City</Text>
+                  <View style={styles.formInputBox}>
+                    <Ionicons name="location-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="Enter city"
+                      value={editingBizLocation}
+                      onChangeText={setEditingBizLocation}
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+                </View>
+
+                <TouchableOpacity style={styles.saveProfileBtn} onPress={saveProfileChanges} disabled={isSavingProfile}>
+                  <Text style={styles.saveProfileBtnText}>{isSavingProfile ? 'Saving...' : 'Save Changes'}</Text>
+                </TouchableOpacity>
+              </View>
+
+            </View>
+          </ScrollView>
+        </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
+  </Modal>
+), [editProfileModalVisible, editingBizName, editingBizLocation, isSavingProfile, saveProfileChanges]);
+  // Profile Modal Component
+  const ProfileModalComponent = useCallback(() => (
     <Modal animationType="slide" transparent visible={profileVisible} onRequestClose={() => setProfileVisible(false)}>
       <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setProfileVisible(false)}>
         <View style={styles.profilePanel} onStartShouldSetResponder={() => true} onResponderTerminationRequest={() => false}>
@@ -867,15 +983,27 @@ export default function HomeScreen() {
           <View style={styles.profileHeader}>
             <View style={styles.profileAvatar}>
               <Text style={styles.profileAvatarText}>
-                {bizName ? bizName.charAt(0).toUpperCase() : 'S'}
+                {bizName ? bizName.charAt(0).toUpperCase() : (user?.email?.charAt(0).toUpperCase() || 'S')}
               </Text>
             </View>
             <Text style={styles.profileBizName}>{bizName || 'Your Business'}</Text>
+            {bizLocation ? (
+              <View style={styles.profileBizTypeBadge}>
+                <Ionicons name="location-outline" size={12} color="#2563EB" />
+                <Text style={styles.profileBizTypeText}>{bizLocation}</Text>
+              </View>
+            ) : null}
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: SCREEN_HEIGHT * 0.52 }}>
             <View style={styles.profileSection}>
-              <Text style={styles.profileSectionLabel}>BUSINESS INFO</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <Text style={styles.profileSectionLabel}>BUSINESS INFO</Text>
+                <TouchableOpacity onPress={openEditProfile} style={styles.editProfileBtn}>
+                  <Ionicons name="pencil-outline" size={16} color="#2563EB" />
+                  <Text style={styles.editProfileBtnText}>Edit</Text>
+                </TouchableOpacity>
+              </View>
 
               <View style={styles.profileRow}>
                 <View style={[styles.profileRowIcon, { backgroundColor: '#EEF2FF' }]}>
@@ -883,14 +1011,8 @@ export default function HomeScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.profileRowLabel}>Business Name</Text>
-                  <Text style={styles.profileRowValue}>{bizName || '—'}</Text>
+                  <Text style={styles.profileRowValue}>{bizName || '— Not set —'}</Text>
                 </View>
-                <TouchableOpacity
-                  onPress={() => { setEditingShopName(true); setTempShopName(bizName); }}
-                  style={styles.profileEditBtn}
-                >
-                  <Ionicons name="pencil" size={14} color="#2563EB" />
-                </TouchableOpacity>
               </View>
 
               <View style={styles.profileRow}>
@@ -899,13 +1021,10 @@ export default function HomeScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.profileRowLabel}>City</Text>
-                  <Text style={styles.profileRowValue}>{bizLocation || '—'}</Text>
+                  <Text style={styles.profileRowValue}>{bizLocation || '— Not set —'}</Text>
                 </View>
               </View>
-            </View>
 
-            <View style={styles.profileSection}>
-              <Text style={styles.profileSectionLabel}>ACCOUNT</Text>
               <View style={styles.profileRow}>
                 <View style={[styles.profileRowIcon, { backgroundColor: '#FEF2F2' }]}>
                   <Ionicons name="mail" size={16} color="#EA4335" />
@@ -973,50 +1092,11 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
-
-      <Modal animationType="fade" transparent visible={editingShopName} onRequestClose={() => setEditingShopName(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 20, borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
-            <Text style={{ fontSize: 16, fontWeight: '700', color: '#111', marginBottom: 16 }}>Edit Shop Name</Text>
-            <TextInput
-              style={{ borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, marginBottom: 16, color: '#111' }}
-              placeholder="Enter shop name"
-              value={tempShopName}
-              onChangeText={setTempShopName}
-              placeholderTextColor="#999"
-            />
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity
-                style={{ flex: 1, backgroundColor: '#E5E7EB', paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
-                onPress={() => setEditingShopName(false)}
-              >
-                <Text style={{ fontSize: 14, fontWeight: '600', color: '#6B7280' }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={{ flex: 1, backgroundColor: '#2563EB', paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
-                onPress={async () => {
-                  setBizName(tempShopName);
-                  setEditingShopName(false);
-                  if (user?.id) {
-                    await supabase
-                      .from('profiles')
-                      .update({ business_name: tempShopName })
-                      .eq('id', user.id);
-                  }
-                  showSuccess('Shop name updated!');
-                }}
-              >
-                <Text style={{ fontSize: 14, fontWeight: '600', color: '#fff' }}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </Modal>
-  ), [profileVisible, bizName, bizLocation, user?.email, user?.id, subStatus, isSubscribed, isTrialActive, nextDue, editingShopName, tempShopName, handleLogout, showSuccess]);
+  ), [profileVisible, bizName, bizLocation, user?.email, subStatus, isSubscribed, isTrialActive, nextDue, handleLogout, showSuccess]);
 
-  // OPTIMIZED: View All Bills Modal
-  const ViewAllBillsModal = useCallback(() => (
+  // View All Bills Modal
+  const ViewAllBillsModalComponent = useCallback(() => (
     <Modal animationType="slide" transparent={false} visible={viewAllBillsVisible} onRequestClose={() => setViewAllBillsVisible(false)}>
       <View style={{ flex: 1, backgroundColor: '#fff', paddingTop: insets.top }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' }}>
@@ -1112,10 +1192,15 @@ export default function HomeScreen() {
     </Modal>
   ), [viewAllBillsVisible, insets.top, activeSessions, salesLog, todayTotal, openSession]);
 
+  const ProfileModal = memo(ProfileModalComponent);
+  const ViewAllBillsModal = memo(ViewAllBillsModalComponent);
+  const EditModal = memo(EditProfileModal);
+
   return (
     <View style={styles.container}>
       <Toast visible={showToast} message={toastMessage} type={toastType} onHide={() => setShowToast(false)} />
       <ProfileModal />
+      <EditModal />
 
       <LiveBillingModal
         visible={liveBillingVisible}
@@ -1144,7 +1229,7 @@ export default function HomeScreen() {
 
       <ViewAllBillsModal />
 
-      {/* ══ GRADIENT HEADER ══ */}
+      {/* Header */}
       <LinearGradient
         colors={['#4F46E5', '#7C3AED', '#9333EA']}
         start={{ x: 0, y: 0 }}
@@ -1153,7 +1238,7 @@ export default function HomeScreen() {
       >
         <View style={styles.headerTop}>
           <View>
-            <Text style={styles.shopName}>{bizName}</Text>
+            <Text style={styles.shopName}>{bizName || 'Sankalp'}</Text>
             <Text style={styles.shopDateTime}>{currentDateTime}</Text>
           </View>
           <TouchableOpacity style={styles.profileBtn} onPress={() => setProfileVisible(true)}>
@@ -1170,7 +1255,7 @@ export default function HomeScreen() {
         </View>
       </LinearGradient>
 
-      {/* ══ QUICK ACTIONS ══ */}
+      {/* Quick Actions */}
       <View style={styles.quickActionsContainer}>
         <Text style={styles.quickActionsTitle}>Quick Actions</Text>
         <View style={styles.quickActionsRow}>
@@ -1204,7 +1289,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* ══ TODAY'S BILLS HEADER ══ */}
+      {/* Today's Bills Header */}
       <View style={styles.billsHeaderContainer}>
         <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>Today's Bills</Text>
@@ -1265,9 +1350,7 @@ export default function HomeScreen() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// STYLES (unchanged)
-// ═══════════════════════════════════════════════════════════════
+// Styles
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F3FF' },
   header: { paddingHorizontal: 16, paddingBottom: 22 },
@@ -1292,8 +1375,7 @@ const styles = StyleSheet.create({
   aoCustomerName: { fontSize: 15, fontWeight: '800', color: '#fff', marginTop: 3 },
   aoItemCount: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.9)' },
   aoTotal: { fontSize: 16, fontWeight: '900', color: '#fff' },
-  aoRight: { marginLeft: 12 },
-  deleteButton: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 60, alignItems: 'center', justifyContent: 'center' },
+  deleteButton: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 60, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EF4444', borderRadius: 14 },
   quickActionsTitle: { fontSize: 16, fontWeight: '800', color: '#111', marginBottom: 10, marginTop: 6 },
   quickActionsRow: { flexDirection: 'row', marginBottom: 4 },
   qaBtn: { flex: 1, borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4 },
@@ -1303,7 +1385,7 @@ const styles = StyleSheet.create({
   billCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', borderWidth: 0.5, borderColor: '#E5E7EB', elevation: 1 },
   billAvatarBox: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
   billAvatarText: { fontSize: 14, fontWeight: '800', color: '#2563EB' },
-  billCustomer: { fontSize: 18, fontWeight: '900', color: '#0F172A', marginTop: 0 },
+  billCustomer: { fontSize: 18, fontWeight: '900', color: '#0F172A' },
   billTime: { fontSize: 11, color: '#9CA3AF', marginTop: 4, fontWeight: '600' },
   billRight: { alignItems: 'flex-end' },
   billAmount: { fontSize: 24, fontWeight: '900', color: '#2563EB' },
@@ -1368,7 +1450,6 @@ const styles = StyleSheet.create({
   profileRowIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   profileRowLabel: { fontSize: 10, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.4 },
   profileRowValue: { fontSize: 14, fontWeight: '700', color: '#111', marginTop: 2 },
-  profileEditBtn: { width: 28, height: 28, borderRadius: 8, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
   subStatusCard: { borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1 },
   subStatusLabel: { fontSize: 14, fontWeight: '800' },
   subStatusNote: { fontSize: 12, color: '#6B7280', fontWeight: '500', lineHeight: 18 },
@@ -1397,4 +1478,13 @@ const styles = StyleSheet.create({
   reviewBillDoneBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
   toastContainer: { position: 'absolute', bottom: 100, left: 20, right: 20, padding: 12, borderRadius: 10, alignItems: 'center', zIndex: 9999 },
   toastText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  editProfileBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#EEF2FF', borderRadius: 8, gap: 4 },
+  editProfileBtnText: { fontSize: 12, fontWeight: '700', color: '#2563EB' },
+  editProfileForm: { paddingHorizontal: 6 },
+  formGroup: { marginBottom: 18 },
+  formLabel: { fontSize: 12, fontWeight: '700', color: '#64748B', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  formInputBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', borderRadius: 12, paddingHorizontal: 12, height: 50 },
+  formInput: { flex: 1, fontSize: 14, fontWeight: '600', color: '#333', height: 50, paddingVertical: 0 },
+  saveProfileBtn: { backgroundColor: '#4F46E5', padding: 15, borderRadius: 14, alignItems: 'center', marginTop: 10 },
+  saveProfileBtnText: { color: '#fff', fontSize: 16, fontWeight: '900' },
 });
