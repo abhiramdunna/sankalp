@@ -174,7 +174,7 @@ const LiveBillingModal = memo(({
               <Ionicons name="arrow-back" size={22} color="#333" />
             </TouchableOpacity>
             <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={styles.liveBillingTitle}>Live Billing</Text>
+              <Text style={styles.liveBillingTitle}>New Bill</Text>
               <Text style={styles.liveBillingSub}>Add items and create bill</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.lbCloseBtn}>
@@ -198,7 +198,7 @@ const LiveBillingModal = memo(({
                 <Ionicons name="person-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
                 <TextInput
                   style={styles.lbInput}
-                  placeholder="Enter customer name (optional)"
+                  placeholder="Enter customer name"
                   value={customerName}
                   onChangeText={setCustomerName}
                   placeholderTextColor="#ccc"
@@ -213,7 +213,7 @@ const LiveBillingModal = memo(({
                 <Ionicons name="call-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
                 <TextInput
                   style={styles.lbInput}
-                  placeholder="Phone (optional)"
+                  placeholder="Phone"
                   value={customerPhone}
                   onChangeText={setCustomerPhone}
                   keyboardType="phone-pad"
@@ -290,7 +290,7 @@ const LiveBillingModal = memo(({
   );
 });
 
-// Quick Entry Modal
+// Quick Bill Modal
 const QuickEntryModal = memo(({
   visible, onClose, onSave,
 }: {
@@ -358,7 +358,7 @@ const QuickEntryModal = memo(({
               <Ionicons name="arrow-back" size={22} color="#333" />
             </TouchableOpacity>
             <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={styles.liveBillingTitle}>Quick Entry</Text>
+              <Text style={styles.liveBillingTitle}>Quick Bill</Text>
               <Text style={styles.liveBillingSub}>Add name and amount quickly</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={[styles.lbCloseBtn, { backgroundColor: '#EDE9FE' }]}>
@@ -888,7 +888,7 @@ export default function HomeScreen() {
       total: amount,
       time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
       date: `${now.getDate()} ${months[now.getMonth()]}`,
-      items: [{ name: note || 'Quick Entry', price: amount, qty: 1 }],
+      items: [{ name: note || 'Quick Bill', price: amount, qty: 1 }],
       customerName: name,
       phone,
     };
@@ -1241,9 +1241,14 @@ const EditProfileModal = useCallback(() => (
             <Text style={styles.shopName}>{bizName || 'Sankalp'}</Text>
             <Text style={styles.shopDateTime}>{currentDateTime}</Text>
           </View>
-          <TouchableOpacity style={styles.profileBtn} onPress={() => setProfileVisible(true)}>
-            <Ionicons name="person" size={22} color="#fff" />
-          </TouchableOpacity>
+          <TouchableOpacity 
+  style={styles.profileBtn} 
+  onPress={() => setProfileVisible(true)}
+>
+  <Text style={styles.headerProfileLetter}>
+    {user?.email?.charAt(0).toUpperCase() || 'S'}
+  </Text>
+</TouchableOpacity>
         </View>
 
         <View style={styles.collectionCard}>
@@ -1260,32 +1265,35 @@ const EditProfileModal = useCallback(() => (
         <Text style={styles.quickActionsTitle}>Quick Actions</Text>
         <View style={styles.quickActionsRow}>
           <TouchableOpacity
-            style={[styles.qaBtn, { backgroundColor: '#4F46E5', marginRight: 10 }]}
-            onPress={startNewBilling}
-          >
-            <View style={styles.qaLeft}>
-              <Ionicons name="document-text-outline" size={22} color="#fff" />
-              <View style={{ marginLeft: 10, marginRight: 12 }}>
-                <Text style={styles.qaBtnTitle}>+ New Bill</Text>
-                <Text style={styles.qaBtnSub}>Add items & generate bill</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#fff" />
-          </TouchableOpacity>
+  style={[styles.qaBtn, { backgroundColor: '#4F46E5' }]}
+  onPress={startNewBilling}
+>
+  <View style={styles.quickActionHorizontal}>
+    <View style={styles.quickActionSmallIcon}>
+      <Ionicons name="document-text-outline" size={20} color="#fff" />
+    </View>
 
-          <TouchableOpacity
-            style={[styles.qaBtn, { backgroundColor: '#6D28D9' }]}
-            onPress={() => setQuickEntryVisible(true)}
-          >
-            <View style={styles.qaLeft}>
-              <Ionicons name="flash" size={22} color="#fff" />
-              <View style={{ marginLeft: 10, marginRight: 12 }}>
-                <Text style={styles.qaBtnTitle}>+ Quick Entry</Text>
-                <Text style={styles.qaBtnSub}>Just name & amount</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#fff" />
-          </TouchableOpacity>
+    <Text style={styles.quickActionMainText}>New Bill</Text>
+  </View>
+</TouchableOpacity>
+
+         <TouchableOpacity
+  style={[styles.qaBtn, { backgroundColor: '#6D28D9' }]}
+  onPress={() => setQuickEntryVisible(true)}
+>
+  <View style={styles.quickActionHorizontal}>
+    <View style={styles.quickActionSmallIcon}>
+      <Ionicons name="flash" size={20} color="#fff" />
+    </View>
+
+    <Text
+  style={styles.quickActionMainText}
+  numberOfLines={1}
+>
+  Quick Bill
+</Text>
+  </View>
+</TouchableOpacity>
         </View>
       </View>
 
@@ -1358,6 +1366,7 @@ const styles = StyleSheet.create({
   shopName: { color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
   shopDateTime: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '600', marginTop: 2 },
   profileBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  headerProfileLetter: { color: '#fff', fontSize: 16, fontWeight: '900' },
   collectionCard: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center' },
   collectionLabel: { fontSize: 10, color: 'rgba(255,255,255,0.8)', fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
   collectionValue: { fontSize: 38, fontWeight: '900', color: '#fff', letterSpacing: -2, marginTop: 2 },
@@ -1377,8 +1386,26 @@ const styles = StyleSheet.create({
   aoTotal: { fontSize: 16, fontWeight: '900', color: '#fff' },
   deleteButton: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 60, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EF4444', borderRadius: 14 },
   quickActionsTitle: { fontSize: 16, fontWeight: '800', color: '#111', marginBottom: 10, marginTop: 6 },
-  quickActionsRow: { flexDirection: 'row', marginBottom: 4 },
-  qaBtn: { flex: 1, borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4 },
+  quickActionsRow: {
+  flexDirection: 'row',
+  gap: 12,
+  marginBottom: 4,
+},
+qaBtn: {
+  flex: 1,
+  height: 70,
+  borderRadius: 16,
+  justifyContent: 'center',
+  alignItems: 'center',
+  elevation: 3,
+  shadowColor: '#000',
+  shadowOffset: {
+    width: 0,
+    height: 2,
+  },
+  shadowOpacity: 0.12,
+  shadowRadius: 4,
+},
   qaLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   qaBtnTitle: { fontSize: 14, fontWeight: '800', color: '#fff' },
   qaBtnSub: { fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginTop: 1 },
@@ -1487,4 +1514,44 @@ const styles = StyleSheet.create({
   formInput: { flex: 1, fontSize: 14, fontWeight: '600', color: '#333', height: 50, paddingVertical: 0 },
   saveProfileBtn: { backgroundColor: '#4F46E5', padding: 15, borderRadius: 14, alignItems: 'center', marginTop: 10 },
   saveProfileBtnText: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  quickActionCenter: {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+
+quickActionIconCircle: {
+  width: 48,
+  height: 48,
+  borderRadius: 24,
+  backgroundColor: 'rgba(255,255,255,0.18)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginBottom: 8,
+},
+
+quickActionMainText: {
+  fontSize: 14,
+  fontWeight: '800',
+  color: '#fff',
+  flexShrink: 1,
+},
+
+quickActionHorizontal: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  width: '85%',
+},
+
+quickActionSmallIcon: {
+  width: 36,
+  height: 36,
+  borderRadius: 18,
+  backgroundColor: 'rgba(255,255,255,0.18)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginRight: 8,
+},
+
+
 });
