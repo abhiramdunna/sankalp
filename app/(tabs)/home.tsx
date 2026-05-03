@@ -199,7 +199,7 @@ const LiveBillingModal = memo(({
                 <Ionicons name="person-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
                 <TextInput
                   style={styles.lbInput}
-                  placeholder="Enter customer name"
+                  placeholder=""
                   value={customerName}
                   onChangeText={setCustomerName}
                   placeholderTextColor="#ccc"
@@ -387,7 +387,7 @@ const QuickEntryModal = memo(({
               <Ionicons name="person-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
               <TextInput 
                 style={styles.lbInput} 
-                placeholder="Enter customer name" 
+                placeholder="" 
                 value={name} 
                 onChangeText={setName} 
                 placeholderTextColor="#ccc" 
@@ -399,7 +399,7 @@ const QuickEntryModal = memo(({
               <Ionicons name="call-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
               <TextInput 
                 style={styles.lbInput} 
-                placeholder="+91 98765 43210" 
+                placeholder="" 
                 value={phone} 
                 onChangeText={setPhone} 
                 keyboardType="phone-pad" 
@@ -425,7 +425,7 @@ const QuickEntryModal = memo(({
               <Ionicons name="document-text-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
               <TextInput 
                 style={styles.lbInput} 
-                placeholder="e.g., Lunch Payment, Advance, etc." 
+                placeholder="" 
                 value={note} 
                 onChangeText={setNote} 
                 placeholderTextColor="#ccc" 
@@ -582,7 +582,7 @@ const BillDetailModal = memo(({
         <View style={styles.reviewBillContainer}>
           {/* Header */}
           <View style={styles.reviewBillHeader}>
-            <Text style={styles.reviewBillTitle}>Bill #{billNumber}</Text>
+            <Text style={styles.reviewBillTitle}>Bill-{billNumber}</Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color="#333" />
             </TouchableOpacity>
@@ -885,13 +885,7 @@ const PendingPaymentsModal = memo(({
             <Text style={styles.ppHeaderTitle}>Pending Payments</Text>
             <Text style={styles.ppHeaderSub}>{payments.length} person{payments.length !== 1 ? 's' : ''} · ₹{totalPending.toLocaleString('en-IN')} due</Text>
           </View>
-          {/* Paid Persons button + Add button */}
-          <TouchableOpacity
-            onPress={() => setActiveTab(activeTab === 'paid' ? 'pending' : 'paid')}
-            style={[styles.ppAddBtn, { marginRight: 8, backgroundColor: activeTab === 'paid' ? '#D97706' : '#fff', borderWidth: activeTab === 'paid' ? 2 : 0, borderColor: '#fff' }]}
-          >
-            <Ionicons name="checkmark-done" size={19} color={activeTab === 'paid' ? '#fff' : '#10B981'} />
-          </TouchableOpacity>
+          {/* Add button — always visible on pending tab */}
           {activeTab === 'pending' && (
             <TouchableOpacity onPress={() => { resetForm(); setShowAdd(true); }} style={styles.ppAddBtn}>
               <Ionicons name="add" size={22} color="#D97706" />
@@ -974,10 +968,6 @@ const PendingPaymentsModal = memo(({
               </View>
             ) : (
               <>
-                <View style={{ backgroundColor: '#ECFDF5', borderRadius: 12, padding: 12, marginBottom: 14, flexDirection: 'row', alignItems: 'center' }}>
-                  <Ionicons name="checkmark-done-circle" size={20} color="#10B981" style={{ marginRight: 8 }} />
-                  <Text style={{ fontSize: 13, fontWeight: '800', color: '#065F46' }}>Total Collected: ₹{totalPaid.toLocaleString('en-IN')}</Text>
-                </View>
                 {paidPayments.map(p => (
                   <View key={p.id} style={[styles.ppCard, { borderLeftWidth: 3, borderLeftColor: '#10B981' }]}>
                     <View style={styles.ppCardLeft}>
@@ -1080,85 +1070,100 @@ const PendingPaymentsModal = memo(({
           </TouchableWithoutFeedback>
         </Modal>
 
-        {/* Add Payment Bottom Sheet */}
-        <Modal animationType="slide" transparent visible={showAdd} onRequestClose={() => setShowAdd(false)}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-              <View style={styles.modalOverlay}>
-                <TouchableWithoutFeedback onPress={() => {}}>
-                  <View style={[styles.profilePanel, { paddingBottom: 32 }]}>
-                    <View style={styles.profileHandle} />
-                    <Text style={[styles.profileBizName, { marginBottom: 20, fontSize: 18 }]}>Add Pending Payment</Text>
+        {/* Add Payment Full Screen */}
+        <Modal animationType="slide" transparent={false} visible={showAdd} onRequestClose={() => { setShowAdd(false); resetForm(); }} statusBarTranslucent>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1, backgroundColor: '#fff' }}
+          >
+            <View style={{ flex: 1, backgroundColor: '#fff' }}>
+              {/* Header */}
+              <LinearGradient colors={['#F59E0B', '#D97706']} style={{ paddingTop: insets.top + 12, paddingBottom: 16, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' }}>
+                <TouchableOpacity onPress={() => { setShowAdd(false); resetForm(); }} style={styles.ppBackBtn}>
+                  <Ionicons name="arrow-back" size={22} color="#fff" />
+                </TouchableOpacity>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.ppHeaderTitle}>Add Pending Payment</Text>
+                  <Text style={styles.ppHeaderSub}>Fill in the details below</Text>
+                </View>
+              </LinearGradient>
 
-                    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-                      {/* Duplicate phone warning */}
-                      {duplicateWarning && (
-                        <View style={{ backgroundColor: '#FEF3C7', borderRadius: 10, padding: 12, marginBottom: 14, flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderColor: '#FCD34D' }}>
-                          <Ionicons name="warning-outline" size={18} color="#D97706" style={{ marginRight: 8, marginTop: 1 }} />
-                          <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 13, fontWeight: '800', color: '#92400E' }}>Returning Person Detected!</Text>
-                            <Text style={{ fontSize: 12, color: '#92400E', marginTop: 3, fontWeight: '500' }}>
-                              {duplicateWarning.name} already has a pending payment of ₹{duplicateWarning.amount.toLocaleString('en-IN')} (added {duplicateWarning.date}). You are adding a new record for the same phone number.
-                            </Text>
-                          </View>
-                        </View>
-                      )}
-
-                      <View style={styles.formGroup}>
-                        <Text style={styles.formLabel}>Customer Name *</Text>
-                        <View style={styles.formInputBox}>
-                          <Ionicons name="person-outline" size={18} color="#999" style={{ marginRight: 8 }} />
-                          <TextInput style={styles.formInput} placeholder="Enter name" value={name} onChangeText={setName} placeholderTextColor="#ccc" autoCorrect={false} blurOnSubmit={false} />
-                        </View>
-                      </View>
-
-                      <View style={styles.formGroup}>
-                        <Text style={styles.formLabel}>Phone Number</Text>
-                        <View style={styles.formInputBox}>
-                          <Ionicons name="call-outline" size={18} color="#999" style={{ marginRight: 8 }} />
-                          <TextInput style={styles.formInput} placeholder="+91 98765 43210" value={phone} onChangeText={(v) => { setPhone(v); checkDuplicate(v); }} keyboardType="phone-pad" placeholderTextColor="#ccc" autoCorrect={false} blurOnSubmit={false} />
-                        </View>
-                      </View>
-
-                      <View style={styles.formGroup}>
-                        <Text style={styles.formLabel}>Place</Text>
-                        <View style={styles.formInputBox}>
-                          <Ionicons name="location-outline" size={18} color="#999" style={{ marginRight: 8 }} />
-                          <TextInput style={styles.formInput} placeholder="e.g. Shop, Colony, Area..." value={place} onChangeText={setPlace} placeholderTextColor="#ccc" autoCorrect={false} blurOnSubmit={false} />
-                        </View>
-                      </View>
-
-                      <View style={styles.formGroup}>
-                        <Text style={styles.formLabel}>Amount (₹) *</Text>
-                        <View style={styles.formInputBox}>
-                          <Ionicons name="cash-outline" size={18} color="#999" style={{ marginRight: 8 }} />
-                          <TextInput style={styles.formInput} placeholder="0.00" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholderTextColor="#ccc" autoCorrect={false} blurOnSubmit={false} />
-                        </View>
-                      </View>
-
-                      <View style={styles.formGroup}>
-                        <Text style={styles.formLabel}>Notes (Optional)</Text>
-                        <View style={styles.formInputBox}>
-                          <Ionicons name="document-text-outline" size={18} color="#999" style={{ marginRight: 8 }} />
-                          <TextInput style={styles.formInput} placeholder="e.g. Lunch, Advance..." value={notes} onChangeText={setNotes} placeholderTextColor="#ccc" autoCorrect={false} blurOnSubmit={false} />
-                        </View>
-                      </View>
-
-                      <View style={{ height: 10 }} />
-                    </ScrollView>
-
-                    <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-                      <TouchableOpacity style={[styles.saveGoBackBtn, { flex: 1 }]} onPress={() => { setShowAdd(false); resetForm(); }}>
-                        <Text style={styles.saveGoBackText}>Cancel</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[styles.completeBillBtn, { flex: 1, backgroundColor: '#F59E0B' }]} onPress={handleAdd}>
-                        <Text style={styles.completeBillText}>Add Payment</Text>
-                      </TouchableOpacity>
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
+                {/* Duplicate phone warning */}
+                {duplicateWarning && (
+                  <View style={{ backgroundColor: '#FEF3C7', borderRadius: 10, padding: 12, marginBottom: 14, flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderColor: '#FCD34D' }}>
+                    <Ionicons name="warning-outline" size={18} color="#D97706" style={{ marginRight: 8, marginTop: 1 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '800', color: '#92400E' }}>Returning Person Detected!</Text>
+                      <Text style={{ fontSize: 12, color: '#92400E', marginTop: 3, fontWeight: '500' }}>
+                        {duplicateWarning.name} already has a pending payment of ₹{duplicateWarning.amount.toLocaleString('en-IN')} (added {duplicateWarning.date}). You are adding a new record for the same phone number.
+                      </Text>
                     </View>
                   </View>
-                </TouchableWithoutFeedback>
+                )}
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Customer Name *</Text>
+                  <View style={styles.formInputBox}>
+                    <Ionicons name="person-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                    <TextInput style={styles.formInput} placeholder="Enter name" value={name} onChangeText={setName} placeholderTextColor="#ccc" autoCorrect={false} blurOnSubmit={false} />
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Phone Number</Text>
+                  <View style={styles.formInputBox}>
+                    <Ionicons name="call-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                    <TextInput style={styles.formInput} placeholder="" value={phone} onChangeText={(v) => { setPhone(v); checkDuplicate(v); }} keyboardType="phone-pad" placeholderTextColor="#ccc" autoCorrect={false} blurOnSubmit={false} />
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Place</Text>
+                  <View style={styles.formInputBox}>
+                    <Ionicons name="location-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                    <TextInput style={styles.formInput} placeholder="e.g. Shop, Colony, Area..." value={place} onChangeText={setPlace} placeholderTextColor="#ccc" autoCorrect={false} blurOnSubmit={false} />
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Amount (₹) *</Text>
+                  <View style={styles.formInputBox}>
+                    <Ionicons name="cash-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                    <TextInput style={styles.formInput} placeholder="0.00" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholderTextColor="#ccc" autoCorrect={false} blurOnSubmit={false} />
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Notes (Optional)</Text>
+                  <View style={[styles.formInputBox, { height: 100, alignItems: 'flex-start', paddingTop: 12 }]}>
+                    <Ionicons name="document-text-outline" size={18} color="#999" style={{ marginRight: 8, marginTop: 2 }} />
+                    <TextInput
+                      style={[styles.formInput, { height: 76, textAlignVertical: 'top' }]}
+                      placeholder="e.g. Lunch, Advance..."
+                      value={notes}
+                      onChangeText={setNotes}
+                      placeholderTextColor="#ccc"
+                      autoCorrect={false}
+                      blurOnSubmit={false}
+                      multiline
+                      numberOfLines={3}
+                    />
+                  </View>
+                </View>
+
+              <View style={{ height: 10 }} />
+              </ScrollView>
+
+              <View style={{ flexDirection: 'row', gap: 12, padding: 16, paddingBottom: insets.bottom + 8, borderTopWidth: 1, borderTopColor: '#F3F4F6', backgroundColor: '#fff' }}>
+                <TouchableOpacity style={[styles.saveGoBackBtn, { flex: 1 }]} onPress={() => { setShowAdd(false); resetForm(); }}>
+                  <Text style={styles.saveGoBackText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.completeBillBtn, { flex: 1, backgroundColor: '#F59E0B' }]} onPress={handleAdd}>
+                  <Text style={styles.completeBillText}>Add Payment</Text>
+                </TouchableOpacity>
               </View>
-            </TouchableWithoutFeedback>
+            </View>
           </KeyboardAvoidingView>
         </Modal>
       </View>
@@ -1251,6 +1256,310 @@ const EditProfileModal = memo(({
     </KeyboardAvoidingView>
   </Modal>
 ));
+
+// ─── Inline Mini-Calendar ──────────────────────────────────────────────────
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAY_NAMES = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+const MiniCalendar = memo(({
+  selectedDate, onSelect, markedDates,
+}: {
+  selectedDate: Date | null;
+  onSelect: (d: Date) => void;
+  markedDates: Set<string>; // 'YYYY-MM-DD' strings
+}) => {
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const toKey = (d: number) => {
+    const mm = String(viewMonth + 1).padStart(2, '0');
+    const dd = String(d).padStart(2, '0');
+    return `${viewYear}-${mm}-${dd}`;
+  };
+
+  const selectedKey = selectedDate
+    ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth()+1).padStart(2,'0')}-${String(selectedDate.getDate()).padStart(2,'0')}`
+    : null;
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
+    else setViewMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
+    else setViewMonth(m => m + 1);
+  };
+
+  return (
+    <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+      {/* Month nav */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+        <TouchableOpacity onPress={prevMonth} style={{ padding: 6 }}>
+          <Ionicons name="chevron-back" size={20} color="#4F46E5" />
+        </TouchableOpacity>
+        <Text style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: '800', color: '#111' }}>
+          {MONTH_NAMES[viewMonth]} {viewYear}
+        </Text>
+        <TouchableOpacity onPress={nextMonth} style={{ padding: 6 }}>
+          <Ionicons name="chevron-forward" size={20} color="#4F46E5" />
+        </TouchableOpacity>
+      </View>
+      {/* Day headers */}
+      <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+        {DAY_NAMES.map(d => (
+          <Text key={d} style={{ flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#9CA3AF' }}>{d}</Text>
+        ))}
+      </View>
+      {/* Cells */}
+      {Array.from({ length: Math.ceil(cells.length / 7) }, (_, row) => (
+        <View key={row} style={{ flexDirection: 'row', marginBottom: 2 }}>
+          {cells.slice(row * 7, row * 7 + 7).map((day, col) => {
+            if (!day) return <View key={col} style={{ flex: 1, height: 36 }} />;
+            const key = toKey(day);
+            const isSelected = selectedKey === key;
+            const hasData = markedDates.has(key);
+            const isToday = today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === day;
+            return (
+              <TouchableOpacity
+                key={col}
+                onPress={() => onSelect(new Date(viewYear, viewMonth, day))}
+                style={{
+                  flex: 1, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 10,
+                  backgroundColor: isSelected ? '#4F46E5' : isToday ? '#EEF2FF' : 'transparent',
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: isSelected || isToday ? '800' : '500', color: isSelected ? '#fff' : isToday ? '#4F46E5' : '#111' }}>
+                  {day}
+                </Text>
+                {hasData && !isSelected && (
+                  <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: '#4F46E5', marginTop: 1 }} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+          {/* Pad last row */}
+          {cells.slice(row * 7, row * 7 + 7).length < 7 &&
+            Array.from({ length: 7 - cells.slice(row * 7, row * 7 + 7).length }, (_, i) => (
+              <View key={`pad-${i}`} style={{ flex: 1, height: 36 }} />
+            ))
+          }
+        </View>
+      ))}
+    </View>
+  );
+});
+
+// View All Bills Modal — standalone component outside HomeScreen to prevent flicker
+const ViewAllBillsModal = memo(({
+  visible, onClose, insetTop, activeSessions, filteredBills, filteredTotal,
+  billsDateFilter, setBillsDateFilter,
+  billsSearchQuery, setBillsSearchQuery,
+  openSession, openBillDetail,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  insetTop: number;
+  activeSessions: Session[];
+  filteredBills: SaleLog[];
+  filteredTotal: number;
+  billsDateFilter: string;
+  setBillsDateFilter: (d: string) => void;
+  billsSearchQuery: string;
+  setBillsSearchQuery: (q: string) => void;
+  openSession: (s: Session) => void;
+  openBillDetail: (b: SaleLog, n: number) => void;
+}) => {
+  const [showCalendar, setShowCalendar] = useState(false);
+
+  // Build a Set of 'YYYY-MM-DD' keys for dates that have bills
+  // Bills store dates like '3 May' — we mark today-ish but mostly just show all calendar days
+  // We'll mark dates that match by parsing the stored date string
+  const markedDates = useMemo((): Set<string> => {
+    const s = new Set<string>();
+    // We cannot reliably reverse-parse '3 May' without year, so we mark nothing extra
+    // The calendar is for free-pick; dots would need full date storage
+    return s;
+  }, []);
+
+  // Parse selected date from billsDateFilter label back to Date object
+  const selectedCalDate = useMemo((): Date | null => {
+    if (billsDateFilter === 'All') return null;
+    // try to parse e.g. '3 May' or '3 May 2025'
+    try {
+      const d = new Date(billsDateFilter + ' ' + new Date().getFullYear());
+      if (!isNaN(d.getTime())) return d;
+    } catch { /* ignore */ }
+    return null;
+  }, [billsDateFilter]);
+
+  const handleCalendarSelect = useCallback((d: Date) => {
+    const day = d.getDate();
+    const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+    setBillsDateFilter(`${day} ${monthName}`);
+    setShowCalendar(false);
+  }, [setBillsDateFilter]);
+
+  return (
+    <Modal animationType="slide" transparent={false} visible={visible} onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#F9FAFB', paddingTop: insetTop }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#fff' }}>
+          <TouchableOpacity onPress={onClose} style={{ marginRight: 12 }}>
+            <Ionicons name="arrow-back" size={22} color="#333" />
+          </TouchableOpacity>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: '#111', flex: 1 }}>All Bills</Text>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600' }}>{billsDateFilter === 'All' ? 'All time' : billsDateFilter}</Text>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#2563EB' }}>₹{filteredTotal.toLocaleString('en-IN')}</Text>
+          </View>
+        </View>
+
+        {/* Search + Date filter bar */}
+        <View style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingHorizontal: 16, paddingVertical: 10 }}>
+          {/* Search input */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10 }}>
+            <Ionicons name="search" size={15} color="#9CA3AF" style={{ marginRight: 6 }} />
+            <TextInput
+              style={{ flex: 1, fontSize: 13, fontWeight: '600', color: '#111', padding: 0 }}
+              placeholder="Search by name or phone..."
+              placeholderTextColor="#9CA3AF"
+              value={billsSearchQuery}
+              onChangeText={setBillsSearchQuery}
+            />
+            {billsSearchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setBillsSearchQuery('')}>
+                <Ionicons name="close-circle" size={15} color="#9CA3AF" />
+              </TouchableOpacity>
+            )}
+          </View>
+          {/* Date filter row */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => { setBillsDateFilter('All'); setShowCalendar(false); }}
+              style={{
+                paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
+                backgroundColor: billsDateFilter === 'All' ? '#4F46E5' : '#F3F4F6',
+                borderWidth: 1, borderColor: billsDateFilter === 'All' ? '#4F46E5' : '#E5E7EB',
+              }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '700', color: billsDateFilter === 'All' ? '#fff' : '#6B7280' }}>All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowCalendar(c => !c)}
+              style={{
+                flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
+                backgroundColor: billsDateFilter !== 'All' ? '#EEF2FF' : '#F3F4F6',
+                borderWidth: 1, borderColor: billsDateFilter !== 'All' ? '#4F46E5' : '#E5E7EB',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="calendar-outline" size={14} color={billsDateFilter !== 'All' ? '#4F46E5' : '#9CA3AF'} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: billsDateFilter !== 'All' ? '#4F46E5' : '#6B7280' }}>
+                  {billsDateFilter !== 'All' ? billsDateFilter : 'Pick a date'}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                {billsDateFilter !== 'All' && (
+                  <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); setBillsDateFilter('All'); setShowCalendar(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="close-circle" size={14} color="#4F46E5" />
+                  </TouchableOpacity>
+                )}
+                <Ionicons name={showCalendar ? 'chevron-up' : 'chevron-down'} size={13} color={billsDateFilter !== 'All' ? '#4F46E5' : '#9CA3AF'} />
+              </View>
+            </TouchableOpacity>
+          </View>
+          {/* Inline calendar dropdown */}
+          {showCalendar && (
+            <View style={{ marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#fff', overflow: 'hidden' }}>
+              <MiniCalendar
+                selectedDate={selectedCalDate}
+                onSelect={handleCalendarSelect}
+                markedDates={markedDates}
+              />
+            </View>
+          )}
+        </View>
+
+        {/* Stats row */}
+        <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', marginBottom: 8, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '700' }}>BILLS</Text>
+            <Text style={{ fontSize: 18, fontWeight: '900', color: '#111' }}>{filteredBills.length + (billsDateFilter === 'All' ? activeSessions.length : 0)}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '700' }}>TOTAL</Text>
+            <Text style={{ fontSize: 18, fontWeight: '900', color: '#2563EB' }}>₹{filteredTotal.toLocaleString('en-IN')}</Text>
+          </View>
+          {billsDateFilter === 'All' && activeSessions.length > 0 && (
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '700' }}>PENDING</Text>
+              <Text style={{ fontSize: 18, fontWeight: '900', color: '#F97316' }}>{activeSessions.length}</Text>
+            </View>
+          )}
+        </View>
+
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          {/* Active (pending) sessions — only show on All tab */}
+          {billsDateFilter === 'All' && activeSessions.map((session) => (
+            <TouchableOpacity
+              key={session.id}
+              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#FED7AA' }}
+              onPress={() => { onClose(); openSession(session); }}
+            >
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFF7ED', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <Ionicons name="time-outline" size={20} color="#F97316" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>{session.customerName || 'Walk-in Customer'}</Text>
+                <Text style={{ fontSize: 11, color: '#F97316', fontWeight: '600', marginTop: 2 }}>🔄 Pending · {session.items.length} item{session.items.length !== 1 ? 's' : ''}</Text>
+              </View>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: '#F97316' }}>
+                ₹{session.items.reduce((s, i) => s + i.price * i.qty, 0).toLocaleString('en-IN')}
+              </Text>
+            </TouchableOpacity>
+          ))}
+
+          {/* Completed bills — NO onClose() so panel stays open */}
+          {filteredBills.length === 0 && (billsDateFilter !== 'All' || activeSessions.length === 0) ? (
+            <View style={{ alignItems: 'center', paddingVertical: 60 }}>
+              <Ionicons name="document-outline" size={48} color="#D1D5DB" />
+              <Text style={{ marginTop: 12, fontSize: 14, color: '#9CA3AF', fontWeight: '600' }}>No bills {billsDateFilter !== 'All' ? `on ${billsDateFilter}` : 'yet'}</Text>
+            </View>
+          ) : filteredBills.map((bill, index) => (
+            <TouchableOpacity
+              key={`filtered-bill-${bill.id}-${index}`}
+              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#E5E7EB' }}
+              onPress={() => openBillDetail(bill, filteredBills.length - index)}
+            >
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: '#2563EB' }}>
+                  {(bill.customerName || 'W').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>{bill.customerName || 'Walk-in Customer'}</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '500', marginTop: 2 }}>{bill.time} · {bill.date}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#22C55E' }}>₹{bill.total.toLocaleString('en-IN')}</Text>
+                <Ionicons name="chevron-forward" size={14} color="#D1D5DB" style={{ marginTop: 4 }} />
+              </View>
+            </TouchableOpacity>
+          ))}
+          <View style={{ height: 30 }} />
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+});
 
 // Main Home Screen Component
 export default function HomeScreen() {
@@ -1591,7 +1900,7 @@ const loadData = useCallback(async () => {
   const now = new Date();
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const newBill: SaleLog = {
-    id: Date.now(),
+    id: Date.now() + Math.floor(Math.random() * 10000),
     total: reviewData.total,
     time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
     date: `${now.getDate()} ${months[now.getMonth()]}`,
@@ -1631,7 +1940,7 @@ const loadData = useCallback(async () => {
     const now = new Date();
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const newBill: SaleLog = {
-      id: Date.now(),
+      id: Date.now() + Math.floor(Math.random() * 10000),
       total: amount,
       time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
       date: `${now.getDate()} ${months[now.getMonth()]}`,
@@ -1656,8 +1965,8 @@ const loadData = useCallback(async () => {
   const subStatus = getSubscriptionStatus();
 
   // View All Bills Modal
-  // Get all unique dates from salesLog
   const [billsDateFilter, setBillsDateFilter] = useState<string>('All');
+  const [billsSearchQuery, setBillsSearchQuery] = useState<string>('');
 
   const allBillDates = useMemo(() => {
     const dates = new Set<string>();
@@ -1666,121 +1975,32 @@ const loadData = useCallback(async () => {
   }, [salesLog]);
 
   const filteredBills = useMemo(() => {
-    if (billsDateFilter === 'All') return salesLog;
-    return salesLog.filter(b => b.date === billsDateFilter);
-  }, [salesLog, billsDateFilter]);
+    let bills = billsDateFilter === 'All' ? salesLog : salesLog.filter(b => b.date === billsDateFilter);
+    if (billsSearchQuery.trim()) {
+      const q = billsSearchQuery.toLowerCase();
+      bills = bills.filter(b => (b.customerName || '').toLowerCase().includes(q) || (b.phone || '').includes(q));
+    }
+    return bills;
+  }, [salesLog, billsDateFilter, billsSearchQuery]);
 
   const filteredTotal = useMemo(() => filteredBills.reduce((s, b) => s + b.total, 0), [filteredBills]);
 
-  const ViewAllBillsModalComponent = useCallback(() => (
-    <Modal animationType="slide" transparent={false} visible={viewAllBillsVisible} onRequestClose={() => setViewAllBillsVisible(false)}>
-      <View style={{ flex: 1, backgroundColor: '#F9FAFB', paddingTop: insets.top }}>
-        {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#fff' }}>
-          <TouchableOpacity onPress={() => setViewAllBillsVisible(false)} style={{ marginRight: 12 }}>
-            <Ionicons name="arrow-back" size={22} color="#333" />
-          </TouchableOpacity>
-          <Text style={{ fontSize: 18, fontWeight: '800', color: '#111', flex: 1 }}>All Bills</Text>
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600' }}>{billsDateFilter === 'All' ? 'All time' : billsDateFilter}</Text>
-            <Text style={{ fontSize: 15, fontWeight: '800', color: '#2563EB' }}>₹{filteredTotal.toLocaleString('en-IN')}</Text>
-          </View>
-        </View>
+  // ViewAllBillsModal is defined as a standalone component outside HomeScreen (see below)
 
-        {/* Date filter chips */}
-        <ScrollView
-          horizontal showsHorizontalScrollIndicator={false}
-          style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 10, gap: 8 }}
-        >
-          {allBillDates.map(date => (
-            <TouchableOpacity
-              key={date}
-              onPress={() => setBillsDateFilter(date)}
-              style={{
-                paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
-                backgroundColor: billsDateFilter === date ? '#4F46E5' : '#F3F4F6',
-                borderWidth: 1, borderColor: billsDateFilter === date ? '#4F46E5' : '#E5E7EB',
-              }}
-            >
-              <Text style={{ fontSize: 12, fontWeight: '700', color: billsDateFilter === date ? '#fff' : '#6B7280' }}>{date}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Stats row */}
-        <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', marginBottom: 8, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '700' }}>BILLS</Text>
-            <Text style={{ fontSize: 18, fontWeight: '900', color: '#111' }}>{filteredBills.length + (billsDateFilter === 'All' ? activeSessions.length : 0)}</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '700' }}>TOTAL</Text>
-            <Text style={{ fontSize: 18, fontWeight: '900', color: '#2563EB' }}>₹{filteredTotal.toLocaleString('en-IN')}</Text>
-          </View>
-          {billsDateFilter === 'All' && activeSessions.length > 0 && (
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '700' }}>PENDING</Text>
-              <Text style={{ fontSize: 18, fontWeight: '900', color: '#F97316' }}>{activeSessions.length}</Text>
-            </View>
-          )}
-        </View>
-
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-          {/* Active (pending) sessions — only show on All tab */}
-          {billsDateFilter === 'All' && activeSessions.map((session) => (
-            <TouchableOpacity
-              key={session.id}
-              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#FED7AA' }}
-              onPress={() => { setViewAllBillsVisible(false); openSession(session); }}
-            >
-              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFF7ED', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                <Ionicons name="time-outline" size={20} color="#F97316" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>{session.customerName || 'Walk-in Customer'}</Text>
-                <Text style={{ fontSize: 11, color: '#F97316', fontWeight: '600', marginTop: 2 }}>🔄 Pending · {session.items.length} item{session.items.length !== 1 ? 's' : ''}</Text>
-              </View>
-              <Text style={{ fontSize: 15, fontWeight: '800', color: '#F97316' }}>
-                ₹{session.items.reduce((s, i) => s + i.price * i.qty, 0).toLocaleString('en-IN')}
-              </Text>
-            </TouchableOpacity>
-          ))}
-
-          {/* Completed bills */}
-          {filteredBills.length === 0 && (billsDateFilter !== 'All' || activeSessions.length === 0) ? (
-            <View style={{ alignItems: 'center', paddingVertical: 60 }}>
-              <Ionicons name="document-outline" size={48} color="#D1D5DB" />
-              <Text style={{ marginTop: 12, fontSize: 14, color: '#9CA3AF', fontWeight: '600' }}>No bills {billsDateFilter !== 'All' ? `on ${billsDateFilter}` : 'yet'}</Text>
-            </View>
-          ) : filteredBills.map((bill, index) => (
-            <TouchableOpacity
-              key={bill.id || index}
-              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#E5E7EB' }}
-              onPress={() => { setViewAllBillsVisible(false); openBillDetail(bill, filteredBills.length - index); }}
-            >
-              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '800', color: '#2563EB' }}>
-                  {(bill.customerName || 'W').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
-                </Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>{bill.customerName || 'Walk-in Customer'}</Text>
-                <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '500', marginTop: 2 }}>{bill.time} · {bill.date}</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={{ fontSize: 15, fontWeight: '800', color: '#22C55E' }}>₹{bill.total.toLocaleString('en-IN')}</Text>
-                <Ionicons name="chevron-forward" size={14} color="#D1D5DB" style={{ marginTop: 4 }} />
-              </View>
-            </TouchableOpacity>
-          ))}
-          <View style={{ height: 30 }} />
-        </ScrollView>
-      </View>
-    </Modal>
-  ), [viewAllBillsVisible, insets.top, activeSessions, filteredBills, filteredTotal, allBillDates, billsDateFilter, openSession, openBillDetail, setViewAllBillsVisible]);
-
-  const ViewAllBillsModal = memo(ViewAllBillsModalComponent);
+  const viewAllBillsProps = {
+    visible: viewAllBillsVisible,
+    onClose: () => setViewAllBillsVisible(false),
+    insetTop: insets.top,
+    activeSessions,
+    filteredBills,
+    filteredTotal,
+    billsDateFilter,
+    setBillsDateFilter,
+    billsSearchQuery,
+    setBillsSearchQuery,
+    openSession,
+    openBillDetail,
+  };
 
   return (
     <View style={styles.container}>
@@ -1866,7 +2086,7 @@ const loadData = useCallback(async () => {
         total={reviewData.total}
       />
 
-      <ViewAllBillsModal />
+      <ViewAllBillsModal {...viewAllBillsProps} />
 
       {/* Header */}
       <LinearGradient
@@ -1966,7 +2186,7 @@ const loadData = useCallback(async () => {
 
             {salesLog.map((bill, index) => (
               <TouchableOpacity
-                key={bill.id || index}
+                key={`bill-${bill.id}-${index}`}
                 style={styles.billCard}
                 onPress={() => openBillDetail(bill, salesLog.length - index)}
               >

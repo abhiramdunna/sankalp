@@ -2,7 +2,7 @@
 import { db as DatabaseService } from '@/lib/database';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, memo, useMemo } from 'react';
 import {
     Alert,
     BackHandler,
@@ -92,6 +92,100 @@ const parseDate = (dateStr: string): Date => {
   return new Date(year, month, day, hours, minutes);
 };
 
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAY_NAMES = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+const MiniCalendar = memo(({
+  selectedDate, onSelect, markedDates,
+}: {
+  selectedDate: Date | null;
+  onSelect: (d: Date) => void;
+  markedDates: Set<string>;
+}) => {
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const toKey = (d: number) => {
+    const mm = String(viewMonth + 1).padStart(2, '0');
+    const dd = String(d).padStart(2, '0');
+    return `${viewYear}-${mm}-${dd}`;
+  };
+
+  const selectedKey = selectedDate
+    ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth()+1).padStart(2,'0')}-${String(selectedDate.getDate()).padStart(2,'0')}`
+    : null;
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
+    else setViewMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
+    else setViewMonth(m => m + 1);
+  };
+
+  return (
+    <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+        <TouchableOpacity onPress={prevMonth} style={{ padding: 6 }}>
+          <Ionicons name="chevron-back" size={20} color="#4F46E5" />
+        </TouchableOpacity>
+        <Text style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: '800', color: '#111' }}>
+          {MONTH_NAMES[viewMonth]} {viewYear}
+        </Text>
+        <TouchableOpacity onPress={nextMonth} style={{ padding: 6 }}>
+          <Ionicons name="chevron-forward" size={20} color="#4F46E5" />
+        </TouchableOpacity>
+      </View>
+      <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+        {DAY_NAMES.map(d => (
+          <Text key={d} style={{ flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#9CA3AF' }}>{d}</Text>
+        ))}
+      </View>
+      {Array.from({ length: Math.ceil(cells.length / 7) }, (_, row) => (
+        <View key={row} style={{ flexDirection: 'row', marginBottom: 2 }}>
+          {cells.slice(row * 7, row * 7 + 7).map((day, col) => {
+            if (!day) return <View key={col} style={{ flex: 1, height: 36 }} />;
+            const key = toKey(day);
+            const isSelected = selectedKey === key;
+            const hasData = markedDates.has(key);
+            const isToday = today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === day;
+            return (
+              <TouchableOpacity
+                key={col}
+                onPress={() => onSelect(new Date(viewYear, viewMonth, day))}
+                style={{
+                  flex: 1, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 10,
+                  backgroundColor: isSelected ? '#4F46E5' : isToday ? '#EEF2FF' : 'transparent',
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: isSelected || isToday ? '800' : '500', color: isSelected ? '#fff' : isToday ? '#4F46E5' : '#111' }}>
+                  {day}
+                </Text>
+                {hasData && !isSelected && (
+                  <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: '#4F46E5', marginTop: 1 }} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+          {cells.slice(row * 7, row * 7 + 7).length < 7 &&
+            Array.from({ length: 7 - cells.slice(row * 7, row * 7 + 7).length }, (_, i) => (
+              <View key={`pad-${i}`} style={{ flex: 1, height: 36 }} />
+            ))
+          }
+        </View>
+      ))}
+    </View>
+  );
+});
+
 // Supplier Detail Screen Component (inline)
 const SupplierDetailScreen = ({ 
   supplier, 
@@ -146,13 +240,31 @@ const SupplierDetailScreen = ({
     return Object.entries(groups).map(([title, data]) => ({ title, data }));
   })();
 
-  // History sections (date-grouped)
+  // History sections (date-grouped, bills only, no time in group key)
+  // Falls back to building from supplier.bills if transactions table is empty
   const historySections = (() => {
-    const sorted = [...supplier.transactions].sort((a, b) => b.id - a.id);
+    const billsOnly = supplier.transactions.filter(tx => tx.type === 'bill');
+
+    // If no bill transactions exist (e.g. older records only saved in bills array),
+    // synthesize them from supplier.bills so history is never blank
+    const source: Transaction[] =
+      billsOnly.length > 0
+        ? billsOnly
+        : supplier.bills.map((b) => ({
+            id: b.id,
+            date: b.date,
+            type: 'bill' as const,
+            billId: b.id,
+            billName: b.name,
+            amount: b.amount,
+          }));
+
+    const sorted = [...source].sort((a, b) => b.id - a.id);
     const groups: Record<string, Transaction[]> = {};
     sorted.forEach((tx) => {
-      if (!groups[tx.date]) groups[tx.date] = [];
-      groups[tx.date].push(tx);
+      const dateOnly = tx.date.split(' ').slice(0, 3).join(' ');
+      if (!groups[dateOnly]) groups[dateOnly] = [];
+      groups[dateOnly].push(tx);
     });
     return Object.entries(groups).map(([title, data]) => ({ title, data }));
   })();
@@ -316,7 +428,7 @@ const SupplierDetailScreen = ({
             }}
           >
             <Ionicons name="cash-outline" size={17} color="#2563EB" style={{ marginRight: 6 }} />
-            <Text style={styles.outlineBtnText}>Record Payment</Text>
+            <Text style={styles.outlineBtnText}>Pay Bill</Text>
           </TouchableOpacity>
         </View>
 
@@ -413,112 +525,122 @@ const SupplierDetailScreen = ({
 
       {/* Add Bill Modal */}
       <Modal visible={billModal} transparent animationType="slide" onRequestClose={() => setBillModal(false)}>
-        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setBillModal(false)} />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
-          <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>Add Bill</Text>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setBillModal(false)} />
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Add Bill</Text>
 
-          <Text style={styles.fieldLabel}>Bill Name *</Text>
-          <TextInput
-            style={styles.fieldInput}
-            placeholder="e.g. Tomatoes, Weekly Supply…"
-            placeholderTextColor="#CBD5E1"
-            value={billForm.name}
-            onChangeText={(v) => setBillForm((p) => ({ ...p, name: v }))}
-          />
+            <Text style={styles.fieldLabel}>Bill Name *</Text>
+            <TextInput
+              style={styles.fieldInput}
+              placeholder=""
+              placeholderTextColor="#CBD5E1"
+              value={billForm.name}
+              onChangeText={(v) => setBillForm((p) => ({ ...p, name: v }))}
+            />
 
-          <Text style={styles.fieldLabel}>Bill Amount *</Text>
-          <TextInput
-            style={styles.fieldInput}
-            placeholder="₹ 0"
-            placeholderTextColor="#CBD5E1"
-            value={billForm.amount}
-            onChangeText={(v) => setBillForm((p) => ({ ...p, amount: v }))}
-            keyboardType="numeric"
-          />
+            <Text style={styles.fieldLabel}>Bill Amount *</Text>
+            <TextInput
+              style={styles.fieldInput}
+              placeholder="₹ 0"
+              placeholderTextColor="#CBD5E1"
+              value={billForm.amount}
+              onChangeText={(v) => setBillForm((p) => ({ ...p, amount: v }))}
+              keyboardType="numeric"
+            />
 
-          <Text style={styles.fieldLabel}>Items (Optional)</Text>
-          <TextInput
-            style={[styles.fieldInput, { height: 80, textAlignVertical: 'top' }]}
-            placeholder="Enter items, one per line&#10;e.g.&#10;Tomatoes - 2kg&#10;Onions - 1kg"
-            placeholderTextColor="#CBD5E1"
-            value={billForm.items}
-            onChangeText={(v) => setBillForm((p) => ({ ...p, items: v }))}
-            multiline
-          />
+            <Text style={styles.fieldLabel}>Items (Optional)</Text>
+            <TextInput
+              style={[styles.fieldInput, { height: 80, textAlignVertical: 'top' }]}
+              placeholder=""
+              placeholderTextColor="#CBD5E1"
+              value={billForm.items}
+              onChangeText={(v) => setBillForm((p) => ({ ...p, items: v }))}
+              multiline
+            />
 
-          <TouchableOpacity
-            style={[styles.sheetPrimaryBtn, (!billForm.name.trim() || !billForm.amount) && { opacity: 0.4 }]}
-            onPress={addBill}
-          >
-            <Text style={styles.sheetPrimaryBtnText}>Add Bill</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setBillModal(false)}>
-            <Text style={styles.sheetCancelText}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={[styles.sheetPrimaryBtn, (!billForm.name.trim() || !billForm.amount) && { opacity: 0.4 }]}
+              onPress={addBill}
+            >
+              <Text style={styles.sheetPrimaryBtnText}>Add Bill</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setBillModal(false)}>
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* Record Payment Modal */}
+      {/* Pay Bill Modal */}
       <Modal visible={payModal} transparent animationType="slide" onRequestClose={() => setPayModal(false)}>
-        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setPayModal(false)} />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
-          <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>Record Payment</Text>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setPayModal(false)} />
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Pay Bill</Text>
 
-          <Text style={styles.fieldLabel}>Select Bill</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-            {pendingBills.map((b) => {
-              const rem = b.amount - b.paid;
-              const selected = payForm.billId === b.id;
-              return (
-                <TouchableOpacity
-                  key={b.id}
-                  style={[styles.billChip, selected && styles.billChipSelected]}
-                  onPress={() => setPayForm((p) => ({ ...p, billId: b.id }))}
-                >
-                  <Text style={[styles.billChipName, selected && { color: '#2563EB' }]}>{b.name}</Text>
-                  <Text style={[styles.billChipAmt, selected && { color: '#EF4444' }]}>
-                    {fmt(rem)} due
+            <Text style={styles.fieldLabel}>Select Bill</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+              {pendingBills.map((b) => {
+                const rem = b.amount - b.paid;
+                const selected = payForm.billId === b.id;
+                return (
+                  <TouchableOpacity
+                    key={b.id}
+                    style={[styles.billChip, selected && styles.billChipSelected]}
+                    onPress={() => setPayForm((p) => ({ ...p, billId: b.id }))}
+                  >
+                    <Text style={[styles.billChipName, selected && { color: '#2563EB' }]}>{b.name}</Text>
+                    <Text style={[styles.billChipAmt, selected && { color: '#EF4444' }]}>
+                      {fmt(rem)} due
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {payForm.billId > 0 && (() => {
+              const selBill = supplier.bills.find((b) => b.id === payForm.billId);
+              return selBill ? (
+                <View style={styles.payBillInfo}>
+                  <Text style={styles.payBillInfoText}>
+                    Max payable: <Text style={{ color: '#EF4444', fontWeight: '700' }}>
+                      {fmt(selBill.amount - selBill.paid)}
+                    </Text>
                   </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+                </View>
+              ) : null;
+            })()}
 
-          {payForm.billId > 0 && (() => {
-            const selBill = supplier.bills.find((b) => b.id === payForm.billId);
-            return selBill ? (
-              <View style={styles.payBillInfo}>
-                <Text style={styles.payBillInfoText}>
-                  Max payable: <Text style={{ color: '#EF4444', fontWeight: '700' }}>
-                    {fmt(selBill.amount - selBill.paid)}
-                  </Text>
-                </Text>
-              </View>
-            ) : null;
-          })()}
+            <Text style={styles.fieldLabel}>Amount</Text>
+            <TextInput
+              style={styles.fieldInput}
+              placeholder="₹ 0"
+              placeholderTextColor="#CBD5E1"
+              value={payForm.amount}
+              onChangeText={(v) => setPayForm((p) => ({ ...p, amount: v }))}
+              keyboardType="numeric"
+            />
 
-          <Text style={styles.fieldLabel}>Amount</Text>
-          <TextInput
-            style={styles.fieldInput}
-            placeholder="₹ 0"
-            placeholderTextColor="#CBD5E1"
-            value={payForm.amount}
-            onChangeText={(v) => setPayForm((p) => ({ ...p, amount: v }))}
-            keyboardType="numeric"
-          />
-
-          <TouchableOpacity
-            style={[styles.sheetPrimaryBtn, (!payForm.billId || !payForm.amount) && { opacity: 0.4 }]}
-            onPress={recordPayment}
-          >
-            <Text style={styles.sheetPrimaryBtnText}>Confirm Payment</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setPayModal(false)}>
-            <Text style={styles.sheetCancelText}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={[styles.sheetPrimaryBtn, (!payForm.billId || !payForm.amount) && { opacity: 0.4 }]}
+              onPress={recordPayment}
+            >
+              <Text style={styles.sheetPrimaryBtnText}>Confirm Payment</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setPayModal(false)}>
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Cleared Bills Modal */}
@@ -609,51 +731,18 @@ const SupplierDetailScreen = ({
                             index < section.data.length - 1 && styles.historyModalItemBorder,
                           ]}
                         >
-                          <View
-                            style={[
-                              styles.historyModalIcon,
-                              {
-                                backgroundColor:
-                                  tx.type === 'payment' ? '#F0FDF4' : '#FFF7ED',
-                              },
-                            ]}
-                          >
-                            <Ionicons
-                              name={tx.type === 'payment' ? 'checkmark-circle' : 'document-text'}
-                              size={20}
-                              color={tx.type === 'payment' ? '#16A34A' : '#F97316'}
-                            />
+                          <View style={[styles.historyModalIcon, { backgroundColor: '#FFF7ED' }]}>
+                            <Ionicons name="document-text" size={20} color="#F97316" />
                           </View>
 
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.historyModalItemTitle}>
-                              {tx.type === 'payment' ? 'Payment' : 'Bill Added'}
-                            </Text>
+                            <Text style={styles.historyModalItemTitle}>Bill Added</Text>
                             <Text style={styles.historyModalItemBillName}>{tx.billName}</Text>
-                            <Text style={styles.historyModalItemSub}>{tx.date}</Text>
                           </View>
 
                           <View style={{ alignItems: 'flex-end' }}>
-                            <Text
-                              style={[
-                                styles.historyModalAmount,
-                                {
-                                  color: tx.type === 'payment' ? '#16A34A' : '#0F172A',
-                                },
-                              ]}
-                            >
-                              {tx.type === 'payment' ? '+' : ''}
+                            <Text style={[styles.historyModalAmount, { color: '#0F172A' }]}>
                               {fmt(tx.amount)}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.historyModalStatus,
-                                {
-                                  color: tx.type === 'payment' ? '#16A34A' : '#0F172A',
-                                },
-                              ]}
-                            >
-                              {tx.type === 'payment' ? 'Paid' : 'Bill Amount'}
                             </Text>
                           </View>
                         </View>
@@ -682,6 +771,184 @@ const SupplierDetailScreen = ({
   );
 };
 
+// Paid Bills Full Screen
+const PaidBillsScreen = memo(({
+  suppliers, txDateFilter, setTxDateFilter, insetTop, onClose,
+}: {
+  suppliers: Supplier[];
+  txDateFilter: string;
+  setTxDateFilter: (d: string) => void;
+  insetTop: number;
+  onClose: () => void;
+}) => {
+  const [showCalendar, setShowCalendar] = useState(false);
+
+  // Collect only payment transactions
+  const allPayments = useMemo(() => {
+    const list: (Transaction & { supplierName: string; supplierId: number })[] = [];
+    suppliers.forEach(s => {
+      s.transactions.filter(tx => tx.type === 'payment').forEach(tx => {
+        list.push({ ...tx, supplierName: s.name, supplierId: s.id });
+      });
+    });
+    return list.sort((a, b) => b.id - a.id);
+  }, [suppliers]);
+
+  // Parse date string "3 May 2025 14:30" → "3 May 2025"
+  const dayKey = (dateStr: string) => dateStr.split(' ').slice(0, 3).join(' ');
+
+  // Filtered list
+  const filtered = useMemo(() =>
+    txDateFilter === 'All' ? allPayments : allPayments.filter(tx => dayKey(tx.date) === txDateFilter),
+    [allPayments, txDateFilter]
+  );
+
+  const filteredTotal = useMemo(() => filtered.reduce((s, tx) => s + tx.amount, 0), [filtered]);
+
+  // Group by date
+  const groups = useMemo(() => {
+    const g: Record<string, typeof filtered> = {};
+    filtered.forEach(tx => {
+      const d = dayKey(tx.date);
+      if (!g[d]) g[d] = [];
+      g[d].push(tx);
+    });
+    return Object.entries(g);
+  }, [filtered]);
+
+  // Marked dates for calendar dots
+  const markedDates = useMemo(() => {
+    const s = new Set<string>();
+    allPayments.forEach(tx => {
+      const parts = tx.date.split(' ');
+      const months: Record<string,number> = { Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11 };
+      const d = parseInt(parts[0]);
+      const m = months[parts[1]];
+      const y = parseInt(parts[2]);
+      if (!isNaN(d) && m !== undefined && !isNaN(y)) {
+        s.add(`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`);
+      }
+    });
+    return s;
+  }, [allPayments]);
+
+  const selectedCalDate = useMemo((): Date | null => {
+    if (txDateFilter === 'All') return null;
+    const parts = txDateFilter.split(' ');
+    const months: Record<string,number> = { Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11 };
+    const d = parseInt(parts[0]);
+    const m = months[parts[1]];
+    const y = parseInt(parts[2]);
+    if (!isNaN(d) && m !== undefined && !isNaN(y)) return new Date(y, m, d);
+    return null;
+  }, [txDateFilter]);
+
+  const handleCalendarSelect = useCallback((d: Date) => {
+    const day = d.getDate();
+    const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+    const year = d.getFullYear();
+    setTxDateFilter(`${day} ${monthName} ${year}`);
+    setShowCalendar(false);
+  }, [setTxDateFilter]);
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#F9FAFB', paddingTop: insetTop }}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#fff' }}>
+        <TouchableOpacity onPress={onClose} style={{ marginRight: 12 }}>
+          <Ionicons name="arrow-back" size={22} color="#333" />
+        </TouchableOpacity>
+        <Text style={{ fontSize: 18, fontWeight: '800', color: '#111', flex: 1 }}>Paid Bills</Text>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600' }}>{txDateFilter === 'All' ? 'All time' : txDateFilter}</Text>
+          <Text style={{ fontSize: 15, fontWeight: '800', color: '#16A34A' }}>{fmt(filteredTotal)}</Text>
+        </View>
+      </View>
+
+      {/* Date filter bar */}
+      <View style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingHorizontal: 16, paddingVertical: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            onPress={() => { setTxDateFilter('All'); setShowCalendar(false); }}
+            style={{
+              paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
+              backgroundColor: txDateFilter === 'All' ? '#4F46E5' : '#F3F4F6',
+              borderWidth: 1, borderColor: txDateFilter === 'All' ? '#4F46E5' : '#E5E7EB',
+            }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '700', color: txDateFilter === 'All' ? '#fff' : '#6B7280' }}>All</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setShowCalendar(c => !c)}
+            style={{
+              flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+              paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
+              backgroundColor: txDateFilter !== 'All' ? '#EEF2FF' : '#F3F4F6',
+              borderWidth: 1, borderColor: txDateFilter !== 'All' ? '#4F46E5' : '#E5E7EB',
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="calendar-outline" size={14} color={txDateFilter !== 'All' ? '#4F46E5' : '#9CA3AF'} />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: txDateFilter !== 'All' ? '#4F46E5' : '#6B7280' }}>
+                {txDateFilter !== 'All' ? txDateFilter : 'Pick a date'}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              {txDateFilter !== 'All' && (
+                <TouchableOpacity onPress={() => { setTxDateFilter('All'); setShowCalendar(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={14} color="#4F46E5" />
+                </TouchableOpacity>
+              )}
+              <Ionicons name={showCalendar ? 'chevron-up' : 'chevron-down'} size={13} color={txDateFilter !== 'All' ? '#4F46E5' : '#9CA3AF'} />
+            </View>
+          </TouchableOpacity>
+        </View>
+        {showCalendar && (
+          <View style={{ marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#fff', overflow: 'hidden' }}>
+            <MiniCalendar selectedDate={selectedCalDate} onSelect={handleCalendarSelect} markedDates={markedDates} />
+          </View>
+        )}
+      </View>
+
+
+      {/* List */}
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        {groups.length > 0 ? groups.map(([date, txList]) => (
+          <View key={date}>
+            <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 }}>
+              <Text style={{ fontSize: 12, fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5 }}>{date}</Text>
+            </View>
+            {txList.map((tx, i) => {
+              const accent = getAvatarColor(tx.supplierId);
+              return (
+                <View key={`${tx.id}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#E5E7EB' }}>
+                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#F0FDF4', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                    <Ionicons name="checkmark-circle" size={22} color="#16A34A" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A' }}>{tx.supplierName}</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#64748B', marginTop: 1 }}>{tx.billName}</Text>
+                  </View>
+                  <Text style={{ fontSize: 16, fontWeight: '900', color: '#16A34A' }}>{fmt(tx.amount)}</Text>
+                </View>
+              );
+            })}
+          </View>
+        )) : (
+          <View style={{ alignItems: 'center', paddingVertical: 80 }}>
+            <Ionicons name="checkmark-done-circle-outline" size={56} color="#D1D5DB" />
+            <Text style={{ fontSize: 16, fontWeight: '800', color: '#9CA3AF', marginTop: 16 }}>No payments found</Text>
+            {txDateFilter !== 'All' && (
+              <Text style={{ fontSize: 13, color: '#9CA3AF', marginTop: 6 }}>No payments on {txDateFilter}</Text>
+            )}
+          </View>
+        )}
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
+  );
+});
+
 // Main Suppliers Screen
 export default function SuppliersScreen() {
   const router = useRouter();
@@ -690,6 +957,7 @@ export default function SuppliersScreen() {
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [addSupModalVisible, setAddSupModalVisible] = useState(false);
   const [paymentHistoryModalVisible, setPaymentHistoryModalVisible] = useState(false);
+  const [txDateFilter, setTxDateFilter] = useState<string>('All');
   const [newSupplierName, setNewSupplierName] = useState('');
   
   const [newSupplierCategory, setNewSupplierCategory] = useState('');
@@ -723,6 +991,7 @@ const loadSuppliers = async () => {
     setSuppliers(updatedSuppliers);
   } catch (error) {
     console.error('Error saving suppliers:', error);
+    Alert.alert('Save Failed', 'Could not save changes. Please try again.'); // ✅ surface the error
   }
 };
 
@@ -1056,100 +1325,15 @@ const loadSuppliers = async () => {
       {/* Bottom Navigation */}
       
 
-      {/* Payment History Modal */}
-      <Modal visible={paymentHistoryModalVisible} transparent animationType="slide" onRequestClose={() => setPaymentHistoryModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.clearedBillsSheet}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>All Payment History</Text>
-              <TouchableOpacity onPress={() => setPaymentHistoryModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#0F172A" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
-              <View style={styles.historyModalContainer}>
-                {(() => {
-                  // Group all payments by supplier
-                  const allPayments: Record<string, { supplier: Supplier; transactions: Transaction[] }> = {};
-                  
-                  suppliers.forEach((supplier) => {
-                    const paymentTransactions = supplier.transactions.filter((tx) => tx.type === 'payment');
-                    if (paymentTransactions.length > 0) {
-                      allPayments[supplier.name] = {
-                        supplier,
-                        transactions: paymentTransactions.sort((a, b) => b.id - a.id),
-                      };
-                    }
-                  });
-
-                  const supplierNames = Object.keys(allPayments).sort();
-                  
-                  return supplierNames.length > 0 ? (
-                    supplierNames.map((supplierName) => {
-                      const { supplier, transactions } = allPayments[supplierName];
-                      const accentColor = getAvatarColor(supplier.id);
-                      
-                      return (
-                        <View key={supplier.id} style={{ marginBottom: 20 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingHorizontal: 20 }}>
-                            <View style={[styles.supplierAvatarSmall, { backgroundColor: accentColor + '22' }]}>
-                              <Text style={[styles.supplierAvatarSmallText, { color: accentColor }]}>
-                                {getInitials(supplier.name)}
-                              </Text>
-                            </View>
-                            <Text style={styles.paymentSupplierName}>{supplier.name}</Text>
-                          </View>
-                          {transactions.map((tx, index) => (
-                            <View key={tx.id} style={{ paddingHorizontal: 12 }}>
-                              <View
-                                style={[
-                                  styles.historyModalItem,
-                                  index < transactions.length - 1 && styles.historyModalItemBorder,
-                                ]}
-                              >
-                                <View style={[styles.historyModalIcon, { backgroundColor: '#F0FDF4' }]}>
-                                  <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
-                                </View>
-
-                                <View style={{ flex: 1 }}>
-                                  <Text style={styles.historyModalItemTitle}>Payment Received</Text>
-                                  <Text style={styles.historyModalItemBillName}>{tx.billName}</Text>
-                                  <Text style={styles.historyModalItemSub}>{tx.date}</Text>
-                                </View>
-
-                                <View style={{ alignItems: 'flex-end' }}>
-                                  <Text style={[styles.historyModalAmount, { color: '#16A34A' }]}>
-                                    +{fmt(tx.amount)}
-                                  </Text>
-                                  <Text style={[styles.historyModalStatus, { color: '#16A34A' }]}>
-                                    Paid
-                                  </Text>
-                                </View>
-                              </View>
-                            </View>
-                          ))}
-                        </View>
-                      );
-                    })
-                  ) : (
-                    <View style={styles.emptyCleared}>
-                      <Text style={styles.emptyIcon}>💳</Text>
-                      <Text style={styles.emptyText}>No payments recorded yet</Text>
-                    </View>
-                  );
-                })()}
-              </View>
-            </ScrollView>
-
-            <TouchableOpacity 
-              style={styles.clearedBillsCloseBtn}
-              onPress={() => setPaymentHistoryModalVisible(false)}
-            >
-              <Text style={styles.clearedBillsCloseBtnText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+      {/* Paid Bills - Full Screen Modal */}
+      <Modal visible={paymentHistoryModalVisible} transparent={false} animationType="slide" onRequestClose={() => { setPaymentHistoryModalVisible(false); setTxDateFilter('All'); }} statusBarTranslucent>
+        <PaidBillsScreen
+          suppliers={suppliers}
+          txDateFilter={txDateFilter}
+          setTxDateFilter={setTxDateFilter}
+          insetTop={insets.top}
+          onClose={() => { setPaymentHistoryModalVisible(false); setTxDateFilter('All'); }}
+        />
       </Modal>
     </View>
   );

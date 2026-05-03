@@ -57,6 +57,8 @@ export interface Transaction {
   billId: number;
   billName: string;
   amount: number;
+  supplierId?: number;
+  supplierName?: string;
 }
 
 export interface Supplier {
@@ -87,10 +89,7 @@ class DatabaseService {
   ========================= */
 
   async saveAuthSession(session: any) {
-    await AsyncStorage.setItem(
-      'supabase_session',
-      JSON.stringify(session)
-    );
+    await AsyncStorage.setItem('supabase_session', JSON.stringify(session));
   }
 
   async loadAuthSession() {
@@ -111,10 +110,7 @@ class DatabaseService {
 
     const { error } = await supabase
       .from('profiles')
-      .upsert({
-        id: userId,
-        ...profileData,
-      });
+      .upsert({ id: userId, ...profileData });
 
     if (error) throw error;
   }
@@ -151,7 +147,7 @@ class DatabaseService {
 
       return (
         data?.map((p) => ({
-          id: Date.now() + Math.floor(Math.random() * 1000),
+          id: p.id,
           name: p.name,
           price: Number(p.price),
           unit: p.unit,
@@ -168,10 +164,7 @@ class DatabaseService {
     try {
       const userId = this.getCurrentUserId();
 
-      await supabase
-        .from('user_products')
-        .delete()
-        .eq('user_id', userId);
+      await supabase.from('user_products').delete().eq('user_id', userId);
 
       if (products.length === 0) return;
 
@@ -183,9 +176,7 @@ class DatabaseService {
         sales: p.sales || 0,
       }));
 
-      const { error } = await supabase
-        .from('user_products')
-        .insert(formattedProducts);
+      const { error } = await supabase.from('user_products').insert(formattedProducts);
 
       if (error) throw error;
     } catch (error) {
@@ -211,7 +202,7 @@ class DatabaseService {
 
       return (
         data?.map((sale) => ({
-          id: Date.now() + Math.floor(Math.random() * 1000),
+          id: sale.id,
           total: Number(sale.total),
           time: sale.time,
           date: sale.date || '',
@@ -226,24 +217,19 @@ class DatabaseService {
     }
   }
 
-  async addSaleLog(
-    saleRecord: SaleLog,
-    existingSales?: SaleLog[]
-  ) {
+  async addSaleLog(saleRecord: SaleLog, existingSales?: SaleLog[]) {
     try {
       const userId = this.getCurrentUserId();
 
-      const { error } = await supabase
-        .from('user_sales')
-        .insert({
-          user_id: userId,
-          total: saleRecord.total,
-          time: saleRecord.time,
-          date: saleRecord.date || '',
-          items: saleRecord.items,
-          customer_name: saleRecord.customerName,
-          phone: saleRecord.phone,
-        });
+      const { error } = await supabase.from('user_sales').insert({
+        user_id: userId,
+        total: saleRecord.total,
+        time: saleRecord.time,
+        date: saleRecord.date || '',
+        items: saleRecord.items,
+        customer_name: saleRecord.customerName,
+        phone: saleRecord.phone,
+      });
 
       if (error) throw error;
     } catch (error) {
@@ -259,23 +245,49 @@ class DatabaseService {
     try {
       const userId = this.getCurrentUserId();
 
-      const { data, error } = await supabase
+      // Load suppliers
+      const { data: suppliersData, error: suppliersError } = await supabase
         .from('user_suppliers')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
+      if (suppliersError) throw suppliersError;
 
-      return (
-        data?.map((supplier) => ({
-          id: Date.now() + Math.floor(Math.random() * 1000),
-          name: supplier.name,
-          category: supplier.category,
-          bills: supplier.bills || [],
-          transactions: supplier.transactions || [],
-        })) || []
-      );
+      if (!suppliersData || suppliersData.length === 0) return [];
+
+      // Load all transactions for this user in one query
+      const { data: txData, error: txError } = await supabase
+        .from('user_supplier_transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
+
+      if (txError) throw txError;
+
+      // Group transactions by supplier_id
+      const txBySupplier: Record<number, Transaction[]> = {};
+      (txData || []).forEach((tx) => {
+        if (!txBySupplier[tx.supplier_id]) txBySupplier[tx.supplier_id] = [];
+        txBySupplier[tx.supplier_id].push({
+          id: tx.id,
+          date: tx.date,
+          type: tx.type,
+          billId: tx.bill_id,
+          billName: tx.bill_name,
+          amount: Number(tx.amount),
+          supplierId: tx.supplier_id,
+          supplierName: tx.supplier_name,
+        });
+      });
+
+      return suppliersData.map((s) => ({
+        id: s.id,
+        name: s.name,
+        category: s.category,
+        bills: s.bills || [],
+        transactions: txBySupplier[s.id] || [],
+      }));
     } catch (error) {
       console.log('loadSuppliers error:', error);
       return [];
@@ -286,28 +298,177 @@ class DatabaseService {
     try {
       const userId = this.getCurrentUserId();
 
-      await supabase
+      // Get existing supplier rows so we can upsert by id
+      const { data: existing, error: fetchError } = await supabase
         .from('user_suppliers')
-        .delete()
+        .select('id')
         .eq('user_id', userId);
 
-      if (suppliers.length === 0) return;
+      if (fetchError) throw fetchError;
 
-      const formattedSuppliers = suppliers.map((s) => ({
-        user_id: userId,
-        name: s.name,
-        category: s.category,
-        bills: s.bills,
-        transactions: s.transactions,
-      }));
+      const existingIds = new Set((existing || []).map((r: any) => r.id));
 
-      const { error } = await supabase
-        .from('user_suppliers')
-        .insert(formattedSuppliers);
+      for (const s of suppliers) {
+        if (existingIds.has(s.id)) {
+          // Update existing supplier (bills only — transactions handled separately)
+          const { error } = await supabase
+            .from('user_suppliers')
+            .update({
+              name: s.name,
+              category: s.category,
+              bills: s.bills,
+            })
+            .eq('id', s.id)
+            .eq('user_id', userId);
 
-      if (error) throw error;
+          if (error) throw error;
+        } else {
+          // Insert new supplier
+          const { data: inserted, error } = await supabase
+            .from('user_suppliers')
+            .insert({
+              user_id: userId,
+              name: s.name,
+              category: s.category,
+              bills: s.bills,
+            })
+            .select('id')
+            .single();
+
+          if (error) throw error;
+
+          // Update the in-memory supplier id to match the DB-generated id
+          s.id = inserted.id;
+        }
+      }
+
+      // Delete suppliers that were removed
+      const currentIds = suppliers.map((s) => s.id);
+      const toDelete = [...existingIds].filter((id) => !currentIds.includes(id));
+      if (toDelete.length > 0) {
+        const { error } = await supabase
+          .from('user_suppliers')
+          .delete()
+          .in('id', toDelete)
+          .eq('user_id', userId);
+
+        if (error) throw error;
+      }
     } catch (error) {
       console.log('saveSuppliers error:', error);
+      throw error;
+    }
+  }
+
+  // Called when a bill is added to a supplier
+  async addSupplierBill(supplier: Supplier, bill: Bill) {
+    try {
+      const userId = this.getCurrentUserId();
+
+      // Update the supplier's bills array in DB
+      const { error: billError } = await supabase
+        .from('user_suppliers')
+        .update({ bills: supplier.bills })
+        .eq('id', supplier.id)
+        .eq('user_id', userId);
+
+      if (billError) throw billError;
+
+      // Insert the transaction row
+      const { data: inserted, error: txError } = await supabase
+        .from('user_supplier_transactions')
+        .insert({
+          user_id: userId,
+          supplier_id: supplier.id,
+          supplier_name: supplier.name,
+          type: 'bill',
+          bill_id: bill.id,
+          bill_name: bill.name,
+          amount: bill.amount,
+          date: bill.date,
+        })
+        .select('id')
+        .single();
+
+      if (txError) throw txError;
+
+      return inserted.id; // return the real transaction id
+    } catch (error) {
+      console.log('addSupplierBill error:', error);
+      throw error;
+    }
+  }
+
+  // Called when a payment is recorded against a bill
+  async addSupplierPayment(
+    supplier: Supplier,
+    bill: Bill,
+    amount: number,
+    date: string
+  ) {
+    try {
+      const userId = this.getCurrentUserId();
+
+      // Update the supplier's bills array (paid amount updated)
+      const { error: billError } = await supabase
+        .from('user_suppliers')
+        .update({ bills: supplier.bills })
+        .eq('id', supplier.id)
+        .eq('user_id', userId);
+
+      if (billError) throw billError;
+
+      // Insert the payment transaction row
+      const { data: inserted, error: txError } = await supabase
+        .from('user_supplier_transactions')
+        .insert({
+          user_id: userId,
+          supplier_id: supplier.id,
+          supplier_name: supplier.name,
+          type: 'payment',
+          bill_id: bill.id,
+          bill_name: bill.name,
+          amount,
+          date,
+        })
+        .select('id')
+        .single();
+
+      if (txError) throw txError;
+
+      return inserted.id;
+    } catch (error) {
+      console.log('addSupplierPayment error:', error);
+      throw error;
+    }
+  }
+
+  // Load all payment transactions across all suppliers (for payment history screen)
+  async loadAllSupplierTransactions(): Promise<Transaction[]> {
+    try {
+      const userId = this.getCurrentUserId();
+
+      const { data, error } = await supabase
+        .from('user_supplier_transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      return (data || []).map((tx) => ({
+        id: tx.id,
+        date: tx.date,
+        type: tx.type,
+        billId: tx.bill_id,
+        billName: tx.bill_name,
+        amount: Number(tx.amount),
+        supplierId: tx.supplier_id,
+        supplierName: tx.supplier_name,
+      }));
+    } catch (error) {
+      console.log('loadAllSupplierTransactions error:', error);
+      return [];
     }
   }
 
@@ -329,7 +490,7 @@ class DatabaseService {
 
       return (
         data?.map((session) => ({
-          id: Date.now() + Math.floor(Math.random() * 1000),
+          id: session.id,
           session_id: session.session_id,
           customerName: session.customer_name,
           phone: session.phone,
@@ -347,10 +508,7 @@ class DatabaseService {
     try {
       const userId = this.getCurrentUserId();
 
-      await supabase
-        .from('user_sessions')
-        .delete()
-        .eq('user_id', userId);
+      await supabase.from('user_sessions').delete().eq('user_id', userId);
 
       if (sessions.length === 0) return;
 
@@ -363,9 +521,7 @@ class DatabaseService {
         np_val: s.npVal,
       }));
 
-      const { error } = await supabase
-        .from('user_sessions')
-        .insert(formattedSessions);
+      const { error } = await supabase.from('user_sessions').insert(formattedSessions);
 
       if (error) throw error;
     } catch (error) {
@@ -386,16 +542,11 @@ class DatabaseService {
   }
 
   async saveSubscriptionStatus(status: boolean) {
-    await AsyncStorage.setItem(
-      'isSubscribed',
-      status.toString()
-    );
+    await AsyncStorage.setItem('isSubscribed', status.toString());
   }
 
   async loadSubscriptionStatus() {
-    const status = await AsyncStorage.getItem(
-      'isSubscribed'
-    );
+    const status = await AsyncStorage.getItem('isSubscribed');
     return status === 'true';
   }
 
