@@ -555,16 +555,26 @@ const [availableProducts, setAvailableProducts] = useState<{ name: string; price
 
  
 
+// analytics.tsx - Update the useFocusEffect
+
 useFocusEffect(
   useCallback(() => {
+    let isMounted = true;
+    
     (async () => {
       try {
+        setLoading(true);
+        console.log('🔄 Loading sales data...');
+        
         const storedSales = await DatabaseService.loadSalesLog();
-        setSalesLog(storedSales || []);
+        console.log('📊 Loaded sales:', storedSales?.length || 0, 'records');
+        
+        if (isMounted) {
+          setSalesLog(storedSales || []);
+        }
 
         const storedProducts = await DatabaseService.loadProducts();
-
-        if (Array.isArray(storedProducts)) {
+        if (isMounted && Array.isArray(storedProducts)) {
           setAvailableProducts(
             storedProducts.map((p: any) => ({
               name: p.name,
@@ -573,48 +583,66 @@ useFocusEffect(
           );
         }
       } catch (e) {
-        console.log(e);
-        setSalesLog([]);
+        console.error('❌ Error loading analytics data:', e);
+        if (isMounted) {
+          setSalesLog([]);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     })();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [])
 );
 
-  // Helper: Filter sales by date range
-  const filterSalesByDateRange = (sales: SaleLog[], start: Date, end: Date) => {
-    const startOfDay = new Date(start);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(end);
-    endOfDay.setHours(23, 59, 59, 999);
+  
 
-    const months: Record<string, number> = {
-      'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
-      'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
-    };
+  // analytics.tsx - Fix the date filtering
 
-    return sales.filter(bill => {
-      if (!bill.date) return false;
-      // Parse date string like "21 Apr" — stored without year, so infer the year
-      // by trying current year first, then fall back to previous year
-      const parts = bill.date.trim().split(' ');
-      if (parts.length < 2) return false;
-      const day = parseInt(parts[0]);
-      const monthStr = parts[1];
-      if (isNaN(day) || !(monthStr in months)) return false;
+const filterSalesByDateRange = (sales: SaleLog[], start: Date, end: Date) => {
+  const startOfDay = new Date(start);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(end);
+  endOfDay.setHours(23, 59, 59, 999);
 
-      const monthNum = months[monthStr];
-      const currentYear = new Date().getFullYear();
-      // Try current year first; if that puts the date in the future, try last year
-      let billDate = new Date(currentYear, monthNum, day);
-      if (billDate > endOfDay) {
-        billDate = new Date(currentYear - 1, monthNum, day);
-      }
-
-      return billDate >= startOfDay && billDate <= endOfDay;
-    });
+  const months: Record<string, number> = {
+    'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+    'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
   };
+
+  return sales.filter(bill => {
+    if (!bill.date) return false;
+    
+    // Parse date string like "21 Apr"
+    const parts = bill.date.trim().split(' ');
+    if (parts.length < 2) return false;
+    
+    const day = parseInt(parts[0]);
+    const monthStr = parts[1];
+    if (isNaN(day) || !(monthStr in months)) return false;
+
+    const monthNum = months[monthStr];
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth();
+    
+    // Handle year logic - if month > current month, use previous year
+    let billYear = currentYear;
+    if (monthNum > currentMonth) {
+      billYear = currentYear - 1;
+    }
+    
+    const billDate = new Date(billYear, monthNum, day);
+    
+    console.log(`Checking bill date: ${bill.date} -> ${billDate.toISOString()} against range: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
+    
+    return billDate >= startOfDay && billDate <= endOfDay;
+  });
+};
 
   // Generate chart data for selected date range
   const generateChartData = (sales: SaleLog[], start: Date, end: Date) => {

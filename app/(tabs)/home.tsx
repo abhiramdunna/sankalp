@@ -7,7 +7,7 @@ import { db as DatabaseService } from '@/lib/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState, memo, useRef } from 'react';
+import React, { useCallback, useEffect, useState, memo, useRef, useMemo } from 'react';
 import {
   Alert,
   Animated,
@@ -563,6 +563,695 @@ const SwipeableOrderButton = memo(({
   );
 });
 
+// Bill Detail Modal — shows full bill info including phone number
+const BillDetailModal = memo(({
+  visible,
+  bill,
+  billNumber,
+  onClose,
+}: {
+  visible: boolean;
+  bill: SaleLog | null;
+  billNumber: number;
+  onClose: () => void;
+}) => {
+  if (!visible || !bill) return null;
+  return (
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
+      <View style={styles.reviewBillOverlay}>
+        <View style={styles.reviewBillContainer}>
+          {/* Header */}
+          <View style={styles.reviewBillHeader}>
+            <Text style={styles.reviewBillTitle}>Bill #{billNumber}</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color="#333" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Customer Info */}
+          <View style={styles.reviewBillCustomerInfo}>
+            <Text style={styles.reviewBillCustomerName}>{bill.customerName || 'Walk-in Customer'}</Text>
+            {bill.phone ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                <Ionicons name="call-outline" size={13} color="#666" style={{ marginRight: 4 }} />
+                <Text style={styles.reviewBillCustomerPhone}>{bill.phone}</Text>
+              </View>
+            ) : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+              <Ionicons name="time-outline" size={13} color="#666" style={{ marginRight: 4 }} />
+              <Text style={[styles.reviewBillCustomerPhone, { color: '#9CA3AF' }]}>{bill.time} · {bill.date}</Text>
+            </View>
+          </View>
+
+          {/* Items */}
+          <ScrollView style={{ maxHeight: SCREEN_HEIGHT * 0.35 }} showsVerticalScrollIndicator={false}>
+            {bill.items.map((item, idx) => (
+              <View key={idx} style={styles.reviewBillItem}>
+                <View>
+                  <Text style={styles.reviewBillItemName}>{item.name}</Text>
+                  <Text style={styles.reviewBillItemQty}>Qty: {item.qty} × ₹{item.price}</Text>
+                </View>
+                <Text style={styles.reviewBillItemAmount}>₹{item.price * item.qty}</Text>
+              </View>
+            ))}
+          </ScrollView>
+
+          {/* Total */}
+          <View style={styles.reviewBillTotal}>
+            <Text style={styles.reviewBillTotalLabel}>Total</Text>
+            <Text style={styles.reviewBillTotalAmount}>₹{bill.total}</Text>
+          </View>
+
+          {/* Close button */}
+          <View style={styles.reviewBillButtons}>
+            <TouchableOpacity style={styles.reviewBillDoneBtn} onPress={onClose}>
+              <Text style={styles.reviewBillDoneBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+});
+
+// Profile Modal — redesigned with menu-style layout + pending payments entry
+const ProfileModal = memo(({
+  visible, bizName, bizLocation, userEmail, subStatus, isSubscribed, isTrialActive,
+  nextDue, pendingCount, pendingTotal, onClose, onEditProfile, onLogout, onUpgrade, onPendingPayments,
+}: {
+  visible: boolean; bizName: string; bizLocation: string; userEmail: string;
+  subStatus: { label: string; color: string; bg: string; icon: any };
+  isSubscribed: boolean; isTrialActive: boolean; nextDue: string;
+  pendingCount: number; pendingTotal: number;
+  onClose: () => void; onEditProfile: () => void; onLogout: () => void;
+  onUpgrade: () => void; onPendingPayments: () => void;
+}) => (
+  <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
+    <TouchableWithoutFeedback onPress={onClose}>
+      <View style={styles.modalOverlay}>
+        <TouchableWithoutFeedback onPress={() => {}}>
+          <View style={[styles.profilePanel, { paddingBottom: 32 }]}>
+            <View style={styles.profileHandle} />
+
+            {/* Header: avatar + name + location */}
+            <View style={styles.profileHeaderNew}>
+              <LinearGradient colors={['#4F46E5', '#7C3AED']} style={styles.profileAvatarNew}>
+                <Text style={styles.profileAvatarText}>
+                  {bizName ? bizName.charAt(0).toUpperCase() : (userEmail?.charAt(0).toUpperCase() || 'S')}
+                </Text>
+              </LinearGradient>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.profileNameNew}>{bizName || 'Your Business'}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+                  {bizLocation ? (
+                    <>
+                      <Ionicons name="location-outline" size={12} color="#9CA3AF" />
+                      <Text style={styles.profileMetaNew}>{bizLocation}</Text>
+                    </>
+                  ) : null}
+                </View>
+                <View style={[styles.subBadgeNew, { backgroundColor: subStatus.bg }]}>
+                  <Ionicons name={subStatus.icon} size={11} color={subStatus.color} />
+                  <Text style={[styles.subBadgeText, { color: subStatus.color }]}>{subStatus.label}</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={onEditProfile} style={styles.editIconBtn}>
+                <Ionicons name="pencil" size={15} color="#4F46E5" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Stats row */}
+            <View style={styles.statsRow}>
+              <View style={[styles.statBox, { borderColor: '#EEF2FF' }]}>
+                <Ionicons name="mail-outline" size={15} color="#6B7280" />
+                <Text style={styles.statLabel}>Account</Text>
+                <Text style={styles.statValue} numberOfLines={1}>{userEmail?.split('@')[0] || '—'}</Text>
+              </View>
+              <View style={[styles.statBox, { borderColor: '#FEF3C7' }]}>
+                <Ionicons name="diamond-outline" size={15} color="#D97706" />
+                <Text style={styles.statLabel}>Plan</Text>
+                <Text style={[styles.statValue, { color: '#D97706' }]}>{isSubscribed ? 'Pro' : 'Trial'}</Text>
+              </View>
+            </View>
+
+            {/* Menu items */}
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: SCREEN_HEIGHT * 0.38 }}>
+              {/* Pending Payments */}
+              <TouchableOpacity style={styles.menuItem} onPress={onPendingPayments}>
+                <View style={[styles.menuItemIcon, { backgroundColor: '#FFF7ED' }]}>
+                  <Ionicons name="time-outline" size={20} color="#F59E0B" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.menuItemTitle}>Pending Payments</Text>
+                  <Text style={styles.menuItemSub}>
+                    {pendingCount > 0 ? `${pendingCount} person${pendingCount !== 1 ? 's' : ''} · ₹${pendingTotal.toLocaleString('en-IN')} due` : 'No pending payments'}
+                  </Text>
+                </View>
+                {pendingCount > 0 && (
+                  <View style={styles.menuBadge}>
+                    <Text style={styles.menuBadgeText}>{pendingCount}</Text>
+                  </View>
+                )}
+                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+
+              {/* Subscription */}
+              <TouchableOpacity style={styles.menuItem} onPress={!isSubscribed ? onUpgrade : undefined} activeOpacity={isSubscribed ? 1 : 0.7}>
+                <View style={[styles.menuItemIcon, { backgroundColor: '#ECFDF5' }]}>
+                  <Ionicons name="sparkles" size={20} color="#10B981" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.menuItemTitle}>Subscription</Text>
+                  <Text style={styles.menuItemSub}>{isSubscribed ? `Renews ${nextDue} · ₹29/month` : isTrialActive ? 'Trial active — Upgrade to Pro' : 'Trial expired — Upgrade now'}</Text>
+                </View>
+                {!isSubscribed && (
+                  <View style={[styles.menuBadge, { backgroundColor: '#ECFDF5' }]}>
+                    <Text style={[styles.menuBadgeText, { color: '#10B981' }]}>Upgrade</Text>
+                  </View>
+                )}
+                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+            </ScrollView>
+
+            {/* Logout */}
+            <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
+              <Ionicons name="log-out-outline" size={18} color="#DC2626" style={{ marginRight: 8 }} />
+              <Text style={styles.logoutBtnText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableWithoutFeedback>
+      </View>
+    </TouchableWithoutFeedback>
+  </Modal>
+));
+
+// Pending Payments Modal — add/view/mark-paid people who owe money
+interface PendingPayment { id: string; name: string; phone: string; amount: number; date: string; notes: string; place: string; }
+interface PaidPayment { id: string; name: string; phone: string; amount: number; date: string; notes: string; place: string; paid_at: string; }
+
+const PendingPaymentsModal = memo(({
+  visible, userId, onClose,
+}: { visible: boolean; userId: string; onClose: () => void; }) => {
+  const insets = useSafeAreaInsets();
+  const [payments, setPayments] = useState<PendingPayment[]>([]);
+  const [paidPayments, setPaidPayments] = useState<PaidPayment[]>([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'pending' | 'paid'>('pending');
+
+  // Add form state
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [amount, setAmount] = useState('');
+  const [notes, setNotes] = useState('');
+  const [place, setPlace] = useState('');
+  const [duplicateWarning, setDuplicateWarning] = useState<PendingPayment | null>(null);
+
+  // Detail sheet state (for "Mark as Paid" flow)
+  const [detailPayment, setDetailPayment] = useState<PendingPayment | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+
+  const [showToast, setShowToast] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
+  const [toastType, setToastType] = useState<'error'|'success'|'info'>('error');
+
+  const toast = (msg: string, type: 'error'|'success'|'info' = 'error') => {
+    setToastMsg(msg); setToastType(type); setShowToast(true);
+  };
+
+  const loadPayments = useCallback(async () => {
+    if (!userId) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('pending_payments')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      if (!error && data) setPayments(data.map((r: any) => ({
+        id: r.id, name: r.name, phone: r.phone || '', amount: Number(r.amount),
+        date: r.date_added, notes: r.notes || '', place: r.place || '',
+      })));
+    } catch (e) { console.log('loadPayments error', e); }
+    setLoading(false);
+  }, [userId]);
+
+  const loadPaidPayments = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const { data, error } = await supabase
+        .from('paid_payments')
+        .select('*')
+        .eq('user_id', userId)
+        .order('paid_at', { ascending: false });
+      if (!error && data) setPaidPayments(data.map((r: any) => ({
+        id: r.id, name: r.name, phone: r.phone || '', amount: Number(r.amount),
+        date: r.date_added, notes: r.notes || '', place: r.place || '', paid_at: r.paid_at || '',
+      })));
+    } catch (e) { console.log('loadPaidPayments error', e); }
+  }, [userId]);
+
+  useEffect(() => {
+    if (visible) {
+      loadPayments();
+      loadPaidPayments();
+    }
+  }, [visible, loadPayments, loadPaidPayments]);
+
+  const resetForm = () => { setName(''); setPhone(''); setAmount(''); setNotes(''); setPlace(''); setDuplicateWarning(null); };
+
+  const checkDuplicate = useCallback((phoneVal: string) => {
+    if (!phoneVal.trim()) { setDuplicateWarning(null); return; }
+    const match = payments.find(p => p.phone.trim() === phoneVal.trim());
+    setDuplicateWarning(match || null);
+  }, [payments]);
+
+  const handleAdd = async () => {
+    if (!name.trim()) { toast('Enter customer name'); return; }
+    const amt = parseFloat(amount);
+    if (!amount.trim() || isNaN(amt) || amt <= 0) { toast('Enter a valid amount'); return; }
+    try {
+      const now = new Date();
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const dateStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+      const { error } = await supabase.from('pending_payments').insert({
+        user_id: userId, name: name.trim(), phone: phone.trim(),
+        amount: amt, date_added: dateStr, notes: notes.trim(), place: place.trim(),
+      });
+      if (error) { toast('Failed to save'); return; }
+      toast('Payment added!', 'success');
+      resetForm(); setShowAdd(false); loadPayments();
+    } catch (e) { toast('Something went wrong'); }
+  };
+
+  const openDetail = (p: PendingPayment) => {
+    setDetailPayment(p);
+    setShowDetail(true);
+  };
+
+  const handleMarkPaid = async (p: PendingPayment) => {
+    try {
+      // Move to paid_payments table
+      const now = new Date();
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const paidAt = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+      await supabase.from('paid_payments').insert({
+        user_id: userId, name: p.name, phone: p.phone, amount: p.amount,
+        date_added: p.date, notes: p.notes, place: p.place, paid_at: paidAt,
+      });
+      await supabase.from('pending_payments').delete().eq('id', p.id);
+      toast(`${p.name} marked as paid!`, 'success');
+      setShowDetail(false);
+      setDetailPayment(null);
+      loadPayments();
+      loadPaidPayments();
+    } catch (e) { toast('Something went wrong'); }
+  };
+
+  const totalPending = payments.reduce((s, p) => s + p.amount, 0);
+  const totalPaid = paidPayments.reduce((s, p) => s + p.amount, 0);
+
+  if (!visible) return null;
+  return (
+    <Modal animationType="slide" transparent={false} visible={visible} onRequestClose={onClose} statusBarTranslucent>
+      <Toast visible={showToast} message={toastMsg} type={toastType} onHide={() => setShowToast(false)} />
+      <View style={{ flex: 1, backgroundColor: '#F5F3FF' }}>
+        {/* Header */}
+        <LinearGradient colors={['#F59E0B', '#D97706']} style={[styles.ppHeader, { paddingTop: insets.top + 12 }]}>
+          <TouchableOpacity onPress={onClose} style={styles.ppBackBtn}>
+            <Ionicons name="arrow-back" size={22} color="#fff" />
+          </TouchableOpacity>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.ppHeaderTitle}>Pending Payments</Text>
+            <Text style={styles.ppHeaderSub}>{payments.length} person{payments.length !== 1 ? 's' : ''} · ₹{totalPending.toLocaleString('en-IN')} due</Text>
+          </View>
+          {/* Paid Persons button + Add button */}
+          <TouchableOpacity
+            onPress={() => setActiveTab(activeTab === 'paid' ? 'pending' : 'paid')}
+            style={[styles.ppAddBtn, { marginRight: 8, backgroundColor: activeTab === 'paid' ? '#D97706' : '#fff', borderWidth: activeTab === 'paid' ? 2 : 0, borderColor: '#fff' }]}
+          >
+            <Ionicons name="checkmark-done" size={19} color={activeTab === 'paid' ? '#fff' : '#10B981'} />
+          </TouchableOpacity>
+          {activeTab === 'pending' && (
+            <TouchableOpacity onPress={() => { resetForm(); setShowAdd(true); }} style={styles.ppAddBtn}>
+              <Ionicons name="add" size={22} color="#D97706" />
+            </TouchableOpacity>
+          )}
+        </LinearGradient>
+
+        {/* Tab strip */}
+        <View style={{ flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' }}>
+          <TouchableOpacity
+            style={{ flex: 1, paddingVertical: 10, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: activeTab === 'pending' ? '#F59E0B' : 'transparent' }}
+            onPress={() => setActiveTab('pending')}
+          >
+            <Text style={{ fontSize: 13, fontWeight: '800', color: activeTab === 'pending' ? '#D97706' : '#9CA3AF' }}>Pending ({payments.length})</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ flex: 1, paddingVertical: 10, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: activeTab === 'paid' ? '#10B981' : 'transparent' }}
+            onPress={() => setActiveTab('paid')}
+          >
+            <Text style={{ fontSize: 13, fontWeight: '800', color: activeTab === 'paid' ? '#10B981' : '#9CA3AF' }}>Paid ({paidPayments.length})</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* List */}
+        <ScrollView style={{ flex: 1, padding: 16 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          {loading ? (
+            <View style={{ alignItems: 'center', paddingVertical: 60 }}>
+              <Text style={{ color: '#9CA3AF', fontSize: 14 }}>Loading...</Text>
+            </View>
+          ) : activeTab === 'pending' ? (
+            payments.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 60 }}>
+                <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                  <Ionicons name="time-outline" size={34} color="#F59E0B" />
+                </View>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: '#111', marginBottom: 6 }}>No Pending Payments</Text>
+                <Text style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center' }}>Tap + to add someone who owes you money</Text>
+              </View>
+            ) : payments.map(p => (
+              <TouchableOpacity key={p.id} style={styles.ppCard} onPress={() => openDetail(p)} activeOpacity={0.75}>
+                <View style={styles.ppCardLeft}>
+                  <View style={styles.ppAvatar}>
+                    <Text style={styles.ppAvatarText}>{p.name.charAt(0).toUpperCase()}</Text>
+                  </View>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.ppName}>{p.name}</Text>
+                  {p.phone ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                      <Ionicons name="call-outline" size={11} color="#9CA3AF" />
+                      <Text style={styles.ppPhone}>{p.phone}</Text>
+                    </View>
+                  ) : null}
+                  {p.place ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                      <Ionicons name="location-outline" size={11} color="#9CA3AF" />
+                      <Text style={[styles.ppPhone, { color: '#6B7280' }]}>{p.place}</Text>
+                    </View>
+                  ) : null}
+                  {p.notes ? <Text style={styles.ppNotes} numberOfLines={1}>{p.notes}</Text> : null}
+                  <Text style={styles.ppDate}>{p.date}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.ppAmount}>₹{p.amount.toLocaleString('en-IN')}</Text>
+                  <View style={styles.ppDeleteBtn}>
+                    <Ionicons name="checkmark-circle-outline" size={14} color="#10B981" />
+                    <Text style={styles.ppDeleteText}>Mark Paid</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))
+          ) : (
+            paidPayments.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 60 }}>
+                <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: '#ECFDF5', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                  <Ionicons name="checkmark-done-circle-outline" size={34} color="#10B981" />
+                </View>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: '#111', marginBottom: 6 }}>No Paid Records Yet</Text>
+                <Text style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center' }}>Payments you mark as paid will appear here</Text>
+              </View>
+            ) : (
+              <>
+                <View style={{ backgroundColor: '#ECFDF5', borderRadius: 12, padding: 12, marginBottom: 14, flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="checkmark-done-circle" size={20} color="#10B981" style={{ marginRight: 8 }} />
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: '#065F46' }}>Total Collected: ₹{totalPaid.toLocaleString('en-IN')}</Text>
+                </View>
+                {paidPayments.map(p => (
+                  <View key={p.id} style={[styles.ppCard, { borderLeftWidth: 3, borderLeftColor: '#10B981' }]}>
+                    <View style={styles.ppCardLeft}>
+                      <View style={[styles.ppAvatar, { backgroundColor: '#ECFDF5' }]}>
+                        <Text style={[styles.ppAvatarText, { color: '#10B981' }]}>{p.name.charAt(0).toUpperCase()}</Text>
+                      </View>
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={styles.ppName}>{p.name}</Text>
+                      {p.phone ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                          <Ionicons name="call-outline" size={11} color="#9CA3AF" />
+                          <Text style={styles.ppPhone}>{p.phone}</Text>
+                        </View>
+                      ) : null}
+                      {p.place ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                          <Ionicons name="location-outline" size={11} color="#9CA3AF" />
+                          <Text style={[styles.ppPhone, { color: '#6B7280' }]}>{p.place}</Text>
+                        </View>
+                      ) : null}
+                      {p.notes ? <Text style={styles.ppNotes} numberOfLines={1}>{p.notes}</Text> : null}
+                      <Text style={styles.ppDate}>Added: {p.date} · Paid: {p.paid_at}</Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.ppAmount, { color: '#10B981' }]}>₹{p.amount.toLocaleString('en-IN')}</Text>
+                      <View style={[styles.ppDeleteBtn, { gap: 3 }]}>
+                        <Ionicons name="checkmark-circle" size={13} color="#10B981" />
+                        <Text style={[styles.ppDeleteText, { color: '#10B981' }]}>Paid</Text>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </>
+            )
+          )}
+          <View style={{ height: 40 }} />
+        </ScrollView>
+
+        {/* Payment Detail Bottom Sheet — triggered on card tap */}
+        <Modal animationType="slide" transparent visible={showDetail} onRequestClose={() => setShowDetail(false)}>
+          <TouchableWithoutFeedback onPress={() => setShowDetail(false)}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback onPress={() => {}}>
+                <View style={[styles.profilePanel, { paddingBottom: 32 }]}>
+                  <View style={styles.profileHandle} />
+                  {detailPayment && (
+                    <>
+                      {/* Person header */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+                        <View style={[styles.ppAvatar, { width: 52, height: 52, borderRadius: 26 }]}>
+                          <Text style={[styles.ppAvatarText, { fontSize: 20 }]}>{detailPayment.name.charAt(0).toUpperCase()}</Text>
+                        </View>
+                        <View style={{ marginLeft: 14, flex: 1 }}>
+                          <Text style={{ fontSize: 18, fontWeight: '900', color: '#111' }}>{detailPayment.name}</Text>
+                          <Text style={{ fontSize: 12, color: '#9CA3AF', fontWeight: '500', marginTop: 2 }}>Pending since {detailPayment.date}</Text>
+                        </View>
+                        <Text style={{ fontSize: 22, fontWeight: '900', color: '#D97706' }}>₹{detailPayment.amount.toLocaleString('en-IN')}</Text>
+                      </View>
+
+                      {/* Detail rows */}
+                      {[
+                        { icon: 'call-outline', label: 'Phone', value: detailPayment.phone || '—' },
+                        { icon: 'location-outline', label: 'Place', value: detailPayment.place || '—' },
+                        { icon: 'document-text-outline', label: 'Notes', value: detailPayment.notes || '—' },
+                        { icon: 'calendar-outline', label: 'Date Added', value: detailPayment.date },
+                      ].map(row => (
+                        <View key={row.label} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
+                          <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                            <Ionicons name={row.icon as any} size={15} color="#D97706" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 10, color: '#9CA3AF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>{row.label}</Text>
+                            <Text style={{ fontSize: 14, fontWeight: '700', color: '#111', marginTop: 1 }}>{row.value}</Text>
+                          </View>
+                        </View>
+                      ))}
+
+                      {/* Action buttons */}
+                      <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+                        <TouchableOpacity
+                          style={[styles.saveGoBackBtn, { flex: 1 }]}
+                          onPress={() => setShowDetail(false)}
+                        >
+                          <Text style={styles.saveGoBackText}>Close</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.completeBillBtn, { flex: 1, backgroundColor: '#10B981' }]}
+                          onPress={() => handleMarkPaid(detailPayment)}
+                        >
+                          <Ionicons name="checkmark-circle-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+                          <Text style={styles.completeBillText}>Mark as Paid</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+
+        {/* Add Payment Bottom Sheet */}
+        <Modal animationType="slide" transparent visible={showAdd} onRequestClose={() => setShowAdd(false)}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View style={styles.modalOverlay}>
+                <TouchableWithoutFeedback onPress={() => {}}>
+                  <View style={[styles.profilePanel, { paddingBottom: 32 }]}>
+                    <View style={styles.profileHandle} />
+                    <Text style={[styles.profileBizName, { marginBottom: 20, fontSize: 18 }]}>Add Pending Payment</Text>
+
+                    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                      {/* Duplicate phone warning */}
+                      {duplicateWarning && (
+                        <View style={{ backgroundColor: '#FEF3C7', borderRadius: 10, padding: 12, marginBottom: 14, flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderColor: '#FCD34D' }}>
+                          <Ionicons name="warning-outline" size={18} color="#D97706" style={{ marginRight: 8, marginTop: 1 }} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 13, fontWeight: '800', color: '#92400E' }}>Returning Person Detected!</Text>
+                            <Text style={{ fontSize: 12, color: '#92400E', marginTop: 3, fontWeight: '500' }}>
+                              {duplicateWarning.name} already has a pending payment of ₹{duplicateWarning.amount.toLocaleString('en-IN')} (added {duplicateWarning.date}). You are adding a new record for the same phone number.
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+
+                      <View style={styles.formGroup}>
+                        <Text style={styles.formLabel}>Customer Name *</Text>
+                        <View style={styles.formInputBox}>
+                          <Ionicons name="person-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                          <TextInput style={styles.formInput} placeholder="Enter name" value={name} onChangeText={setName} placeholderTextColor="#ccc" autoCorrect={false} blurOnSubmit={false} />
+                        </View>
+                      </View>
+
+                      <View style={styles.formGroup}>
+                        <Text style={styles.formLabel}>Phone Number</Text>
+                        <View style={styles.formInputBox}>
+                          <Ionicons name="call-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                          <TextInput style={styles.formInput} placeholder="+91 98765 43210" value={phone} onChangeText={(v) => { setPhone(v); checkDuplicate(v); }} keyboardType="phone-pad" placeholderTextColor="#ccc" autoCorrect={false} blurOnSubmit={false} />
+                        </View>
+                      </View>
+
+                      <View style={styles.formGroup}>
+                        <Text style={styles.formLabel}>Place</Text>
+                        <View style={styles.formInputBox}>
+                          <Ionicons name="location-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                          <TextInput style={styles.formInput} placeholder="e.g. Shop, Colony, Area..." value={place} onChangeText={setPlace} placeholderTextColor="#ccc" autoCorrect={false} blurOnSubmit={false} />
+                        </View>
+                      </View>
+
+                      <View style={styles.formGroup}>
+                        <Text style={styles.formLabel}>Amount (₹) *</Text>
+                        <View style={styles.formInputBox}>
+                          <Ionicons name="cash-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                          <TextInput style={styles.formInput} placeholder="0.00" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholderTextColor="#ccc" autoCorrect={false} blurOnSubmit={false} />
+                        </View>
+                      </View>
+
+                      <View style={styles.formGroup}>
+                        <Text style={styles.formLabel}>Notes (Optional)</Text>
+                        <View style={styles.formInputBox}>
+                          <Ionicons name="document-text-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                          <TextInput style={styles.formInput} placeholder="e.g. Lunch, Advance..." value={notes} onChangeText={setNotes} placeholderTextColor="#ccc" autoCorrect={false} blurOnSubmit={false} />
+                        </View>
+                      </View>
+
+                      <View style={{ height: 10 }} />
+                    </ScrollView>
+
+                    <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                      <TouchableOpacity style={[styles.saveGoBackBtn, { flex: 1 }]} onPress={() => { setShowAdd(false); resetForm(); }}>
+                        <Text style={styles.saveGoBackText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.completeBillBtn, { flex: 1, backgroundColor: '#F59E0B' }]} onPress={handleAdd}>
+                        <Text style={styles.completeBillText}>Add Payment</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
+        </Modal>
+      </View>
+    </Modal>
+  );
+});
+
+// Edit Profile Modal — standalone to prevent remount on parent re-render (fixes keyboard dismiss bug)
+const EditProfileModal = memo(({
+  visible,
+  editingBizName,
+  editingBizLocation,
+  isSavingProfile,
+  onChangeName,
+  onChangeLocation,
+  onSave,
+  onClose,
+}: {
+  visible: boolean;
+  editingBizName: string;
+  editingBizLocation: string;
+  isSavingProfile: boolean;
+  onChangeName: (v: string) => void;
+  onChangeLocation: (v: string) => void;
+  onSave: () => void;
+  onClose: () => void;
+}) => (
+  <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
+    >
+      <View style={styles.modalOverlay}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.profilePanel} onStartShouldSetResponder={() => true}>
+              <View style={styles.profileHandle} />
+
+              <View style={[styles.profileHeader, { marginBottom: 24 }]}>
+                <Text style={styles.profileBizName}>Edit Business Details</Text>
+              </View>
+
+              <View style={styles.editProfileForm}>
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Business Name</Text>
+                  <View style={styles.formInputBox}>
+                    <Ionicons name="business-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="Enter business name"
+                      value={editingBizName}
+                      onChangeText={onChangeName}
+                      placeholderTextColor="#999"
+                      autoCorrect={false}
+                      blurOnSubmit={false}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>City</Text>
+                  <View style={styles.formInputBox}>
+                    <Ionicons name="location-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="Enter city"
+                      value={editingBizLocation}
+                      onChangeText={onChangeLocation}
+                      placeholderTextColor="#999"
+                      autoCorrect={false}
+                      blurOnSubmit={false}
+                    />
+                  </View>
+                </View>
+
+                <TouchableOpacity style={styles.saveProfileBtn} onPress={onSave} disabled={isSavingProfile}>
+                  <Text style={styles.saveProfileBtnText}>{isSavingProfile ? 'Saving...' : 'Save Changes'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </ScrollView>
+      </View>
+    </KeyboardAvoidingView>
+  </Modal>
+));
+
 // Main Home Screen Component
 export default function HomeScreen() {
   const router = useRouter();
@@ -597,6 +1286,18 @@ export default function HomeScreen() {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('error');
+  const [billDetailVisible, setBillDetailVisible] = useState(false);
+  const [selectedBill, setSelectedBill] = useState<SaleLog | null>(null);
+  const [selectedBillNumber, setSelectedBillNumber] = useState(0);
+  const [pendingPaymentsVisible, setPendingPaymentsVisible] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [pendingTotal, setPendingTotal] = useState(0);
+
+  const openBillDetail = useCallback((bill: SaleLog, number: number) => {
+    setSelectedBill(bill);
+    setSelectedBillNumber(number);
+    setBillDetailVisible(true);
+  }, []);
 
   const showSuccess = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -822,8 +1523,19 @@ const loadData = useCallback(async () => {
     loadBusinessDetails();
     updateDateTime();
     const interval = setInterval(updateDateTime, 30000);
+
+    // Load pending payments summary
+    if (user?.id) {
+      supabase.from('pending_payments').select('amount').eq('user_id', user.id).then(({ data }) => {
+        if (data) {
+          setPendingCount(data.length);
+          setPendingTotal(data.reduce((s: number, r: any) => s + Number(r.amount), 0));
+        }
+      });
+    }
+
     return () => clearInterval(interval);
-  }, [loadData, loadBusinessDetails, updateDateTime]);
+  }, [loadData, loadBusinessDetails, updateDateTime, user?.id]);
 
   const startNewBilling = useCallback(() => {
     setEditingSession(null);
@@ -876,22 +1588,30 @@ const loadData = useCallback(async () => {
   }, [editingSession?.id]);
 
   const handleConfirmBill = useCallback(async () => {
-    const now = new Date();
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const newBill: SaleLog = {
-      id: Date.now(),
-      total: reviewData.total,
-      time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-      date: `${now.getDate()} ${months[now.getMonth()]}`,
-      items: reviewData.items,
-      customerName: reviewData.customerName,
-      phone: reviewData.customerPhone || '',
-    };
+  const now = new Date();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const newBill: SaleLog = {
+    id: Date.now(),
+    total: reviewData.total,
+    time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+    date: `${now.getDate()} ${months[now.getMonth()]}`,
+    items: reviewData.items,
+    customerName: reviewData.customerName,
+    phone: reviewData.customerPhone || '',
+  };
+  
+  try {
+    console.log('💰 Saving bill:', newBill);
+    
+    // Save to database
+    await DatabaseService.addSaleLog(newBill, salesLog);
+    
+    // Update local state
     const updatedBills = [newBill, ...salesLog];
     setSalesLog(updatedBills);
-    await DatabaseService.addSaleLog(newBill, salesLog);
     setTodayTotal(prev => prev + reviewData.total);
 
+    // Remove from active sessions if needed
     if (reviewData.sessionId) {
       RAM_SESSIONS = RAM_SESSIONS.filter(s => s.id !== reviewData.sessionId);
       setActiveSessions([...RAM_SESSIONS]);
@@ -901,7 +1621,11 @@ const loadData = useCallback(async () => {
     setEditingSession(null);
     setReviewData({ customerName: '', customerPhone: '', items: [], total: 0, sessionId: null });
     showSuccess(`Bill saved! ₹${newBill.total}`);
-  }, [reviewData, salesLog, showSuccess]);
+  } catch (error) {
+    console.error('Failed to save bill:', error);
+    showError('Failed to save bill. Please try again.');
+  }
+}, [reviewData, salesLog, showSuccess, showError]);
 
   const handleQuickEntrySave = useCallback(async (name: string, phone: string, amount: number, note: string) => {
     const now = new Date();
@@ -931,299 +1655,191 @@ const loadData = useCallback(async () => {
 
   const subStatus = getSubscriptionStatus();
 
-  // Edit Profile Modal Component
-// Edit Profile Modal Component
-const EditProfileModal = useCallback(() => (
-  <Modal animationType="slide" transparent visible={editProfileModalVisible} onRequestClose={() => setEditProfileModalVisible(false)}>
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.modalOverlay}>
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.profilePanel} onStartShouldSetResponder={() => true}>
-              <View style={styles.profileHandle} />
-
-              <View style={[styles.profileHeader, { marginBottom: 24 }]}>
-                <Text style={styles.profileBizName}>Edit Business Details</Text>
-              </View>
-
-              <View style={styles.editProfileForm}>
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>Business Name</Text>
-                  <View style={styles.formInputBox}>
-                    <Ionicons name="business-outline" size={18} color="#999" style={{ marginRight: 8 }} />
-                    <TextInput
-                      style={styles.formInput}
-                      placeholder="Enter business name"
-                      value={editingBizName}
-                      onChangeText={setEditingBizName}
-                      placeholderTextColor="#999"
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>City</Text>
-                  <View style={styles.formInputBox}>
-                    <Ionicons name="location-outline" size={18} color="#999" style={{ marginRight: 8 }} />
-                    <TextInput
-                      style={styles.formInput}
-                      placeholder="Enter city"
-                      value={editingBizLocation}
-                      onChangeText={setEditingBizLocation}
-                      placeholderTextColor="#999"
-                    />
-                  </View>
-                </View>
-
-                <TouchableOpacity style={styles.saveProfileBtn} onPress={saveProfileChanges} disabled={isSavingProfile}>
-                  <Text style={styles.saveProfileBtnText}>{isSavingProfile ? 'Saving...' : 'Save Changes'}</Text>
-                </TouchableOpacity>
-              </View>
-
-            </View>
-          </ScrollView>
-        </View>
-      </TouchableWithoutFeedback>
-    </KeyboardAvoidingView>
-  </Modal>
-), [editProfileModalVisible, editingBizName, editingBizLocation, isSavingProfile, saveProfileChanges]);
-  // Profile Modal Component
-  const ProfileModalComponent = useCallback(() => (
-    <Modal animationType="slide" transparent visible={profileVisible} onRequestClose={() => setProfileVisible(false)}>
-      <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setProfileVisible(false)}>
-        <View style={styles.profilePanel} onStartShouldSetResponder={() => true} onResponderTerminationRequest={() => false}>
-          <View style={styles.profileHandle} />
-
-          <View style={styles.profileHeader}>
-            <View style={styles.profileAvatar}>
-              <Text style={styles.profileAvatarText}>
-                {bizName ? bizName.charAt(0).toUpperCase() : (user?.email?.charAt(0).toUpperCase() || 'S')}
-              </Text>
-            </View>
-            <Text style={styles.profileBizName}>{bizName || 'Your Business'}</Text>
-            {bizLocation ? (
-              <View style={styles.profileBizTypeBadge}>
-                <Ionicons name="location-outline" size={12} color="#2563EB" />
-                <Text style={styles.profileBizTypeText}>{bizLocation}</Text>
-              </View>
-            ) : null}
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: SCREEN_HEIGHT * 0.52 }}>
-            <View style={styles.profileSection}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <Text style={styles.profileSectionLabel}>BUSINESS INFO</Text>
-                <TouchableOpacity onPress={openEditProfile} style={styles.editProfileBtn}>
-                  <Ionicons name="pencil-outline" size={16} color="#2563EB" />
-                  <Text style={styles.editProfileBtnText}>Edit</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.profileRow}>
-                <View style={[styles.profileRowIcon, { backgroundColor: '#EEF2FF' }]}>
-                  <Ionicons name="business-outline" size={16} color="#2563EB" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.profileRowLabel}>Business Name</Text>
-                  <Text style={styles.profileRowValue}>{bizName || '— Not set —'}</Text>
-                </View>
-              </View>
-
-              <View style={styles.profileRow}>
-                <View style={[styles.profileRowIcon, { backgroundColor: '#FFF7ED' }]}>
-                  <Ionicons name="location-outline" size={16} color="#F59E0B" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.profileRowLabel}>City</Text>
-                  <Text style={styles.profileRowValue}>{bizLocation || '— Not set —'}</Text>
-                </View>
-              </View>
-
-              <View style={styles.profileRow}>
-                <View style={[styles.profileRowIcon, { backgroundColor: '#FEF2F2' }]}>
-                  <Ionicons name="mail" size={16} color="#EA4335" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.profileRowLabel}>Google Account</Text>
-                  <Text style={styles.profileRowValue} numberOfLines={1}>{user?.email || 'Not connected'}</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.profileSection}>
-              <Text style={styles.profileSectionLabel}>SUBSCRIPTION</Text>
-
-              <View style={[styles.subStatusCard, { backgroundColor: subStatus.bg, borderColor: subStatus.color + '40' }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                  <Ionicons name={subStatus.icon} size={16} color={subStatus.color} />
-                  <Text style={[styles.subStatusLabel, { color: subStatus.color, marginLeft: 6 }]}>{subStatus.label}</Text>
-                </View>
-                {!isSubscribed && isTrialActive() && (
-                  <Text style={styles.subStatusNote}>
-                    After trial ends, upgrade to Pro at ₹29/month to keep all features.
-                  </Text>
-                )}
-                {!isSubscribed && !isTrialActive() && (
-                  <Text style={styles.subStatusNote}>
-                    Your free trial has ended. Upgrade to Pro at ₹29/month to continue.
-                  </Text>
-                )}
-                {isSubscribed && (
-                  <Text style={styles.subStatusNote}>
-                    Next billing on {nextDue} · ₹29/month
-                  </Text>
-                )}
-              </View>
-
-              <View style={styles.profileRow}>
-                <View style={[styles.profileRowIcon, { backgroundColor: '#ECFDF5' }]}>
-                  <Ionicons name="diamond-outline" size={16} color="#10B981" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.profileRowLabel}>Plan</Text>
-                  <Text style={styles.profileRowValue}>{isSubscribed ? 'Pro — ₹29/month' : '7-Day Free Trial → ₹29/month'}</Text>
-                </View>
-              </View>
-
-              {!isSubscribed && (
-                <TouchableOpacity
-                  style={styles.upgradeBtn}
-                  onPress={() => Alert.alert('Upgrade to Pro', 'Sankalp Pro at just ₹29/month.\n\nUnlock unlimited bills, analytics, and priority support.', [
-                    { text: 'Maybe Later', style: 'cancel' },
-                    { text: 'Subscribe Now', onPress: () => showSuccess('Redirecting to payment...') },
-                  ])}
-                >
-                  <Ionicons name="sparkles" size={16} color="#fff" style={{ marginRight: 6 }} />
-                  <Text style={styles.upgradeBtnText}>Upgrade to Pro — ₹29/month</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </ScrollView>
-
-          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={18} color="#DC2626" style={{ marginRight: 8 }} />
-            <Text style={styles.logoutBtnText}>Logout</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  ), [profileVisible, bizName, bizLocation, user?.email, subStatus, isSubscribed, isTrialActive, nextDue, handleLogout, showSuccess]);
-
   // View All Bills Modal
+  // Get all unique dates from salesLog
+  const [billsDateFilter, setBillsDateFilter] = useState<string>('All');
+
+  const allBillDates = useMemo(() => {
+    const dates = new Set<string>();
+    salesLog.forEach(b => { if (b.date) dates.add(b.date); });
+    return ['All', ...Array.from(dates)];
+  }, [salesLog]);
+
+  const filteredBills = useMemo(() => {
+    if (billsDateFilter === 'All') return salesLog;
+    return salesLog.filter(b => b.date === billsDateFilter);
+  }, [salesLog, billsDateFilter]);
+
+  const filteredTotal = useMemo(() => filteredBills.reduce((s, b) => s + b.total, 0), [filteredBills]);
+
   const ViewAllBillsModalComponent = useCallback(() => (
     <Modal animationType="slide" transparent={false} visible={viewAllBillsVisible} onRequestClose={() => setViewAllBillsVisible(false)}>
-      <View style={{ flex: 1, backgroundColor: '#fff', paddingTop: insets.top }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' }}>
-          <Text style={{ fontSize: 18, fontWeight: '800', color: '#111' }}>Today's Bills</Text>
-          <TouchableOpacity onPress={() => setViewAllBillsVisible(false)}>
-            <Ionicons name="close" size={24} color="#6B7280" />
+      <View style={{ flex: 1, backgroundColor: '#F9FAFB', paddingTop: insets.top }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#fff' }}>
+          <TouchableOpacity onPress={() => setViewAllBillsVisible(false)} style={{ marginRight: 12 }}>
+            <Ionicons name="arrow-back" size={22} color="#333" />
           </TouchableOpacity>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: '#111', flex: 1 }}>All Bills</Text>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600' }}>{billsDateFilter === 'All' ? 'All time' : billsDateFilter}</Text>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#2563EB' }}>₹{filteredTotal.toLocaleString('en-IN')}</Text>
+          </View>
         </View>
 
-        <View style={{ paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#F3F4F6' }}>
-          <Text style={{ fontSize: 12, fontWeight: '600', color: '#6B7280' }}>
-            {activeSessions.length + salesLog.length} transaction{(activeSessions.length + salesLog.length) !== 1 ? 's' : ''} • ₹{todayTotal.toLocaleString('en-IN')}
-          </Text>
+        {/* Date filter chips */}
+        <ScrollView
+          horizontal showsHorizontalScrollIndicator={false}
+          style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 10, gap: 8 }}
+        >
+          {allBillDates.map(date => (
+            <TouchableOpacity
+              key={date}
+              onPress={() => setBillsDateFilter(date)}
+              style={{
+                paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
+                backgroundColor: billsDateFilter === date ? '#4F46E5' : '#F3F4F6',
+                borderWidth: 1, borderColor: billsDateFilter === date ? '#4F46E5' : '#E5E7EB',
+              }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '700', color: billsDateFilter === date ? '#fff' : '#6B7280' }}>{date}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Stats row */}
+        <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', marginBottom: 8, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '700' }}>BILLS</Text>
+            <Text style={{ fontSize: 18, fontWeight: '900', color: '#111' }}>{filteredBills.length + (billsDateFilter === 'All' ? activeSessions.length : 0)}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '700' }}>TOTAL</Text>
+            <Text style={{ fontSize: 18, fontWeight: '900', color: '#2563EB' }}>₹{filteredTotal.toLocaleString('en-IN')}</Text>
+          </View>
+          {billsDateFilter === 'All' && activeSessions.length > 0 && (
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '700' }}>PENDING</Text>
+              <Text style={{ fontSize: 18, fontWeight: '900', color: '#F97316' }}>{activeSessions.length}</Text>
+            </View>
+          )}
         </View>
 
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-          {activeSessions.length === 0 && salesLog.length === 0 ? (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 }}>
-              <Ionicons name="document-outline" size={48} color="#D1D5DB" />
-              <Text style={{ marginTop: 12, fontSize: 14, color: '#9CA3AF', fontWeight: '600' }}>No bills today</Text>
-            </View>
-          ) : (
-            <>
-              {activeSessions.map((session) => (
-                <TouchableOpacity
-                  key={session.id}
-                  style={{ borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingHorizontal: 16, paddingVertical: 14 }}
-                  onPress={() => openSession(session)}
-                >
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#111', marginBottom: 2 }}>
-                        {session.customerName || 'Walk-in Customer'}
-                      </Text>
-                      <Text style={{ fontSize: 12, color: '#F97316', fontWeight: '600' }}>
-                        🔄 Pending ({session.items.length} item{session.items.length !== 1 ? 's' : ''})
-                      </Text>
-                    </View>
-                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#2563EB' }}>
-                      ₹{session.items.reduce((sum, item) => sum + item.price * item.qty, 0).toLocaleString('en-IN')}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-
-              {salesLog.map((bill, index) => (
-                <TouchableOpacity
-                  key={bill.id || index}
-                  style={{ borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingHorizontal: 16, paddingVertical: 14 }}
-                  onPress={() => Alert.alert(
-                    `Bill #${salesLog.length - index}`,
-                    `Customer: ${bill.customerName}\nTime: ${bill.time}\nTotal: ₹${bill.total}\n\nItems:\n${bill.items.map(i => `${i.name} x${i.qty} = ₹${i.price * i.qty}`).join('\n')}`,
-                    [{ text: 'OK' }]
-                  )}
-                >
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#111', marginBottom: 2 }}>
-                        {bill.customerName || 'Walk-in Customer'}
-                      </Text>
-                      <Text style={{ fontSize: 12, color: '#6B7280', fontWeight: '500' }}>{bill.time}</Text>
-                    </View>
-                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#22C55E' }}>
-                      ₹{bill.total.toLocaleString('en-IN')}
-                    </Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                    {bill.items.map((item, i) => (
-                      <View key={i} style={{ backgroundColor: '#EEF2FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-                        <Text style={{ fontSize: 11, color: '#2563EB', fontWeight: '600' }}>
-                          {item.name} x{item.qty}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </>
-          )}
-        </ScrollView>
-
-        {(activeSessions.length > 0 || salesLog.length > 0) && (
-          <View style={{ borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingHorizontal: 16, paddingVertical: 16 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ fontSize: 14, fontWeight: '600', color: '#6B7280' }}>Total Today</Text>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: '#2563EB' }}>
-                ₹{todayTotal.toLocaleString('en-IN')}
+          {/* Active (pending) sessions — only show on All tab */}
+          {billsDateFilter === 'All' && activeSessions.map((session) => (
+            <TouchableOpacity
+              key={session.id}
+              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#FED7AA' }}
+              onPress={() => { setViewAllBillsVisible(false); openSession(session); }}
+            >
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFF7ED', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <Ionicons name="time-outline" size={20} color="#F97316" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>{session.customerName || 'Walk-in Customer'}</Text>
+                <Text style={{ fontSize: 11, color: '#F97316', fontWeight: '600', marginTop: 2 }}>🔄 Pending · {session.items.length} item{session.items.length !== 1 ? 's' : ''}</Text>
+              </View>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: '#F97316' }}>
+                ₹{session.items.reduce((s, i) => s + i.price * i.qty, 0).toLocaleString('en-IN')}
               </Text>
+            </TouchableOpacity>
+          ))}
+
+          {/* Completed bills */}
+          {filteredBills.length === 0 && (billsDateFilter !== 'All' || activeSessions.length === 0) ? (
+            <View style={{ alignItems: 'center', paddingVertical: 60 }}>
+              <Ionicons name="document-outline" size={48} color="#D1D5DB" />
+              <Text style={{ marginTop: 12, fontSize: 14, color: '#9CA3AF', fontWeight: '600' }}>No bills {billsDateFilter !== 'All' ? `on ${billsDateFilter}` : 'yet'}</Text>
             </View>
-          </View>
-        )}
+          ) : filteredBills.map((bill, index) => (
+            <TouchableOpacity
+              key={bill.id || index}
+              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#E5E7EB' }}
+              onPress={() => { setViewAllBillsVisible(false); openBillDetail(bill, filteredBills.length - index); }}
+            >
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: '#2563EB' }}>
+                  {(bill.customerName || 'W').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>{bill.customerName || 'Walk-in Customer'}</Text>
+                <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '500', marginTop: 2 }}>{bill.time} · {bill.date}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#22C55E' }}>₹{bill.total.toLocaleString('en-IN')}</Text>
+                <Ionicons name="chevron-forward" size={14} color="#D1D5DB" style={{ marginTop: 4 }} />
+              </View>
+            </TouchableOpacity>
+          ))}
+          <View style={{ height: 30 }} />
+        </ScrollView>
       </View>
     </Modal>
-  ), [viewAllBillsVisible, insets.top, activeSessions, salesLog, todayTotal, openSession]);
+  ), [viewAllBillsVisible, insets.top, activeSessions, filteredBills, filteredTotal, allBillDates, billsDateFilter, openSession, openBillDetail, setViewAllBillsVisible]);
 
-  const ProfileModal = memo(ProfileModalComponent);
   const ViewAllBillsModal = memo(ViewAllBillsModalComponent);
-  const EditModal = memo(EditProfileModal);
 
   return (
     <View style={styles.container}>
       <Toast visible={showToast} message={toastMessage} type={toastType} onHide={() => setShowToast(false)} />
-      <ProfileModal />
-      <EditModal />
+      <ProfileModal
+        visible={profileVisible}
+        bizName={bizName}
+        bizLocation={bizLocation}
+        userEmail={user?.email || ''}
+        subStatus={subStatus}
+        isSubscribed={isSubscribed}
+        isTrialActive={isTrialActive()}
+        nextDue={nextDue}
+        pendingCount={pendingCount}
+        pendingTotal={pendingTotal}
+        onClose={() => setProfileVisible(false)}
+        onEditProfile={() => {
+          setProfileVisible(false);
+          setTimeout(() => openEditProfile(), 300);
+        }}
+        onLogout={handleLogout}
+        onUpgrade={() => Alert.alert('Upgrade to Pro', 'Sankalp Pro at just ₹29/month.\n\nUnlock unlimited bills, analytics, and priority support.', [
+          { text: 'Maybe Later', style: 'cancel' },
+          { text: 'Subscribe Now', onPress: () => showSuccess('Redirecting to payment...') },
+        ])}
+        onPendingPayments={() => {
+          setProfileVisible(false);
+          setTimeout(() => setPendingPaymentsVisible(true), 300);
+        }}
+      />
+      <EditProfileModal
+        visible={editProfileModalVisible}
+        editingBizName={editingBizName}
+        editingBizLocation={editingBizLocation}
+        isSavingProfile={isSavingProfile}
+        onChangeName={setEditingBizName}
+        onChangeLocation={setEditingBizLocation}
+        onSave={saveProfileChanges}
+        onClose={() => setEditProfileModalVisible(false)}
+      />
+      <BillDetailModal
+        visible={billDetailVisible}
+        bill={selectedBill}
+        billNumber={selectedBillNumber}
+        onClose={() => setBillDetailVisible(false)}
+      />
+      <PendingPaymentsModal
+        visible={pendingPaymentsVisible}
+        userId={user?.id || ''}
+        onClose={() => {
+          setPendingPaymentsVisible(false);
+          // Refresh pending count after closing
+          if (user?.id) {
+            supabase.from('pending_payments').select('amount').eq('user_id', user.id).then(({ data }) => {
+              if (data) { setPendingCount(data.length); setPendingTotal(data.reduce((s: number, r: any) => s + Number(r.amount), 0)); }
+            });
+          }
+        }}
+      />
 
       <LiveBillingModal
         visible={liveBillingVisible}
@@ -1352,11 +1968,7 @@ const EditProfileModal = useCallback(() => (
               <TouchableOpacity
                 key={bill.id || index}
                 style={styles.billCard}
-                onPress={() => Alert.alert(
-                  `Bill #${salesLog.length - index}`,
-                  `Customer: ${bill.customerName}\nTime: ${bill.time}\nTotal: ₹${bill.total}\n\nItems:\n${bill.items.map(i => `${i.name} x${i.qty} = ₹${i.price * i.qty}`).join('\n')}`,
-                  [{ text: 'OK' }]
-                )}
+                onPress={() => openBillDetail(bill, salesLog.length - index)}
               >
                 <View style={styles.billAvatarBox}>
                   <Text style={styles.billAvatarText}>
@@ -1537,6 +2149,41 @@ qaBtn: {
   formInput: { flex: 1, fontSize: 14, fontWeight: '600', color: '#333', height: 50, paddingVertical: 0 },
   saveProfileBtn: { backgroundColor: '#4F46E5', padding: 15, borderRadius: 14, alignItems: 'center', marginTop: 10 },
   saveProfileBtnText: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  // Profile redesign styles
+  profileHeaderNew: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 14 },
+  profileAvatarNew: { width: 58, height: 58, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  profileNameNew: { fontSize: 17, fontWeight: '900', color: '#111' },
+  profileMetaNew: { fontSize: 12, color: '#9CA3AF', fontWeight: '600', marginLeft: 3 },
+  subBadgeNew: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, marginTop: 5, alignSelf: 'flex-start' },
+  subBadgeText: { fontSize: 11, fontWeight: '700' },
+  editIconBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
+  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  statBox: { flex: 1, borderRadius: 12, borderWidth: 1.5, backgroundColor: '#F9FAFB', padding: 12, alignItems: 'flex-start', gap: 2 },
+  statLabel: { fontSize: 10, color: '#9CA3AF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4 },
+  statValue: { fontSize: 13, fontWeight: '800', color: '#111' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderRadius: 12, paddingHorizontal: 4, marginBottom: 2 },
+  menuItemIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  menuItemTitle: { fontSize: 14, fontWeight: '700', color: '#111' },
+  menuItemSub: { fontSize: 12, color: '#9CA3AF', fontWeight: '500', marginTop: 2 },
+  menuBadge: { backgroundColor: '#FEF3C7', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, marginRight: 4 },
+  menuBadgeText: { fontSize: 11, fontWeight: '800', color: '#D97706' },
+  // Pending Payments styles
+  ppHeader: { paddingHorizontal: 16, paddingBottom: 16, flexDirection: 'row', alignItems: 'center' },
+  ppHeaderTitle: { fontSize: 18, fontWeight: '900', color: '#fff' },
+  ppHeaderSub: { fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600', marginTop: 2 },
+  ppBackBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  ppAddBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  ppCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E5E7EB', elevation: 1 },
+  ppCardLeft: {},
+  ppAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center' },
+  ppAvatarText: { fontSize: 16, fontWeight: '900', color: '#D97706' },
+  ppName: { fontSize: 15, fontWeight: '800', color: '#111' },
+  ppPhone: { fontSize: 12, color: '#9CA3AF', fontWeight: '500', marginLeft: 3 },
+  ppNotes: { fontSize: 12, color: '#6B7280', fontWeight: '500', marginTop: 3, fontStyle: 'italic' },
+  ppDate: { fontSize: 11, color: '#D1D5DB', fontWeight: '600', marginTop: 4 },
+  ppAmount: { fontSize: 17, fontWeight: '900', color: '#D97706' },
+  ppDeleteBtn: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 3 },
+  ppDeleteText: { fontSize: 11, color: '#10B981', fontWeight: '700' },
   quickActionCenter: {
   flex: 1,
   justifyContent: 'center',
