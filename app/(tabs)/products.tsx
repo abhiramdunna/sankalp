@@ -1,6 +1,7 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAuthStore } from '@/lib/store';
+import { db as DatabaseService } from '@/lib/database';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -41,7 +42,7 @@ interface Session {
   customerName: string;
   phone: string;
   items: BillItem[];
-  npVal: string;
+  npVal?: string;
 }
 
 interface AppAlertConfig {
@@ -56,17 +57,14 @@ interface AppAlertConfig {
 
 export default function ProductsScreen() {
   const router = useRouter();
+
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const sessionId = params.sessionId ? parseInt(params.sessionId as string) : null;
 
-  const [products, setProducts] = useState<Product[]>([
-    { id: 1, name: 'Puri plate', price: 20, unit: 'pieces', sales: 0 },
-    { id: 2, name: 'Masala puri', price: 25, unit: 'pieces', sales: 0 },
-    { id: 3, name: 'Tamarind water', price: 10, unit: 'liters', sales: 0 },
-    { id: 4, name: 'Special plate', price: 40, unit: 'pieces', sales: 0 },
-    { id: 5, name: 'Idly 2pcs', price: 15, unit: 'pieces', sales: 0 },
-  ]);
+  const [products, setProducts] = useState<Product[]>([]);
+const [productsLoading, setProductsLoading] = useState(true);
+const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -127,32 +125,42 @@ export default function ProductsScreen() {
     }
   }, [sessions, sessionId]);
 
-  const loadProducts = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('products');
-      if (stored) setProducts(JSON.parse(stored));
-    } catch (e) {
-      console.error('Error loading products:', e);
+ const loadProducts = async () => {
+  try {
+    setProductsLoading(true);
+    const data = await DatabaseService.loadProducts();
+    if (Array.isArray(data)) {
+      setProducts(data);
+    } else {
+      setProducts([]);
     }
-  };
+  } catch (error) {
+    console.log(error);
+    setProducts([]);
+  } finally {
+    setProductsLoading(false);
+    setIsInitialLoad(false);
+  }
+};
 
   const loadSessions = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('sessions');
-      if (stored) setSessions(JSON.parse(stored));
-    } catch (e) {
-      console.error('Error loading sessions:', e);
-    }
-  };
+  try {
+    const data = await DatabaseService.loadSessions();
+    setSessions(data);
+  } catch (e) {
+    console.error('Error loading sessions:', e);
+  }
+};
 
-  const saveSessions = async (updatedSessions: Session[]) => {
-    try {
-      await AsyncStorage.setItem('sessions', JSON.stringify(updatedSessions));
-      setSessions(updatedSessions);
-    } catch (e) {
-      console.error('Error saving sessions:', e);
-    }
-  };
+const saveSessions = async (updatedSessions: Session[]) => {
+  try {
+    await DatabaseService.saveSessions(updatedSessions);
+    setSessions(updatedSessions);
+  } catch (e) {
+    console.error('Error saving sessions:', e);
+  }
+};
+     
 
   const updateCurrentSession = (updatedItems: BillItem[]) => {
     if (!currentSession) return;
@@ -252,7 +260,7 @@ export default function ProductsScreen() {
     };
     const updatedProducts = [...products, newProduct];
     setProducts(updatedProducts);
-    await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
+    await DatabaseService.saveProducts(updatedProducts)
     setNewProductName('');
     setNewProductPrice('');
     setNewProductUnit('pieces');
@@ -268,7 +276,7 @@ export default function ProductsScreen() {
       async () => {
         const updated = products.filter(p => p.id !== id);
         setProducts(updated);
-        await AsyncStorage.setItem('products', JSON.stringify(updated));
+        await DatabaseService.saveProducts(updated);
       },
       'Delete',
       'Cancel',
@@ -296,7 +304,7 @@ export default function ProductsScreen() {
       p.id === editingProduct?.id ? { ...p, name: editName.trim(), price } : p
     );
     setProducts(updated);
-    await AsyncStorage.setItem('products', JSON.stringify(updated));
+    await DatabaseService.saveProducts(updated);
     setEditModalVisible(false);
     showAlert('Updated!', 'Product details have been saved.', 'success');
   };
@@ -315,15 +323,23 @@ export default function ProductsScreen() {
       }
     }
     setProducts(updatedProducts);
-    await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
+    await DatabaseService.saveProducts(updatedProducts);
 
     const now = new Date();
     const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
-    const saleRecord = { total, time: timeStr, items: currentSession.items, customerName: currentSession.customerName, phone: currentSession.phone };
-    const existingSales = await AsyncStorage.getItem('salesLog');
-    const salesLog = existingSales ? JSON.parse(existingSales) : [];
-    salesLog.unshift(saleRecord);
-    await AsyncStorage.setItem('salesLog', JSON.stringify(salesLog));
+    const existingSales = await DatabaseService.loadSalesLog();
+
+const saleRecord = {
+  id: Date.now(),
+  total,
+  time: timeStr,
+  date: new Date().toLocaleDateString(),
+  items: currentSession.items,
+  customerName: currentSession.customerName,
+  phone: currentSession.phone
+};
+
+await DatabaseService.addSaleLog(saleRecord, existingSales);
 
     const updatedSessions = sessions.filter(s => s.id !== currentSession.id);
     await saveSessions(updatedSessions);
@@ -593,13 +609,13 @@ export default function ProductsScreen() {
     </Modal>
   );
 
-  if (!currentSession && sessionId) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
-    );
-  }
+  if (sessionId && sessions.length === 0) {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.loadingText}>Loading session...</Text>
+    </View>
+  );
+}
 
   // ─── Live Bill UI ──────────────────────────────────────────────────────────
   if (currentSession != null) {
@@ -778,72 +794,173 @@ export default function ProductsScreen() {
     p.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  if (productsLoading || isInitialLoad) {
   return (
-    <View style={styles.container}>
-      {renderAppAlert()}
-      {renderUnitPickerModal()}
-      {renderAddProductModal()}
-      {renderEditProductModal()}
+    <View
+      style={{
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#F5F3FF',
+      }}
+    >
+      <Text>Loading products...</Text>
+    </View>
+  );
+}
 
-      <LinearGradient
-        colors={['#4F46E5', '#7C3AED', '#9333EA']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.header, { paddingTop: insets.top + 8 }]}
-      >
-        <Text style={styles.headerTitle}>Products</Text>
-      </LinearGradient>
+ return (
+  <View style={styles.container}>
+    {renderAppAlert()}
+    {renderUnitPickerModal()}
+    {renderAddProductModal()}
+    {renderEditProductModal()}
 
-      <ScrollView
-        style={styles.catalogueSection}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 36 }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color="#94A3B8" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search products..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#999"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color="#94A3B8" />
-            </TouchableOpacity>
-          )}
-        </View>
+    <LinearGradient
+      colors={['#4F46E5', '#7C3AED', '#9333EA']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[styles.header, { paddingTop: insets.top + 8 }]}
+    >
+      <Text style={styles.headerTitle}>Products</Text>
+    </LinearGradient>
 
-        <View style={styles.productList}>
-          {filteredProducts.map((item) => (
-            <View key={item.id} style={styles.productCard}>
+    <ScrollView
+      style={styles.catalogueSection}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingBottom: 36 }}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <Ionicons
+          name="search"
+          size={20}
+          color="#94A3B8"
+        />
+
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search products..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholderTextColor="#999"
+        />
+
+        {searchQuery.length > 0 && (
+          <TouchableOpacity
+            onPress={() => setSearchQuery('')}
+          >
+            <Ionicons
+              name="close-circle"
+              size={20}
+              color="#94A3B8"
+            />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Product List */}
+      <View style={styles.productList}>
+        {filteredProducts.length === 0 ? (
+          <View
+            style={{
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingVertical: 50
+            }}
+          >
+            <Ionicons
+              name="cube-outline"
+              size={60}
+              color="#CBD5E1"
+            />
+
+            <Text
+              style={{
+                marginTop: 12,
+                fontSize: 16,
+                fontWeight: '700',
+                color: '#64748B'
+              }}
+            >
+              No products found
+            </Text>
+
+            <Text
+              style={{
+                marginTop: 6,
+                fontSize: 13,
+                color: '#94A3B8'
+              }}
+            >
+              Add your first product
+            </Text>
+          </View>
+        ) : (
+          filteredProducts.map((item) => (
+            <View
+              key={item.id}
+              style={styles.productCard}
+            >
               <View>
-                <Text style={styles.productName}>{item.name}</Text>
-                <Text style={styles.productPrice}>₹{item.price}</Text>
+                <Text style={styles.productName}>
+                  {item.name}
+                </Text>
+
+                <Text style={styles.productPrice}>
+                  ₹{item.price}
+                </Text>
               </View>
+
               <View style={styles.productActions}>
-                <TouchableOpacity style={styles.editBtn} onPress={() => startEditProduct(item)}>
-                  <Text style={styles.editBtnText}>✏️</Text>
+                <TouchableOpacity
+                  style={styles.editBtn}
+                  onPress={() =>
+                    startEditProduct(item)
+                  }
+                >
+                  <Text style={styles.editBtnText}>
+                    ✏️
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteProduct(item.id)}>
-                  <Text style={styles.deleteBtnText}>Del</Text>
+
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={() =>
+                    deleteProduct(item.id)
+                  }
+                >
+                  <Text style={styles.deleteBtnText}>
+                    Del
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
-          ))}
-        </View>
+          ))
+        )}
+      </View>
 
-        <TouchableOpacity style={styles.addProductButton} onPress={() => setAddProductVisible(true)}>
-          <Ionicons name="add-circle" size={50} color="#2563EB" />
-          <Text style={styles.addProductButtonText}>Add Product</Text>
-        </TouchableOpacity>
-      </ScrollView>
+      {/* Add Product Button */}
+      <TouchableOpacity
+        style={styles.addProductButton}
+        onPress={() =>
+          setAddProductVisible(true)
+        }
+      >
+        <Ionicons
+          name="add-circle"
+          size={50}
+          color="#2563EB"
+        />
 
-      
-    </View>
-  );
+        <Text style={styles.addProductButtonText}>
+          Add Product
+        </Text>
+      </TouchableOpacity>
+    </ScrollView>
+  </View>
+);
 }
 
 const styles = StyleSheet.create({

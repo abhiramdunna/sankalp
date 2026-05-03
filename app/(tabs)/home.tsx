@@ -3,6 +3,7 @@
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { db as DatabaseService } from '@/lib/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -691,45 +692,67 @@ export default function HomeScreen() {
     }
   };
 
-  // Load data from storage
-  const loadData = useCallback(async () => {
-    try {
-      const storedTrialStart = await AsyncStorage.getItem('trialStart');
-      const storedSubscribed = await AsyncStorage.getItem('isSubscribed');
-      if (storedTrialStart) setTrialStart(new Date(storedTrialStart));
-      if (storedSubscribed === 'true') setIsSubscribed(true);
+const loadData = useCallback(async () => {
+  try {
+    const storedTrialStart = await AsyncStorage.getItem('trialStart');
+    const storedSubscribed = await AsyncStorage.getItem('isSubscribed');
 
-      if (!storedTrialStart) {
-        const now = new Date();
-        await AsyncStorage.setItem('trialStart', now.toISOString());
-        setTrialStart(now);
-      }
-
-      const storedProducts = await AsyncStorage.getItem('products');
-      if (storedProducts) {
-        const parsedProducts = JSON.parse(storedProducts);
-        if (Array.isArray(parsedProducts)) {
-          setProducts(parsedProducts.map((p: any) => ({ name: p.name, price: p.price })));
-        }
-      }
-
-      const stored = await AsyncStorage.getItem('salesLog');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          const now = new Date();
-          const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-          const todayDateStr = `${now.getDate()} ${months[now.getMonth()]}`;
-          const todaysBills = parsed.filter((bill: SaleLog) => bill.date === todayDateStr);
-          setSalesLog(todaysBills);
-          setTodayTotal(todaysBills.reduce((s: number, b: SaleLog) => s + b.total, 0));
-        }
-      }
-      setActiveSessions([...RAM_SESSIONS]);
-    } catch (e) { 
-      console.error('loadData error:', e);
+    if (storedTrialStart) {
+      setTrialStart(new Date(storedTrialStart));
     }
-  }, []);
+
+    if (storedSubscribed === 'true') {
+      setIsSubscribed(true);
+    }
+
+    if (!storedTrialStart) {
+      const now = new Date();
+      await AsyncStorage.setItem('trialStart', now.toISOString());
+      setTrialStart(now);
+    }
+
+    const storedProducts = await DatabaseService.loadProducts();
+
+    if (Array.isArray(storedProducts)) {
+      setProducts(
+        storedProducts.map((p: any) => ({
+          name: p.name,
+          price: p.price,
+        }))
+      );
+    }
+
+    const parsed = await DatabaseService.loadSalesLog();
+
+    if (Array.isArray(parsed)) {
+      const now = new Date();
+      const months = [
+        'Jan','Feb','Mar','Apr','May','Jun',
+        'Jul','Aug','Sep','Oct','Nov','Dec'
+      ];
+
+      const todayDateStr = `${now.getDate()} ${months[now.getMonth()]}`;
+
+      const todaysBills = parsed.filter(
+        (bill: SaleLog) => bill.date === todayDateStr
+      );
+
+      setSalesLog(todaysBills);
+
+      setTodayTotal(
+        todaysBills.reduce(
+          (sum: number, bill: SaleLog) => sum + bill.total,
+          0
+        )
+      );
+    }
+
+    setActiveSessions([...RAM_SESSIONS]);
+
+  } catch (e) {
+    console.error('loadData error:', e);
+  }
+}, []);
 
   // Save business details to Supabase
   const saveBusinessDetails = useCallback(async () => {
@@ -866,7 +889,7 @@ export default function HomeScreen() {
     };
     const updatedBills = [newBill, ...salesLog];
     setSalesLog(updatedBills);
-    await AsyncStorage.setItem('salesLog', JSON.stringify(updatedBills));
+    await DatabaseService.addSaleLog(newBill, salesLog);
     setTodayTotal(prev => prev + reviewData.total);
 
     if (reviewData.sessionId) {
@@ -894,7 +917,7 @@ export default function HomeScreen() {
     };
     const updated = [newBill, ...salesLog];
     setSalesLog(updated);
-    await AsyncStorage.setItem('salesLog', JSON.stringify(updated));
+    await DatabaseService.addSaleLog(newBill, salesLog);
     setTodayTotal(prev => prev + amount);
     setQuickEntryVisible(false);
     showSuccess(`₹${amount} saved!`);

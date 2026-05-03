@@ -2,10 +2,11 @@
 // Matches home.tsx style system: #2563EB blue, same nav, same card patterns
 
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuthStore } from '@/lib/store';
+import { db as DatabaseService } from '@/lib/database';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -42,18 +43,12 @@ interface SaleLog {
 // ─────────────────────────────────────────────
 // PRODUCTS
 // ─────────────────────────────────────────────
-const AVAILABLE_PRODUCTS = [
-  { name: 'Puri Plate', price: 20 },
-  { name: 'Masala Puri', price: 25 },
-  { name: 'Tamarind Water', price: 10 },
-  { name: 'Special Plate', price: 40 },
-  { name: 'Idly 2pcs', price: 15 },
-];
+
 
 // ─────────────────────────────────────────────
 // DUMMY SALES DATA
 // ─────────────────────────────────────────────
-const DUMMY_SALES: SaleLog[] = [];
+
 
 // 30 daily data points for April (all zeros - no data yet)
 const APRIL_DATA = [
@@ -543,43 +538,49 @@ export default function AnalyticsScreen() {
   const insets = useSafeAreaInsets();
 
   const [salesLog, setSalesLog] = useState<SaleLog[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterKey>('month');
   const [activeTrend, setActiveTrend] = useState<TrendKey>('Daily');
   const [showTrendMenu, setShowTrendMenu] = useState(false);
   const [activeChartIdx, setActiveChartIdx] = useState(19); // 20 Apr
-  const [availableProducts, setAvailableProducts] = useState<{ name: string; price: number }[]>([]);
-  
+const [availableProducts, setAvailableProducts] = useState<{ name: string; price: number }[]>([]);  
   // Date selection states
   const [showDateMenu, setShowDateMenu] = useState(false);
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
-  const [startDate, setStartDate] = useState(new Date(2025, 3, 1)); // 01 Apr 2025
+  const [startDate, setStartDate] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [endDate, setEndDate] = useState(new Date());
   const [filterLabel, setFilterLabel] = useState('This Month');
   const [showTransactionsModal, setShowTransactionsModal] = useState(false);
 
-  // Load sales from AsyncStorage
-  useEffect(() => {
+ 
+
+useFocusEffect(
+  useCallback(() => {
     (async () => {
       try {
-        const stored = await AsyncStorage.getItem('salesLog');
-        setSalesLog(stored ? JSON.parse(stored) : DUMMY_SALES);
-        
-        // Load products from AsyncStorage
-        const storedProducts = await AsyncStorage.getItem('products');
-        if (storedProducts) {
-          const parsedProducts = JSON.parse(storedProducts);
-          if (Array.isArray(parsedProducts)) {
-            setAvailableProducts(parsedProducts.map(p => ({ name: p.name, price: p.price })));
-          }
+        const storedSales = await DatabaseService.loadSalesLog();
+        setSalesLog(storedSales || []);
+
+        const storedProducts = await DatabaseService.loadProducts();
+
+        if (Array.isArray(storedProducts)) {
+          setAvailableProducts(
+            storedProducts.map((p: any) => ({
+              name: p.name,
+              price: p.price
+            }))
+          );
         }
-      } catch {
-        setSalesLog(DUMMY_SALES);
+      } catch (e) {
+        console.log(e);
+        setSalesLog([]);
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [])
+);
 
   // Helper: Filter sales by date range
   const filterSalesByDateRange = (sales: SaleLog[], start: Date, end: Date) => {
@@ -588,17 +589,29 @@ export default function AnalyticsScreen() {
     const endOfDay = new Date(end);
     endOfDay.setHours(23, 59, 59, 999);
 
+    const months: Record<string, number> = {
+      'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+      'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+    };
+
     return sales.filter(bill => {
       if (!bill.date) return false;
-      // Parse date string like "21 Apr" to compare
-      const parts = bill.date.split(' ');
+      // Parse date string like "21 Apr" — stored without year, so infer the year
+      // by trying current year first, then fall back to previous year
+      const parts = bill.date.trim().split(' ');
+      if (parts.length < 2) return false;
       const day = parseInt(parts[0]);
       const monthStr = parts[1];
-      const months: Record<string, number> = {
-        'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
-        'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
-      };
-      const billDate = new Date(new Date().getFullYear(), months[monthStr] || 0, day);
+      if (isNaN(day) || !(monthStr in months)) return false;
+
+      const monthNum = months[monthStr];
+      const currentYear = new Date().getFullYear();
+      // Try current year first; if that puts the date in the future, try last year
+      let billDate = new Date(currentYear, monthNum, day);
+      if (billDate > endOfDay) {
+        billDate = new Date(currentYear - 1, monthNum, day);
+      }
+
       return billDate >= startOfDay && billDate <= endOfDay;
     });
   };
@@ -667,8 +680,8 @@ export default function AnalyticsScreen() {
     const perf: Record<string, { qty: number; revenue: number }> = {};
     
     // Initialize all products with 0 revenue
-    (availableProducts.length > 0 ? availableProducts : AVAILABLE_PRODUCTS).forEach(product => {
-      perf[product.name] = { qty: 0, revenue: 0 };
+availableProducts.forEach((product: { name: string; price: number }) => {
+        perf[product.name] = { qty: 0, revenue: 0 };
     });
     
     // Update with actual sales data

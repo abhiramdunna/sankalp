@@ -1,18 +1,17 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { db as DatabaseService } from '@/lib/database';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     Alert,
+    BackHandler,
     Modal,
     ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    TouchableWithoutFeedback,
-    Keyboard,
     KeyboardAvoidingView,
     Platform,
     View,
@@ -65,6 +64,10 @@ const getAvatarColor = (id: number) => {
 const getInitials = (name: string) =>
   name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
+// Generate a unique numeric id — timestamp + random suffix to avoid collisions
+let _idCounter = 0;
+const uniqueId = () => Date.now() * 1000 + ((_idCounter++) % 1000);
+
 const todayStr = () => {
   const d = new Date();
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -72,6 +75,7 @@ const todayStr = () => {
   const minutes = String(d.getMinutes()).padStart(2, '0');
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} ${hours}:${minutes}`;
 };
+
 
 // Helper to parse date string for sorting
 const parseDate = (dateStr: string): Date => {
@@ -107,6 +111,22 @@ const SupplierDetailScreen = ({
   const [historyModal, setHistoryModal] = useState(false);
   const [billForm, setBillForm] = useState({ name: '', amount: '', items: '' });
   const [payForm, setPayForm] = useState({ billId: 0, amount: '' });
+
+  // Handle Android hardware back button — go back to supplier list, not out of the app
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (billModal) { setBillModal(false); return true; }
+        if (payModal) { setPayModal(false); return true; }
+        if (clearedBillsModal) { setClearedBillsModal(false); return true; }
+        if (historyModal) { setHistoryModal(false); return true; }
+        onBack();
+        return true;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => sub.remove();
+    }, [billModal, payModal, clearedBillsModal, historyModal, onBack])
+  );
 
   const totalPending = getPending(supplier);
   const accentColor = getAvatarColor(supplier.id);
@@ -150,7 +170,7 @@ const SupplierDetailScreen = ({
       : [];
 
     const newBill: Bill = {
-      id: Date.now(),
+      id: uniqueId(),
       name: billForm.name.trim(),
       date: todayStr(),
       amount,
@@ -159,7 +179,7 @@ const SupplierDetailScreen = ({
     };
 
     const newTx: Transaction = {
-      id: Date.now() + 1,
+      id: uniqueId(),
       date: todayStr(),
       type: 'bill',
       billId: newBill.id,
@@ -194,7 +214,7 @@ const SupplierDetailScreen = ({
     }
 
     const newTx: Transaction = {
-      id: Date.now(),
+      id: uniqueId(),
       date: todayStr(),
       type: 'payment',
       billId: bill.id,
@@ -512,7 +532,7 @@ const SupplierDetailScreen = ({
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+            <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
               <View style={styles.clearedBillsContainer}>
                 {clearedBillsByDate.length > 0 ? (
                   clearedBillsByDate.map((section) => (
@@ -575,7 +595,7 @@ const SupplierDetailScreen = ({
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+            <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
               <View style={styles.historyModalContainer}>
                 {historySections.length > 0 ? (
                   historySections.map((section) => (
@@ -671,27 +691,25 @@ export default function SuppliersScreen() {
   const [addSupModalVisible, setAddSupModalVisible] = useState(false);
   const [paymentHistoryModalVisible, setPaymentHistoryModalVisible] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState('');
+  
   const [newSupplierCategory, setNewSupplierCategory] = useState('');
   const [newSupplierAmount, setNewSupplierAmount] = useState('');
 
-  // Load suppliers from storage
-  const loadSuppliers = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('suppliers_v2');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // Ensure all suppliers have bills and transactions arrays
-        const sanitized = parsed.map((s: any) => ({
-          ...s,
-          bills: Array.isArray(s.bills) ? s.bills : [],
-          transactions: Array.isArray(s.transactions) ? s.transactions : [],
-        }));
-        setSuppliers(sanitized);
-      }
-    } catch (error) {
-      console.error('Error loading suppliers:', error);
-    }
-  };
+const loadSuppliers = async () => {
+  try {
+    const data = await DatabaseService.loadSuppliers();
+
+    const sanitized = data.map((s: any) => ({
+      ...s,
+      bills: Array.isArray(s.bills) ? s.bills : [],
+      transactions: Array.isArray(s.transactions) ? s.transactions : [],
+    }));
+
+    setSuppliers(sanitized);
+  } catch (error) {
+    console.error('Error loading suppliers:', error);
+  }
+};
 
   useFocusEffect(
     useCallback(() => {
@@ -700,13 +718,13 @@ export default function SuppliersScreen() {
   );
 
   const saveSuppliers = async (updatedSuppliers: Supplier[]) => {
-    try {
-      await AsyncStorage.setItem('suppliers_v2', JSON.stringify(updatedSuppliers));
-      setSuppliers(updatedSuppliers);
-    } catch (error) {
-      console.error('Error saving suppliers:', error);
-    }
-  };
+  try {
+    await DatabaseService.saveSuppliers(updatedSuppliers);
+    setSuppliers(updatedSuppliers);
+  } catch (error) {
+    console.error('Error saving suppliers:', error);
+  }
+};
 
   const updateSupplier = (updatedSupplier: Supplier) => {
     const updatedSuppliers = suppliers.map(s =>
@@ -716,60 +734,72 @@ export default function SuppliersScreen() {
     setSelectedSupplier(updatedSupplier);
   };
 
-  // Add new supplier
   const addSupplier = () => {
-    if (!newSupplierName.trim() || !newSupplierCategory.trim()) {
-      Alert.alert('Error', 'Please fill all fields');
-      return;
-    }
-    
-    const amount = parseFloat(newSupplierAmount);
-    if (isNaN(amount) || amount <= 0) {
-      Alert.alert('Error', 'Enter valid amount for first bill');
-      return;
-    }
-    
-    const now = new Date();
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const dateStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()} ${hours}:${minutes}`;
-    
+  if (!newSupplierName.trim() || !newSupplierCategory.trim()) {
+    Alert.alert('Error', 'Please fill supplier name and category');
+    return;
+  }
+
+  const amount = parseFloat(newSupplierAmount);
+
+  const now = new Date();
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+
+  const dateStr = `${now.getDate()} ${
+    months[now.getMonth()]
+  } ${now.getFullYear()} ${hours}:${minutes}`;
+
+  let bills: Bill[] = [];
+  let transactions: Transaction[] = [];
+
+  // Create first bill only if amount entered
+  if (!isNaN(amount) && amount > 0) {
     const newBill: Bill = {
-      id: Date.now(),
+      id: uniqueId(),
       name: 'First Bill',
       date: dateStr,
       amount,
       paid: 0,
     };
-    
+
     const newTransaction: Transaction = {
-      id: Date.now() + 1,
+      id: uniqueId(),
       date: dateStr,
       type: 'bill',
       billId: newBill.id,
       billName: newBill.name,
       amount,
     };
-    
-    const newSupplier: Supplier = {
-      id: Date.now(),
-      name: newSupplierName.trim(),
-      category: newSupplierCategory.trim(),
-      bills: [newBill],
-      transactions: [newTransaction],
-    };
-    
-    const updatedSuppliers = [...suppliers, newSupplier];
-    saveSuppliers(updatedSuppliers);
-    
-    setNewSupplierName('');
-    setNewSupplierCategory('');
-    setNewSupplierAmount('');
-    setAddSupModalVisible(false);
-    Alert.alert('Success', 'Supplier added ✓');
+
+    bills = [newBill];
+    transactions = [newTransaction];
+  }
+
+  const newSupplier: Supplier = {
+    id: uniqueId(),
+    name: newSupplierName.trim(),
+    category: newSupplierCategory.trim(),
+    bills,
+    transactions,
   };
+
+  const updatedSuppliers = [...suppliers, newSupplier];
+
+  saveSuppliers(updatedSuppliers);
+
+  setNewSupplierName('');
+  setNewSupplierCategory('');
+  setNewSupplierAmount('');
+  setAddSupModalVisible(false);
+
+  Alert.alert('Success', 'Supplier added successfully ✓');
+};
 
   // Calculate supplier totals
   const getSupplierTotals = (supplier: Supplier) => {
@@ -813,7 +843,7 @@ export default function SuppliersScreen() {
                     const dateStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()} ${hours}:${minutes}`;
                     
                     const newBill: Bill = {
-                      id: Date.now(),
+                      id: uniqueId(),
                       name: name?.trim() || 'New Bill',
                       date: dateStr,
                       amount,
@@ -821,7 +851,7 @@ export default function SuppliersScreen() {
                     };
                     
                     const newTx: Transaction = {
-                      id: Date.now() + 1,
+                      id: uniqueId(),
                       date: dateStr,
                       type: 'bill',
                       billId: newBill.id,
@@ -871,93 +901,85 @@ export default function SuppliersScreen() {
     );
   };
 
-  // Add Supplier Modal - Moves up with keyboard on mobile
-  const AddSupplierModal = () => (
+  // Add Supplier Modal - inline (not a nested component) to prevent remount on every keystroke
+  const renderAddSupplierModal = () => (
     <Modal
       animationType="slide"
       transparent
       visible={addSupModalVisible}
       onRequestClose={() => setAddSupModalVisible(false)}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.modalContainer}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-          >
-            <ScrollView 
-              style={{ flex: 1 }} 
-              contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
-              scrollEnabled={true}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.addSupplierModal}>
-                <View style={styles.addSupplierModalHeader}>
-                  <Text style={styles.addSupplierModalTitle}>➕ Add Supplier</Text>
-                  <TouchableOpacity onPress={() => setAddSupModalVisible(false)}>
-                    <Text style={styles.modalClose}>×</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.addSupplierModalContent}>
-                  <View>
-                    <Text style={styles.inputLabel}>Supplier Name</Text>
-                    <View style={styles.inputBox}>
-                      <Ionicons name="person-outline" size={18} color="#999" style={{ marginRight: 8 }} />
-                      <TextInput
-                        style={styles.inputField}
-                        placeholder="Enter supplier name"
-                        value={newSupplierName}
-                        onChangeText={setNewSupplierName}
-                        placeholderTextColor="#999"
-                        autoCorrect={false}
-                        returnKeyType="next"
-                      />
-                    </View>
-                  </View>
-
-                  <View>
-                    <Text style={styles.inputLabel}>Category</Text>
-                    <View style={styles.inputBox}>
-                      <Ionicons name="pricetag-outline" size={18} color="#999" style={{ marginRight: 8 }} />
-                      <TextInput
-                        style={styles.inputField}
-                        placeholder="e.g., Vegetables"
-                        value={newSupplierCategory}
-                        onChangeText={setNewSupplierCategory}
-                        placeholderTextColor="#999"
-                        autoCorrect={false}
-                        returnKeyType="next"
-                      />
-                    </View>
-                  </View>
-
-                  <View>
-                    <Text style={styles.inputLabel}>First Bill Amount (₹)</Text>
-                    <View style={styles.inputBox}>
-                      <Ionicons name="cash-outline" size={18} color="#999" style={{ marginRight: 8 }} />
-                      <TextInput
-                        style={styles.inputField}
-                        placeholder="Enter amount"
-                        value={newSupplierAmount}
-                        onChangeText={setNewSupplierAmount}
-                        keyboardType="numeric"
-                        placeholderTextColor="#999"
-                        returnKeyType="done"
-                      />
-                    </View>
-                  </View>
-
-                  <TouchableOpacity style={styles.addSupplierBtn} onPress={addSupplier}>
-                    <Text style={styles.addSupplierBtnText}>Add Supplier ✓</Text>
-                  </TouchableOpacity>
-                </View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1, justifyContent: 'flex-end' }}
+      >
+        <TouchableOpacity
+          style={{ flex: 1 }}
+          activeOpacity={1}
+          onPress={() => setAddSupModalVisible(false)}
+        />
+        <View style={[styles.addSupplierModal, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.addSupplierModalHeader}>
+            <Text style={styles.addSupplierModalTitle}>➕ Add Supplier</Text>
+            <TouchableOpacity onPress={() => setAddSupModalVisible(false)}>
+              <Text style={styles.modalClose}>×</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.addSupplierModalContent}>
+            <View>
+              <Text style={styles.inputLabel}>Supplier Name</Text>
+              <View style={styles.inputBox}>
+                <Ionicons name="person-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                <TextInput
+                  style={styles.inputField}
+                  placeholder="Enter supplier name"
+                  value={newSupplierName}
+                  onChangeText={setNewSupplierName}
+                  placeholderTextColor="#999"
+                  autoCorrect={false}
+                  returnKeyType="next"
+                />
               </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
+            </View>
+
+            <View>
+              <Text style={styles.inputLabel}>Category</Text>
+              <View style={styles.inputBox}>
+                <Ionicons name="pricetag-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                <TextInput
+                  style={styles.inputField}
+                  placeholder="e.g., Vegetables"
+                  value={newSupplierCategory}
+                  onChangeText={setNewSupplierCategory}
+                  placeholderTextColor="#999"
+                  autoCorrect={false}
+                  returnKeyType="next"
+                />
+              </View>
+            </View>
+
+            <View>
+              <Text style={styles.inputLabel}>First Bill Amount (Optional)</Text>
+              <View style={styles.inputBox}>
+                <Ionicons name="cash-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                <TextInput
+                  style={styles.inputField}
+                  placeholder="Optional"
+                  value={newSupplierAmount}
+                  onChangeText={setNewSupplierAmount}
+                  keyboardType="numeric"
+                  placeholderTextColor="#999"
+                  returnKeyType="done"
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.addSupplierBtn} onPress={addSupplier}>
+              <Text style={styles.addSupplierBtnText}>Add Supplier ✓</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </Modal>
   );
 
@@ -976,7 +998,7 @@ export default function SuppliersScreen() {
   // Main suppliers list view
   return (
     <View style={styles.container}>
-      <AddSupplierModal />
+      {renderAddSupplierModal()}
       
       {/* Header */}
       <LinearGradient
@@ -1045,7 +1067,7 @@ export default function SuppliersScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+            <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
               <View style={styles.historyModalContainer}>
                 {(() => {
                   // Group all payments by supplier
@@ -1723,7 +1745,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '90%',
-    flex: 1,
+    marginTop: 'auto',
     flexDirection: 'column',
   },
   sheetHeader: {

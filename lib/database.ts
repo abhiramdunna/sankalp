@@ -1,9 +1,11 @@
-// lib/database.ts
-import { supabase } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from './supabase';
 import { useAuthStore } from './store';
 
-// Types remain the same...
+/* =========================
+   TYPES
+========================= */
+
 export interface Product {
   id: number;
   name: string;
@@ -22,6 +24,7 @@ export interface BillItem {
 
 export interface Session {
   id: number;
+  session_id?: number;
   customerName: string;
   phone: string;
   items: BillItem[];
@@ -64,28 +67,80 @@ export interface Supplier {
   transactions: Transaction[];
 }
 
+/* =========================
+   DATABASE SERVICE
+========================= */
+
 class DatabaseService {
-  private getCurrentUserId(): string | null {
+  private getCurrentUserId(): string {
     const { user } = useAuthStore.getState();
-    return user?.id || null;
-  }
 
-  private isAuthenticated(): boolean {
-    const userId = this.getCurrentUserId();
-    return !!userId;
-  }
-
-  // ==================== Products ====================
-  async loadProducts(): Promise<Product[]> {
-    if (!this.isAuthenticated()) {
-      console.log('No authenticated user, skipping products load');
-      return [];
+    if (!user?.id) {
+      throw new Error('User not logged in');
     }
 
-    const userId = this.getCurrentUserId();
-    if (!userId) return [];
+    return user.id;
+  }
 
+  /* =========================
+     AUTH SESSION
+  ========================= */
+
+  async saveAuthSession(session: any) {
+    await AsyncStorage.setItem(
+      'supabase_session',
+      JSON.stringify(session)
+    );
+  }
+
+  async loadAuthSession() {
+    const data = await AsyncStorage.getItem('supabase_session');
+    return data ? JSON.parse(data) : null;
+  }
+
+  async clearAuthSession() {
+    await AsyncStorage.removeItem('supabase_session');
+  }
+
+  /* =========================
+     PROFILE
+  ========================= */
+
+  async saveUserProfile(profileData: any) {
+    const userId = this.getCurrentUserId();
+
+    const { error } = await supabase
+      .from('profiles')
+      .upsert({
+        id: userId,
+        ...profileData,
+      });
+
+    if (error) throw error;
+  }
+
+  async getUserProfile() {
+    const userId = this.getCurrentUserId();
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (error) throw error;
+
+    return data;
+  }
+
+  /* =========================
+     PRODUCTS
+  ========================= */
+
+  async loadProducts(): Promise<Product[]> {
     try {
+      const userId = this.getCurrentUserId();
+
       const { data, error } = await supabase
         .from('user_products')
         .select('*')
@@ -93,145 +148,59 @@ class DatabaseService {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      
-      return (data || []).map(item => ({
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        unit: item.unit,
-        sales: item.sales || 0
-      }));
+
+      return (
+        data?.map((p) => ({
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          name: p.name,
+          price: Number(p.price),
+          unit: p.unit,
+          sales: p.sales || 0,
+        })) || []
+      );
     } catch (error) {
-      console.error('Error loading products from DB:', error);
+      console.log('loadProducts error:', error);
       return [];
     }
   }
 
-  async saveProducts(products: Product[]): Promise<void> {
-    if (!this.isAuthenticated()) {
-      console.log('No authenticated user, skipping products save');
-      await AsyncStorage.setItem('products', JSON.stringify(products));
-      return;
-    }
-
-    const userId = this.getCurrentUserId();
-    if (!userId) return;
-
+  async saveProducts(products: Product[]) {
     try {
-      const { error: deleteError } = await supabase
+      const userId = this.getCurrentUserId();
+
+      await supabase
         .from('user_products')
         .delete()
         .eq('user_id', userId);
 
-      if (deleteError) throw deleteError;
+      if (products.length === 0) return;
 
-      if (products.length > 0) {
-        const { error: insertError } = await supabase
-          .from('user_products')
-          .insert(
-            products.map(p => ({
-              user_id: userId,
-              name: p.name,
-              price: p.price,
-              unit: p.unit,
-              sales: p.sales || 0
-            }))
-          );
+      const formattedProducts = products.map((p) => ({
+        user_id: userId,
+        name: p.name,
+        price: p.price,
+        unit: p.unit,
+        sales: p.sales || 0,
+      }));
 
-        if (insertError) throw insertError;
-      }
-
-      await AsyncStorage.setItem('products', JSON.stringify(products));
-    } catch (error) {
-      console.error('Error saving products to DB:', error);
-      await AsyncStorage.setItem('products', JSON.stringify(products));
-    }
-  }
-
-  // ==================== Sessions ====================
-  async loadSessions(): Promise<Session[]> {
-    if (!this.isAuthenticated()) {
-      console.log('No authenticated user, skipping sessions load');
-      return [];
-    }
-
-    const userId = this.getCurrentUserId();
-    if (!userId) return [];
-
-    try {
-      const { data, error } = await supabase
-        .from('user_sessions')
-        .select('*')
-        .eq('user_id', userId);
+      const { error } = await supabase
+        .from('user_products')
+        .insert(formattedProducts);
 
       if (error) throw error;
-
-      return (data || []).map(item => ({
-        id: item.session_id,
-        customerName: item.customer_name || 'Walk-in Customer',
-        phone: item.phone || '',
-        items: item.items || [],
-        npVal: item.np_val || '0'
-      }));
     } catch (error) {
-      console.error('Error loading sessions from DB:', error);
-      return [];
+      console.log('saveProducts error:', error);
     }
   }
 
-  async saveSessions(sessions: Session[]): Promise<void> {
-    if (!this.isAuthenticated()) {
-      console.log('No authenticated user, skipping sessions save');
-      await AsyncStorage.setItem('sessions', JSON.stringify(sessions));
-      return;
-    }
+  /* =========================
+     SALES
+  ========================= */
 
-    const userId = this.getCurrentUserId();
-    if (!userId) return;
-
-    try {
-      const { error: deleteError } = await supabase
-        .from('user_sessions')
-        .delete()
-        .eq('user_id', userId);
-
-      if (deleteError) throw deleteError;
-
-      if (sessions.length > 0) {
-        const { error: insertError } = await supabase
-          .from('user_sessions')
-          .insert(
-            sessions.map(s => ({
-              user_id: userId,
-              session_id: s.id,
-              customer_name: s.customerName,
-              phone: s.phone,
-              items: s.items,
-              np_val: s.npVal || '0'
-            }))
-          );
-
-        if (insertError) throw insertError;
-      }
-
-      await AsyncStorage.setItem('sessions', JSON.stringify(sessions));
-    } catch (error) {
-      console.error('Error saving sessions to DB:', error);
-      await AsyncStorage.setItem('sessions', JSON.stringify(sessions));
-    }
-  }
-
-  // ==================== Sales Log ====================
   async loadSalesLog(): Promise<SaleLog[]> {
-    if (!this.isAuthenticated()) {
-      console.log('No authenticated user, skipping sales log load');
-      return [];
-    }
-
-    const userId = this.getCurrentUserId();
-    if (!userId) return [];
-
     try {
+      const userId = this.getCurrentUserId();
+
       const { data, error } = await supabase
         .from('user_sales')
         .select('*')
@@ -240,199 +209,202 @@ class DatabaseService {
 
       if (error) throw error;
 
-      return (data || []).map(item => ({
-        id: item.sale_id,
-        total: item.total,
-        time: item.time,
-        date: item.date,
-        items: item.items,
-        customerName: item.customer_name || 'Walk-in Customer',
-        phone: item.phone || ''
-      }));
+      return (
+        data?.map((sale) => ({
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          total: Number(sale.total),
+          time: sale.time,
+          date: sale.date || '',
+          items: sale.items || [],
+          customerName: sale.customer_name,
+          phone: sale.phone,
+        })) || []
+      );
     } catch (error) {
-      console.error('Error loading sales from DB:', error);
+      console.log('loadSalesLog error:', error);
       return [];
     }
   }
 
-  async addSaleLog(sale: SaleLog, existingSales: SaleLog[]): Promise<SaleLog[]> {
-    const updated = [sale, ...existingSales];
-    await AsyncStorage.setItem('salesLog', JSON.stringify(updated));
-
-    if (!this.isAuthenticated()) {
-      console.log('No authenticated user, skipping sale save to DB');
-      return updated;
-    }
-
-    const userId = this.getCurrentUserId();
-    if (!userId) return updated;
-
+  async addSaleLog(
+    saleRecord: SaleLog,
+    existingSales?: SaleLog[]
+  ) {
     try {
+      const userId = this.getCurrentUserId();
+
       const { error } = await supabase
         .from('user_sales')
         .insert({
           user_id: userId,
-          sale_id: sale.id,
-          total: sale.total,
-          time: sale.time,
-          date: sale.date,
-          items: sale.items,
-          customer_name: sale.customerName,
-          phone: sale.phone
+          total: saleRecord.total,
+          time: saleRecord.time,
+          date: saleRecord.date || '',
+          items: saleRecord.items,
+          customer_name: saleRecord.customerName,
+          phone: saleRecord.phone,
         });
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error adding sale to DB:', error);
+      console.log('addSaleLog error:', error);
     }
-    
-    return updated;
   }
 
-  // ==================== Suppliers ====================
+  /* =========================
+     SUPPLIERS
+  ========================= */
+
   async loadSuppliers(): Promise<Supplier[]> {
-    if (!this.isAuthenticated()) {
-      console.log('No authenticated user, skipping suppliers load');
-      return [];
-    }
-
-    const userId = this.getCurrentUserId();
-    if (!userId) return [];
-
     try {
+      const userId = this.getCurrentUserId();
+
       const { data, error } = await supabase
         .from('user_suppliers')
         .select('*')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
 
       if (error) throw error;
 
-      return (data || []).map(item => ({
-        id: item.supplier_id,
-        name: item.name,
-        category: item.category,
-        bills: item.bills || [],
-        transactions: item.transactions || []
-      }));
+      return (
+        data?.map((supplier) => ({
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          name: supplier.name,
+          category: supplier.category,
+          bills: supplier.bills || [],
+          transactions: supplier.transactions || [],
+        })) || []
+      );
     } catch (error) {
-      console.error('Error loading suppliers from DB:', error);
+      console.log('loadSuppliers error:', error);
       return [];
     }
   }
 
-  async saveSuppliers(suppliers: Supplier[]): Promise<void> {
-    if (!this.isAuthenticated()) {
-      console.log('No authenticated user, skipping suppliers save');
-      await AsyncStorage.setItem('suppliers_v2', JSON.stringify(suppliers));
-      return;
-    }
-
-    const userId = this.getCurrentUserId();
-    if (!userId) return;
-
+  async saveSuppliers(suppliers: Supplier[]) {
     try {
-      const { error: deleteError } = await supabase
+      const userId = this.getCurrentUserId();
+
+      await supabase
         .from('user_suppliers')
         .delete()
         .eq('user_id', userId);
 
-      if (deleteError) throw deleteError;
+      if (suppliers.length === 0) return;
 
-      if (suppliers.length > 0) {
-        const { error: insertError } = await supabase
-          .from('user_suppliers')
-          .insert(
-            suppliers.map(s => ({
-              user_id: userId,
-              supplier_id: s.id,
-              name: s.name,
-              category: s.category,
-              bills: s.bills,
-              transactions: s.transactions
-            }))
-          );
+      const formattedSuppliers = suppliers.map((s) => ({
+        user_id: userId,
+        name: s.name,
+        category: s.category,
+        bills: s.bills,
+        transactions: s.transactions,
+      }));
 
-        if (insertError) throw insertError;
-      }
+      const { error } = await supabase
+        .from('user_suppliers')
+        .insert(formattedSuppliers);
 
-      await AsyncStorage.setItem('suppliers_v2', JSON.stringify(suppliers));
+      if (error) throw error;
     } catch (error) {
-      console.error('Error saving suppliers to DB:', error);
-      await AsyncStorage.setItem('suppliers_v2', JSON.stringify(suppliers));
+      console.log('saveSuppliers error:', error);
     }
   }
 
-  // ==================== Sync All Data ====================
-  async syncAllData(): Promise<void> {
-    if (!this.isAuthenticated()) {
-      console.log('No authenticated user, skipping sync');
-      return;
-    }
+  /* =========================
+     SESSIONS
+  ========================= */
 
-    const userId = this.getCurrentUserId();
-    if (!userId) {
-      console.log('No user ID, skipping sync');
-      return;
-    }
-
-    console.log('🔄 Syncing data for user:', userId);
-
+  async loadSessions(): Promise<Session[]> {
     try {
-      const [products, sessions, salesLog, suppliers] = await Promise.all([
-        AsyncStorage.getItem('products'),
-        AsyncStorage.getItem('sessions'),
-        AsyncStorage.getItem('salesLog'),
-        AsyncStorage.getItem('suppliers_v2')
-      ]);
+      const userId = this.getCurrentUserId();
 
-      if (products) {
-        await this.saveProducts(JSON.parse(products));
-        console.log('✅ Products synced');
-      }
+      const { data, error } = await supabase
+        .from('user_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
 
-      if (sessions) {
-        await this.saveSessions(JSON.parse(sessions));
-        console.log('✅ Sessions synced');
-      }
+      if (error) throw error;
 
-      if (salesLog) {
-        const sales = JSON.parse(salesLog);
-        for (const sale of sales) {
-          await this.addSaleLog(sale, []);
-        }
-        console.log('✅ Sales synced');
-      }
-
-      if (suppliers) {
-        await this.saveSuppliers(JSON.parse(suppliers));
-        console.log('✅ Suppliers synced');
-      }
-
-      console.log('✅ All data synced successfully');
+      return (
+        data?.map((session) => ({
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          session_id: session.session_id,
+          customerName: session.customer_name,
+          phone: session.phone,
+          items: session.items || [],
+          npVal: session.np_val,
+        })) || []
+      );
     } catch (error) {
-      console.error('Error syncing data:', error);
+      console.log('loadSessions error:', error);
+      return [];
     }
   }
 
-  async loadAllDataFromDB(): Promise<{
-    products: Product[];
-    sessions: Session[];
-    salesLog: SaleLog[];
-    suppliers: Supplier[];
-  }> {
-    if (!this.isAuthenticated()) {
-      console.log('No authenticated user, returning empty data');
-      return { products: [], sessions: [], salesLog: [], suppliers: [] };
+  async saveSessions(sessions: Session[]) {
+    try {
+      const userId = this.getCurrentUserId();
+
+      await supabase
+        .from('user_sessions')
+        .delete()
+        .eq('user_id', userId);
+
+      if (sessions.length === 0) return;
+
+      const formattedSessions = sessions.map((s) => ({
+        user_id: userId,
+        session_id: s.session_id,
+        customer_name: s.customerName,
+        phone: s.phone,
+        items: s.items,
+        np_val: s.npVal,
+      }));
+
+      const { error } = await supabase
+        .from('user_sessions')
+        .insert(formattedSessions);
+
+      if (error) throw error;
+    } catch (error) {
+      console.log('saveSessions error:', error);
     }
+  }
 
-    const [products, sessions, salesLog, suppliers] = await Promise.all([
-      this.loadProducts(),
-      this.loadSessions(),
-      this.loadSalesLog(),
-      this.loadSuppliers()
-    ]);
+  /* =========================
+     TRIAL / SUBSCRIPTION
+  ========================= */
 
-    return { products, sessions, salesLog, suppliers };
+  async saveTrialStart(date: string) {
+    await AsyncStorage.setItem('trialStart', date);
+  }
+
+  async loadTrialStart() {
+    return await AsyncStorage.getItem('trialStart');
+  }
+
+  async saveSubscriptionStatus(status: boolean) {
+    await AsyncStorage.setItem(
+      'isSubscribed',
+      status.toString()
+    );
+  }
+
+  async loadSubscriptionStatus() {
+    const status = await AsyncStorage.getItem(
+      'isSubscribed'
+    );
+    return status === 'true';
+  }
+
+  /* =========================
+     LOGOUT CLEANUP
+  ========================= */
+
+  async logoutCleanup() {
+    await this.clearAuthSession();
   }
 }
 
