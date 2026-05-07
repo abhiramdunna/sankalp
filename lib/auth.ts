@@ -122,16 +122,7 @@ export async function signInWithGoogle(mode: AuthMode): Promise<AuthResult> {
   // Phase 4: Profile handling
   if (mode === 'signup') {
     // Create profile row for brand new user (upsert is safe)
-    const { error: profileError } = await supabase.from('profiles').upsert({
-      id: userId,
-      email: userEmail,
-    });
-
-    if (profileError) {
-      console.error('❌ Profile creation error:', profileError);
-    } else {
-      console.log('✅ Profile row created');
-    }
+   
 
     return {
       user: data.user,

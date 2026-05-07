@@ -1,4 +1,3 @@
-// complete-profile.tsx
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,99 +21,125 @@ import {
 export default function CompleteProfile() {
   const router = useRouter();
   const { user, clearAuth, updateProfileStatus } = useAuthStore();
+
   const [businessName, setBusinessName] = useState('');
   const [city, setCity] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    const checkProfile = async () => {
-      try {
-        // ✅ Use the store user instead of getSession().
-        // getSession() can return null immediately after signInWithIdToken
-        // fires SIGNED_IN due to a timing race — this avoids clearing auth.
-        if (!user?.id) {
-          console.log('⚠️ No user in store — redirecting to login');
-          router.replace('/login');
-          return;
-        }
-
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('business_name, city')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        if (error) {
-          console.error('Profile check error:', error);
-        }
-
-        if (profile?.business_name && profile?.city) {
-          // Already complete — update store, layout will navigate to home
-          updateProfileStatus(true);
-          return;
-        }
-
-        // Pre-fill any partial data
-        if (profile?.business_name) setBusinessName(profile.business_name);
-        if (profile?.city) setCity(profile.city);
-      } catch (error) {
-        console.error('Check profile error:', error);
-      } finally {
-        setIsChecking(false);
-      }
-    };
-
-    checkProfile();
-  }, []);
-
-  const handleContinue = async () => {
-    if (!businessName.trim() || !city.trim()) {
-      Alert.alert('Missing Details', 'Please enter both business name and city.');
+    if (!user?.id) {
+      console.log('⚠️ No user found → redirecting to login');
+      router.replace('/login');
       return;
     }
 
-    setIsLoading(true);
+    console.log('✅ User available:', user.id);
+    setIsChecking(false);
+  }, [user]);
 
-    try {
-      if (!user?.id) {
-        Alert.alert('Session Expired', 'Please sign in again.');
-        clearAuth();
-        router.replace('/login');
-        return;
-      }
+  const handleContinue = async () => {
+  if (!businessName.trim() || !city.trim()) {
+    Alert.alert(
+      'Missing Details',
+      'Please enter both business name and city.'
+    );
+    return;
+  }
 
-      const { error } = await supabase.from('profiles').upsert({
-        id: user.id,
-        email: user.email,
-        business_name: businessName.trim(),
-        city: city.trim(),
-      });
+  setIsLoading(true);
 
-      if (error) {
-        console.error('❌ Profile save error:', error);
-        Alert.alert('Error', 'Failed to save business details. Please try again.');
+  try {
+    if (!user?.id) {
+      Alert.alert('Session Expired');
+      clearAuth();
+      router.replace('/login');
+      return;
+    }
+
+    console.log('🔍 Checking session before insert...');
+    
+    // HIGH-SIGNAL DIAGNOSTIC: Check if Postgres will see auth.uid()
+    const { data: sessionData } = await supabase.auth.getSession();
+    const { data: userData } = await supabase.auth.getUser();
+    const authUid = userData?.user?.id;
+    
+    console.log('🔐 AUTH session?', !!sessionData?.session, 'uid:', authUid);
+    
+    if (!authUid) {
+      console.error('❌ Auth not ready - session may still be persisting');
+      console.log('⏳ Waiting 500ms for session to persist...');
+      
+      // Wait a moment for AsyncStorage to settle
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Try again
+      const { data: retrySession } = await supabase.auth.getSession();
+      const { data: retryUser } = await supabase.auth.getUser();
+      const retryUid = retryUser?.user?.id;
+      
+      console.log('🔐 Retry - session?', !!retrySession?.session, 'uid:', retryUid);
+      
+      if (!retryUid) {
+        console.error('❌ CRITICAL: auth.uid() still undefined after retry');
+        Alert.alert('Error', 'Session lost. Please try again.');
         setIsLoading(false);
         return;
       }
-
-      console.log('✅ Profile completed');
-
-      // ✅ Update store → useProtectedRoute in _layout.tsx navigates to home
-      updateProfileStatus(true);
-    } catch (err) {
-      console.error('❌ Unexpected error:', err);
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
-      setIsLoading(false);
     }
-  };
+    
+    console.log('✅ Auth uid confirmed');
+
+    // Final verification right before insert
+    const { data: s } = await supabase.auth.getSession();
+    const { data: u } = await supabase.auth.getUser();
+    console.log('session ok?', !!s?.session, 'auth uid:', u?.user?.id);
+
+    // FIX 1: Don't send id from client - let trigger set it from auth.uid()
+    const payload = {
+       id: user.id,  
+      email: user.email,
+      business_name: businessName.trim(),
+      city: city.trim(),
+    };
+
+    console.log('📝 Profile payload (no id):', payload);
+    console.log('💾 Calling supabase.from().insert()...');
+
+  const { data, error } = await supabase
+  .from("profiles")
+  .upsert(payload)         // ← upsert not insert
+  .select()
+  .single();
+
+    if (error) {
+      console.error('❌ Error:', error);
+      Alert.alert('Error', error.message);
+      setIsLoading(false);
+      return;
+    }
+
+    console.log('✅ Profile saved:', data);
+
+    updateProfileStatus(true);
+
+    router.replace('/(tabs)/home');
+  } catch (err: any) {
+    console.error('❌ Exception:', err);
+    Alert.alert(
+      'Error',
+      err.message || 'Something went wrong'
+    );
+    setIsLoading(false);
+  }
+};
 
   if (isChecking) {
     return (
       <LinearGradient colors={['#4F46E5', '#7C3AED', '#9333EA']} style={styles.container}>
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#ffffff" />
+            <ActivityIndicator size="large" color="#fff" />
             <Text style={styles.loadingText}>Loading profile...</Text>
           </View>
         </SafeAreaView>
@@ -125,8 +150,6 @@ export default function CompleteProfile() {
   return (
     <LinearGradient
       colors={['#4F46E5', '#7C3AED', '#9333EA']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
       style={styles.container}
     >
       <SafeAreaView style={styles.safeArea}>
@@ -146,19 +169,24 @@ export default function CompleteProfile() {
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Let's Get Started</Text>
-              <Text style={styles.cardMessage}>Tell us about your business to continue</Text>
+              <Text style={styles.cardMessage}>
+                Tell us about your business to continue
+              </Text>
 
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Business Name</Text>
                 <View style={styles.inputContainer}>
-                  <Ionicons name="business-outline" size={18} color="#999" style={styles.inputIcon} />
+                  <Ionicons
+                    name="business-outline"
+                    size={18}
+                    color="#999"
+                    style={styles.inputIcon}
+                  />
                   <TextInput
                     style={styles.input}
                     placeholder="e.g., ABC Store"
-                    placeholderTextColor="#bbb"
                     value={businessName}
                     onChangeText={setBusinessName}
-                    editable={!isLoading}
                   />
                 </View>
               </View>
@@ -166,37 +194,35 @@ export default function CompleteProfile() {
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>City</Text>
                 <View style={styles.inputContainer}>
-                  <Ionicons name="location-outline" size={18} color="#999" style={styles.inputIcon} />
+                  <Ionicons
+                    name="location-outline"
+                    size={18}
+                    color="#999"
+                    style={styles.inputIcon}
+                  />
                   <TextInput
                     style={styles.input}
                     placeholder="e.g., Mumbai"
-                    placeholderTextColor="#bbb"
                     value={city}
                     onChangeText={setCity}
-                    editable={!isLoading}
                   />
                 </View>
               </View>
 
               <TouchableOpacity
-                style={[styles.continueBtn, isLoading && { opacity: 0.6 }]}
+                style={styles.continueBtn}
                 onPress={handleContinue}
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
+                  <ActivityIndicator color="#fff" />
                 ) : (
                   <>
-                    <Text style={styles.continueBtnText}>Continue to Home</Text>
-                    <Ionicons name="arrow-forward" size={18} color="#ffffff" />
+                    <Text style={styles.continueBtnText}>Continue</Text>
+                    <Ionicons name="arrow-forward" size={18} color="#fff" />
                   </>
                 )}
               </TouchableOpacity>
-
-              <View style={styles.footer}>
-                <Ionicons name="checkmark-circle-outline" size={16} color="#999" />
-                <Text style={styles.footerText}>Your data is secured and encrypted</Text>
-              </View>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -209,41 +235,80 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
   inner: { flex: 1 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
-  loadingText: { fontSize: 16, fontWeight: '600', color: 'rgba(255,255,255,0.8)' },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 20 },
-  hero: { alignItems: 'center', marginBottom: 24, paddingTop: 60 },
-  brand: { marginTop: 20, fontSize: 48, fontWeight: '900', color: '#ffffff', letterSpacing: 0.2 },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#fff',
+    marginTop: 10,
+    fontSize: 16,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: 20,
+  },
+  hero: {
+    alignItems: 'center',
+    marginTop: 60,
+    marginBottom: 30,
+  },
+  brand: {
+    fontSize: 42,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
   subtitle: {
-    marginTop: 4, fontSize: 20, lineHeight: 26,
-    color: '#fff6e8', fontWeight: '700', textAlign: 'center',
+    color: '#fff',
+    fontSize: 18,
   },
   card: {
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 24, paddingHorizontal: 20, paddingVertical: 22, marginBottom: 14,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
   },
-  cardTitle: { fontSize: 22, fontWeight: '900', color: '#1f2937', marginBottom: 6 },
-  cardMessage: { fontSize: 14, color: '#666', marginBottom: 18, lineHeight: 20 },
-  inputGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '700', color: '#374151', marginBottom: 8 },
+  cardTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+  cardMessage: {
+    color: 'gray',
+    marginBottom: 20,
+  },
+  inputGroup: {
+    marginBottom: 15,
+  },
+  label: {
+    fontWeight: '600',
+    marginBottom: 8,
+  },
   inputContainer: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#f3f4f6', borderRadius: 12,
-    paddingHorizontal: 12, borderWidth: 1, borderColor: '#e5e7eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 10,
+    paddingHorizontal: 10,
   },
-  inputIcon: { marginRight: 8 },
-  input: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#1f2937', fontWeight: '600' },
+  inputIcon: {
+    marginRight: 8,
+  },
+  input: {
+    flex: 1,
+    paddingVertical: 12,
+  },
   continueBtn: {
-    backgroundColor: '#4F46E5', borderRadius: 12, paddingVertical: 14,
-    alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
-    marginTop: 22, elevation: 3,
-    shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25, shadowRadius: 6,
+    backgroundColor: '#4F46E5',
+    padding: 15,
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
   },
-  continueBtnText: { fontSize: 16, fontWeight: '900', color: '#ffffff' },
-  footer: {
-    alignItems: 'center', marginTop: 16,
-    flexDirection: 'row', justifyContent: 'center', gap: 6,
+  continueBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
-  footerText: { color: '#999', fontSize: 12, fontWeight: '600', textAlign: 'center' },
 });
