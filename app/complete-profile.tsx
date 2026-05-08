@@ -1,9 +1,11 @@
+// complete-profile.tsx
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
   Alert,
@@ -20,7 +22,7 @@ import {
 
 export default function CompleteProfile() {
   const router = useRouter();
-  const { user, clearAuth, updateProfileStatus } = useAuthStore();
+  const { user, clearAuth, updateProfileStatus, setIsNewSignup } = useAuthStore();
 
   const [businessName, setBusinessName] = useState('');
   const [city, setCity] = useState('');
@@ -39,100 +41,76 @@ export default function CompleteProfile() {
   }, [user]);
 
   const handleContinue = async () => {
-  if (!businessName.trim() || !city.trim()) {
-    Alert.alert(
-      'Missing Details',
-      'Please enter both business name and city.'
-    );
-    return;
-  }
-
-  setIsLoading(true);
-
-  try {
-    if (!user?.id) {
-      Alert.alert('Session Expired');
-      clearAuth();
-      router.replace('/login');
+    if (!businessName.trim() || !city.trim()) {
+      Alert.alert('Missing Details', 'Please enter both business name and city.');
       return;
     }
 
-    console.log('🔍 Checking session before insert...');
-    
-    // HIGH-SIGNAL DIAGNOSTIC: Check if Postgres will see auth.uid()
-    const { data: sessionData } = await supabase.auth.getSession();
-    const { data: userData } = await supabase.auth.getUser();
-    const authUid = userData?.user?.id;
-    
-    console.log('🔐 AUTH session?', !!sessionData?.session, 'uid:', authUid);
-    
-    if (!authUid) {
-      console.error('❌ Auth not ready - session may still be persisting');
-      console.log('⏳ Waiting 500ms for session to persist...');
-      
-      // Wait a moment for AsyncStorage to settle
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Try again
-      const { data: retrySession } = await supabase.auth.getSession();
-      const { data: retryUser } = await supabase.auth.getUser();
-      const retryUid = retryUser?.user?.id;
-      
-      console.log('🔐 Retry - session?', !!retrySession?.session, 'uid:', retryUid);
-      
-      if (!retryUid) {
-        console.error('❌ CRITICAL: auth.uid() still undefined after retry');
-        Alert.alert('Error', 'Session lost. Please try again.');
+    setIsLoading(true);
+
+    try {
+      if (!user?.id) {
+        Alert.alert('Session Expired');
+        clearAuth();
+        router.replace('/login');
+        return;
+      }
+
+      const payload = {
+        id: user.id,
+        email: user.email,
+        business_name: businessName.trim(),
+        city: city.trim(),
+      };
+
+      console.log('💾 Saving profile:', payload);
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .upsert(payload)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Error:', error);
+        Alert.alert('Error', error.message);
         setIsLoading(false);
         return;
       }
-    }
-    
-    console.log('✅ Auth uid confirmed');
 
-    // Final verification right before insert
-    const { data: s } = await supabase.auth.getSession();
-    const { data: u } = await supabase.auth.getUser();
-    console.log('session ok?', !!s?.session, 'auth uid:', u?.user?.id);
+      console.log('✅ Profile saved:', data);
 
-    // FIX 1: Don't send id from client - let trigger set it from auth.uid()
-    const payload = {
-       id: user.id,  
-      email: user.email,
-      business_name: businessName.trim(),
-      city: city.trim(),
-    };
+      // Mark profile complete and clear new signup flag
+      updateProfileStatus(true);
+      setIsNewSignup(false);
 
-    console.log('📝 Profile payload (no id):', payload);
-    console.log('💾 Calling supabase.from().insert()...');
-
-  const { data, error } = await supabase
-  .from("profiles")
-  .upsert(payload)         // ← upsert not insert
-  .select()
-  .single();
-
-    if (error) {
-      console.error('❌ Error:', error);
-      Alert.alert('Error', error.message);
+      router.replace('/(tabs)/home');
+    } catch (err: any) {
+      console.error('❌ Exception:', err);
+      Alert.alert('Error', err.message || 'Something went wrong');
       setIsLoading(false);
-      return;
     }
+  };
 
-    console.log('✅ Profile saved:', data);
-
-    updateProfileStatus(true);
-
-    router.replace('/(tabs)/home');
-  } catch (err: any) {
-    console.error('❌ Exception:', err);
-    Alert.alert(
-      'Error',
-      err.message || 'Something went wrong'
-    );
-    setIsLoading(false);
-  }
-};
+  const handleLogout = async () => {
+    Alert.alert('Clear Session', 'This will clear your current session and sign you out. Continue?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await supabase.auth.signOut();
+            await AsyncStorage.removeItem('auth-storage');
+            clearAuth();
+            router.replace('/login');
+          } catch (err) {
+            console.error('Error logging out:', err);
+          }
+        },
+      },
+    ]);
+  };
 
   if (isChecking) {
     return (
@@ -223,6 +201,10 @@ export default function CompleteProfile() {
                   </>
                 )}
               </TouchableOpacity>
+
+              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+                <Text style={styles.logoutBtnText}>🔧 Clear Session</Text>
+              </TouchableOpacity>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -310,5 +292,20 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  logoutBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  logoutBtnText: {
+    color: '#DC2626',
+    fontWeight: '600',
+    fontSize: 14,
+    textAlign: 'center',
   },
 });

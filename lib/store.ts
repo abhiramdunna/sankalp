@@ -19,9 +19,11 @@ interface AuthState {
   user: User | null;
   session: Session | null;
   isLoading: boolean;
+  isNewSignup: boolean;
   setUser: (user: User | null) => void;
   setSession: (session: Session | null) => void;
   setLoading: (isLoading: boolean) => void;
+  setIsNewSignup: (val: boolean) => void;
   updateProfileStatus: (hasCompleteProfile: boolean) => void;
   clearAuth: () => void;
 }
@@ -32,21 +34,24 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       session: null,
       isLoading: true,
+      isNewSignup: false,
       setUser: (user) => set({ user }),
       setSession: (session) => set({ session }),
       setLoading: (isLoading) => set({ isLoading }),
+      setIsNewSignup: (val) => set({ isNewSignup: val }),
       updateProfileStatus: (hasCompleteProfile) =>
         set((state) => ({
           user: state.user ? { ...state.user, hasCompleteProfile } : null,
         })),
       clearAuth: () => {
         console.log('🧹 Clearing all auth state');
-        set({ user: null, session: null, isLoading: false });
+        set({ user: null, session: null, isLoading: false, isNewSignup: false });
       },
     }),
     {
       name: 'auth-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      // isNewSignup is intentionally NOT persisted — resets on app restart
       partialize: (state) => ({ user: state.user, session: state.session }),
     }
   )

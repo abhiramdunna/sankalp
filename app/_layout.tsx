@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { configureGoogleSignIn } from '@/lib/auth';
+import { configureGoogleSignIn, suppressAuthEvent } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
 
@@ -18,34 +18,26 @@ export const unstable_settings = {
   initialRouteName: 'login',
 };
 
-/**
- * SINGLE SOURCE OF TRUTH FOR NAVIGATION.
- * Login.tsx must NOT navigate after auth — it just calls signInWithGoogle and
- * updates the store. This hook reacts to store changes and routes accordingly.
- */
 function useProtectedRoute(user: any, isReady: boolean) {
   const segments = useSegments();
   const router = useRouter();
+  const { isNewSignup } = useAuthStore();
 
   useEffect(() => {
     if (!isReady) return;
 
-    // Cast to string to avoid TypeScript tuple-type comparison errors
     const firstSegment = segments[0] as string | undefined;
-
     const onCompleteProfile = firstSegment === 'complete-profile';
-    const onLoginOrIndex =
-      firstSegment === 'login' ||
-      firstSegment === undefined;
+    const onLoginOrIndex = firstSegment === 'login' || firstSegment === undefined;
 
     console.log('🔐 Route check:', {
       user: !!user,
       hasCompleteProfile: user?.hasCompleteProfile,
+      isNewSignup,
       segments,
     });
 
     if (!user) {
-      // No user — send to login (but only if not already there)
       if (!onLoginOrIndex) {
         console.log('➡️ No user → /login');
         router.replace('/login');
@@ -53,21 +45,20 @@ function useProtectedRoute(user: any, isReady: boolean) {
       return;
     }
 
-    // User exists
+    // If profile is incomplete, ALWAYS go to complete-profile (regardless of signup vs login)
     if (!user.hasCompleteProfile) {
-      // Needs to complete profile
       if (!onCompleteProfile) {
         console.log('➡️ Incomplete profile → /complete-profile');
         router.replace('/complete-profile');
       }
     } else {
-      // Profile complete — go to home if on auth screens
+      // Profile is complete, go to home (but not if already there)
       if (onLoginOrIndex || onCompleteProfile) {
         console.log('➡️ Profile complete → /(tabs)/home');
         router.replace('/(tabs)/home');
       }
     }
-  }, [user, isReady, segments]);
+  }, [user, isReady, segments, isNewSignup]);
 }
 
 export default function RootLayout() {
@@ -86,7 +77,6 @@ export default function RootLayout() {
         configureGoogleSignIn();
         setLoading(true);
 
-        // Check for an existing Supabase session (handles app restarts)
         const { data: { session }, error } = await supabase.auth.getSession();
 
         if (error) {
@@ -116,12 +106,19 @@ export default function RootLayout() {
           clearAuth();
         }
 
-        // Listen for auth state changes (triggered by signInWithGoogle in login.tsx)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, newSession) => {
-            console.log('🔄 Auth event:', event);
+            console.log('🔄 Auth event:', event, '| suppressed:', suppressAuthEvent);
 
             if (event === 'SIGNED_IN' && newSession?.user) {
+              // If signInWithGoogle() is still running its checks, ignore this event.
+              // signInWithGoogle() will unsuppress and the store will be updated
+              // by login.tsx calling setUser manually after the function returns.
+              if (suppressAuthEvent) {
+                console.log('⏸️ SIGNED_IN suppressed — auth checks still running');
+                return;
+              }
+
               console.log('✅ SIGNED_IN:', newSession.user.email);
 
               const { data: profile } = await supabase
@@ -140,6 +137,7 @@ export default function RootLayout() {
                 access_token: newSession.access_token,
                 refresh_token: newSession.refresh_token,
               });
+
             } else if (event === 'TOKEN_REFRESHED' && newSession) {
               setSession({
                 access_token: newSession.access_token,
@@ -167,7 +165,6 @@ export default function RootLayout() {
     initializeApp();
   }, []);
 
-  // Navigation guard — driven entirely by store state
   useProtectedRoute(user, appReady && !isLoading);
 
   if (!appReady || isLoading) {

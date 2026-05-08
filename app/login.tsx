@@ -19,6 +19,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { signInWithGoogle, type AuthMode } from '@/lib/auth';
+import { useAuthStore } from '@/lib/store';
+import { supabase } from '@/lib/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -31,6 +33,8 @@ function getErrorMessage(err: any): string {
 }
 
 export default function Login() {
+  const { setIsNewSignup, setUser, setSession } = useAuthStore();
+
   const [isLoading, setIsLoading] = useState(false);
   const [loadingTitle, setLoadingTitle] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -71,27 +75,46 @@ export default function Login() {
     ]).start();
   }, []);
 
-  /**
-   * Handles Google auth for login or signup.
-   *
-   * After signInWithGoogle succeeds, Supabase fires onAuthStateChange(SIGNED_IN),
-   * which _layout.tsx listens to → updates the store → useProtectedRoute navigates.
-   * So we do NOT navigate here at all.
-   */
   const handleAuth = async (mode: AuthMode) => {
     if (isLoading) return;
 
+    setIsNewSignup(mode === 'signup');
     setLoadingTitle(mode === 'signup' ? 'Creating your account...' : 'Signing in...');
     setIsLoading(true);
 
     try {
-      await signInWithGoogle(mode);
-      // ✅ Success: _layout.tsx SIGNED_IN listener handles store update + navigation.
-      // We just stop the loading state. The screen will unmount when navigation happens.
+      const result = await signInWithGoogle(mode);
+
+      /**
+       * Because we suppressed the SIGNED_IN event in _layout.tsx during
+       * signInWithGoogle(), we must manually update the store here now
+       * that all checks have passed and we know the user is legitimate.
+       *
+       * This store update triggers useProtectedRoute which handles navigation.
+       */
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('business_name, city')
+        .eq('id', result.user.id)
+        .maybeSingle();
+
+      setUser({
+        id: result.user.id,
+        email: result.user.email || '',
+        user_metadata: result.user.user_metadata,
+        hasCompleteProfile: !!(profile?.business_name && profile?.city),
+      });
+      setSession({
+        access_token: result.session.access_token,
+        refresh_token: result.session.refresh_token,
+      });
+
       setIsLoading(false);
     } catch (err) {
       const msg = getErrorMessage(err);
       console.error('❌ Auth error:', msg);
+
+      setIsNewSignup(false);
       setIsLoading(false);
 
       if (msg === 'CANCELLED') return;
@@ -203,7 +226,6 @@ export default function Login() {
         </KeyboardAvoidingView>
       </SafeAreaView>
 
-      {/* Modal for account conflict errors */}
       {modalConfig && (
         <Modal
           animationType="fade"
@@ -236,7 +258,7 @@ export default function Login() {
                   }}
                 >
                   <Text style={styles.modalButtonTextPrimary}>
-                    {modalConfig.type === 'exists' ? 'Go to Login' : 'Sign Up Instead'}
+                    {modalConfig.type === 'exists' ? 'Go to Login' : 'Sign Up'}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -334,8 +356,6 @@ const styles = StyleSheet.create({
   loadingTitle: { fontSize: 34, fontWeight: '900', color: '#ffffff', textAlign: 'center' },
   loadingSub: { fontSize: 20, color: 'rgba(255,255,255,0.8)', fontWeight: '700', marginBottom: 12 },
   loadingIndicator: { marginTop: 8, transform: [{ scale: 1.2 }] },
-
-  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -366,20 +386,8 @@ const styles = StyleSheet.create({
   modalIconError: { backgroundColor: '#FEE2E2' },
   modalIconWarning: { backgroundColor: '#FEF3C7' },
   modalIconText: { fontSize: 32 },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  modalMessage: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
-  },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#111827', marginBottom: 8, textAlign: 'center' },
+  modalMessage: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
   modalButtons: { flexDirection: 'row', gap: 12, width: '100%' },
   modalButton: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   modalButtonPrimary: { backgroundColor: '#4F46E5' },
