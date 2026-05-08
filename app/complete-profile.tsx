@@ -5,7 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
   Alert,
@@ -80,7 +79,6 @@ export default function CompleteProfile() {
 
       console.log('✅ Profile saved:', data);
 
-      // Mark profile complete and clear new signup flag
       updateProfileStatus(true);
       setIsNewSignup(false);
 
@@ -90,26 +88,6 @@ export default function CompleteProfile() {
       Alert.alert('Error', err.message || 'Something went wrong');
       setIsLoading(false);
     }
-  };
-
-  const handleLogout = async () => {
-    Alert.alert('Clear Session', 'This will clear your current session and sign you out. Continue?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await supabase.auth.signOut();
-            await AsyncStorage.removeItem('auth-storage');
-            clearAuth();
-            router.replace('/login');
-          } catch (err) {
-            console.error('Error logging out:', err);
-          }
-        },
-      },
-    ]);
   };
 
   if (isChecking) {
@@ -163,6 +141,7 @@ export default function CompleteProfile() {
                   <TextInput
                     style={styles.input}
                     placeholder="e.g., ABC Store"
+                    placeholderTextColor="#9CA3AF"
                     value={businessName}
                     onChangeText={setBusinessName}
                   />
@@ -181,6 +160,7 @@ export default function CompleteProfile() {
                   <TextInput
                     style={styles.input}
                     placeholder="e.g., Mumbai"
+                    placeholderTextColor="#9CA3AF"
                     value={city}
                     onChangeText={setCity}
                   />
@@ -200,10 +180,6 @@ export default function CompleteProfile() {
                     <Ionicons name="arrow-forward" size={18} color="#fff" />
                   </>
                 )}
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-                <Text style={styles.logoutBtnText}>🔧 Clear Session</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -278,6 +254,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     paddingVertical: 12,
+    color: '#111827',
   },
   continueBtn: {
     backgroundColor: '#4F46E5',
@@ -292,20 +269,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
-  },
-  logoutBtn: {
-    marginTop: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: '#FEE2E2',
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-  },
-  logoutBtnText: {
-    color: '#DC2626',
-    fontWeight: '600',
-    fontSize: 14,
-    textAlign: 'center',
   },
 });

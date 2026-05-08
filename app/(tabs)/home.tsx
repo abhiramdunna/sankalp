@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { db as DatabaseService } from '@/lib/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState, memo, useRef, useMemo } from 'react';
 import {
   Alert,
@@ -133,7 +133,7 @@ const LiveBillingModal = memo(({
   const billTotal = activeItems.reduce((s, i) => s + i.price * i.qty, 0);
   const totalQty = activeItems.reduce((s, i) => s + i.qty, 0);
 
-  const productsToUse = products && products.length > 0 ? products : SAMPLE_PRODUCTS;
+  const productsToUse = products && products.length > 0 ? products : [];
   const filtered = searchQuery 
     ? productsToUse.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : productsToUse;
@@ -189,20 +189,14 @@ const LiveBillingModal = memo(({
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.customerSection}>
-              <View style={styles.customerAvatarRow}>
-                <View style={styles.customerAvatar}>
-                  <Ionicons name="person" size={22} color="#2563EB" />
-                </View>
-                <Text style={styles.customerSectionTitle}>Customer Name</Text>
-              </View>
               <View style={styles.lbInputBox}>
                 <Ionicons name="person-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
                 <TextInput
                   style={styles.lbInput}
-                  placeholder=""
+                  placeholder="Customer Name"
                   value={customerName}
                   onChangeText={setCustomerName}
-                  placeholderTextColor="#ccc"
+                  placeholderTextColor="#9CA3AF"
                 />
                 {customerName.length > 0 && (
                   <TouchableOpacity onPress={() => setCustomerName('')}>
@@ -235,7 +229,13 @@ const LiveBillingModal = memo(({
                   placeholderTextColor="#ccc"
                 />
               </View>
-              {filtered.map(product => {
+              {productsToUse.length === 0 ? (
+                <View style={{ alignItems: 'center', paddingVertical: 30 }}>
+                  <Ionicons name="cube-outline" size={36} color="#D1D5DB" />
+                  <Text style={{ color: '#9CA3AF', fontSize: 14, fontWeight: '600', marginTop: 10 }}>No products added yet</Text>
+                  <Text style={{ color: '#C4C4C4', fontSize: 12, marginTop: 4, textAlign: 'center' }}>Go to Products tab to add your items</Text>
+                </View>
+              ) : filtered.map(product => {
                 const cur = items.find(i => i.name === product.name);
                 const qty = cur?.qty || 0;
                 return (
@@ -1845,6 +1845,20 @@ const loadData = useCallback(async () => {
 
     return () => clearInterval(interval);
   }, [loadData, loadBusinessDetails, updateDateTime, user?.id]);
+
+  // Reload products every time the home tab comes into focus
+  // (covers the case where user adds a product in the Products tab and returns)
+  useFocusEffect(
+    useCallback(() => {
+      DatabaseService.loadProducts().then((storedProducts) => {
+        if (Array.isArray(storedProducts)) {
+          setProducts(
+            storedProducts.map((p: any) => ({ name: p.name, price: p.price }))
+          );
+        }
+      });
+    }, [])
+  );
 
   const startNewBilling = useCallback(() => {
     setEditingSession(null);
