@@ -68,6 +68,33 @@ const getInitials = (name: string) =>
 let _idCounter = 0;
 const uniqueId = () => Date.now() * 1000 + ((_idCounter++) % 1000);
 
+// Toast Component
+const Toast = memo(({
+  visible, message, type = 'error', onHide,
+}: {
+  visible: boolean; message: string; type?: 'error' | 'success' | 'info'; onHide: () => void;
+}) => {
+  useEffect(() => {
+    if (visible) {
+      const t = setTimeout(onHide, 2000);
+      return () => clearTimeout(t);
+    }
+  }, [visible, onHide]);
+
+  if (!visible) return null;
+
+  const accentColor = type === 'error' ? '#EF4444' : type === 'success' ? '#16A34A' : '#2563EB';
+  const iconName = type === 'error' ? 'alert-circle' : type === 'success' ? 'checkmark-circle' : 'information-circle';
+  const bgColor = type === 'error' ? '#FEF2F2' : type === 'success' ? '#F0FDF4' : '#EFF6FF';
+
+  return (
+    <View style={[styles.toastContainer, { backgroundColor: bgColor, borderLeftColor: accentColor }]}>
+      <Ionicons name={iconName as any} size={20} color={accentColor} style={{ marginRight: 10, flexShrink: 0 }} />
+      <Text style={[styles.toastText, { color: '#0F172A' }]} numberOfLines={2}>{message}</Text>
+    </View>
+  );
+});
+
 const todayStr = () => {
   const d = new Date();
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -186,6 +213,351 @@ const MiniCalendar = memo(({
   );
 });
 
+// Transaction History Full Screen Component
+const TransactionHistoryScreen = memo(({
+  supplier,
+  onBack,
+  insetTop,
+}: {
+  supplier: Supplier;
+  onBack: () => void;
+  insetTop: number;
+}) => {
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [txDateFilter, setTxDateFilter] = useState<string>('All');
+
+  // All transactions for this supplier — with fallback for older records
+  // that only have bills saved (no transactions array populated yet)
+  const allTransactions = useMemo(() => {
+    const txs = supplier.transactions || [];
+    if (txs.length > 0) {
+      return [...txs].sort((a, b) => b.id - a.id);
+    }
+    // Synthesize bill + payment transactions from bills array as fallback
+    const synth: Transaction[] = [];
+    (supplier.bills || []).forEach((b) => {
+      synth.push({
+        id: b.id,
+        date: b.date,
+        type: 'bill',
+        billId: b.id,
+        billName: b.name,
+        amount: b.amount,
+      });
+      if (b.paid > 0) {
+        synth.push({
+          id: b.id - 1,
+          date: b.date,
+          type: 'payment',
+          billId: b.id,
+          billName: b.name,
+          amount: b.paid,
+        });
+      }
+    });
+    return synth.sort((a, b) => b.id - a.id);
+  }, [supplier.transactions, supplier.bills]);
+
+  // Parse date string "3 May 2025 14:30" → "3 May 2025"
+  const dayKey = (dateStr: string) => dateStr.split(' ').slice(0, 3).join(' ');
+
+  // Filtered list
+  const filtered = useMemo(() =>
+    txDateFilter === 'All' ? allTransactions : allTransactions.filter(tx => dayKey(tx.date) === txDateFilter),
+    [allTransactions, txDateFilter]
+  );
+
+  // Group by date
+  const groups = useMemo(() => {
+    const g: Record<string, Transaction[]> = {};
+    filtered.forEach(tx => {
+      const d = dayKey(tx.date);
+      if (!g[d]) g[d] = [];
+      g[d].push(tx);
+    });
+    return Object.entries(g).sort((a, b) => {
+      const dateA = parseDate(a[0] + ' 00:00');
+      const dateB = parseDate(b[0] + ' 00:00');
+      return dateB.getTime() - dateA.getTime();
+    });
+  }, [filtered]);
+
+  // Marked dates for calendar
+  const markedDates = useMemo(() => {
+    const s = new Set<string>();
+    allTransactions.forEach(tx => {
+      const parts = tx.date.split(' ');
+      const months: Record<string,number> = { Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11 };
+      const d = parseInt(parts[0]);
+      const m = months[parts[1]];
+      const y = parseInt(parts[2]);
+      if (!isNaN(d) && m !== undefined && !isNaN(y)) {
+        s.add(`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`);
+      }
+    });
+    return s;
+  }, [allTransactions]);
+
+  const selectedCalDate = useMemo((): Date | null => {
+    if (txDateFilter === 'All') return null;
+    const parts = txDateFilter.split(' ');
+    const months: Record<string,number> = { Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11 };
+    const d = parseInt(parts[0]);
+    const m = months[parts[1]];
+    const y = parseInt(parts[2]);
+    if (!isNaN(d) && m !== undefined && !isNaN(y)) return new Date(y, m, d);
+    return null;
+  }, [txDateFilter]);
+
+  const handleCalendarSelect = useCallback((d: Date) => {
+    const day = d.getDate();
+    const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+    const year = d.getFullYear();
+    setTxDateFilter(`${day} ${monthName} ${year}`);
+    setShowCalendar(false);
+  }, []);
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#F9FAFB', paddingTop: insetTop }}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#fff' }}>
+        <TouchableOpacity onPress={onBack} style={{ marginRight: 12 }}>
+          <Ionicons name="arrow-back" size={22} color="#333" />
+        </TouchableOpacity>
+        <Text style={{ fontSize: 18, fontWeight: '800', color: '#111', flex: 1 }}>Transaction History</Text>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600' }}>{txDateFilter === 'All' ? 'All time' : txDateFilter}</Text>
+        </View>
+      </View>
+
+      {/* Date filter bar */}
+      <View style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingHorizontal: 16, paddingVertical: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            onPress={() => { setTxDateFilter('All'); setShowCalendar(false); }}
+            style={{
+              paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
+              backgroundColor: txDateFilter === 'All' ? '#4F46E5' : '#F3F4F6',
+              borderWidth: 1, borderColor: txDateFilter === 'All' ? '#4F46E5' : '#E5E7EB',
+            }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '700', color: txDateFilter === 'All' ? '#fff' : '#6B7280' }}>All</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setShowCalendar(c => !c)}
+            style={{
+              flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+              paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
+              backgroundColor: txDateFilter !== 'All' ? '#EEF2FF' : '#F3F4F6',
+              borderWidth: 1, borderColor: txDateFilter !== 'All' ? '#4F46E5' : '#E5E7EB',
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="calendar-outline" size={14} color={txDateFilter !== 'All' ? '#4F46E5' : '#9CA3AF'} />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: txDateFilter !== 'All' ? '#4F46E5' : '#6B7280' }}>
+                {txDateFilter !== 'All' ? txDateFilter : 'Pick a date'}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              {txDateFilter !== 'All' && (
+                <TouchableOpacity onPress={() => { setTxDateFilter('All'); setShowCalendar(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={14} color="#4F46E5" />
+                </TouchableOpacity>
+              )}
+              <Ionicons name={showCalendar ? 'chevron-up' : 'chevron-down'} size={13} color={txDateFilter !== 'All' ? '#4F46E5' : '#9CA3AF'} />
+            </View>
+          </TouchableOpacity>
+        </View>
+        {showCalendar && (
+          <View style={{ marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#fff', overflow: 'hidden' }}>
+            <MiniCalendar selectedDate={selectedCalDate} onSelect={handleCalendarSelect} markedDates={markedDates} />
+          </View>
+        )}
+      </View>
+
+      {/* List */}
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        {groups.length > 0 ? groups.map(([date, txList]) => (
+          <View key={date}>
+            <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 }}>
+              <Text style={{ fontSize: 12, fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5 }}>{date}</Text>
+            </View>
+            {txList.map((tx, i) => {
+              const isBill = tx.type === 'bill';
+              const bgColor = isBill ? '#FFF7ED' : '#F0FDF4';
+              const iconColor = isBill ? '#F97316' : '#16A34A';
+              const iconName = isBill ? 'document-text' : 'checkmark-circle';
+              const txLabel = isBill ? 'Bill Added' : 'Payment';
+              const amountColor = isBill ? '#0F172A' : '#16A34A';
+              
+              return (
+                <View key={`${tx.id}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#E5E7EB' }}>
+                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: bgColor, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                    <Ionicons name={iconName} size={22} color={iconColor} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A' }}>{txLabel}</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#64748B', marginTop: 1 }}>{tx.billName}</Text>
+                  </View>
+                  <Text style={{ fontSize: 16, fontWeight: '900', color: amountColor }}>{fmt(tx.amount)}</Text>
+                </View>
+              );
+            })}
+          </View>
+        )) : (
+          <View style={{ alignItems: 'center', paddingVertical: 80 }}>
+            <Ionicons name="list-outline" size={56} color="#D1D5DB" />
+            <Text style={{ fontSize: 16, fontWeight: '800', color: '#9CA3AF', marginTop: 16 }}>No transactions found</Text>
+            {txDateFilter !== 'All' && (
+              <Text style={{ fontSize: 13, color: '#9CA3AF', marginTop: 6 }}>No transactions on {txDateFilter}</Text>
+            )}
+          </View>
+        )}
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
+  );
+});
+
+// Pay Bill Full Screen — simple 2-step
+const PayBillScreen = memo(({
+  supplier, onBack, onPayment, insetTop, insetBottom,
+}: {
+  supplier: Supplier;
+  onBack: () => void;
+  onPayment: (billId: number, amount: number) => void;
+  insetTop: number;
+  insetBottom: number;
+}) => {
+  const pendingBills = useMemo(
+    () => [...supplier.bills.filter((b) => b.amount - b.paid > 0)].sort((a, b) => b.id - a.id),
+    [supplier.bills]
+  );
+
+  const [selectedBillId, setSelectedBillId] = useState<number | null>(null);
+  const [amountStr, setAmountStr] = useState('');
+
+  const selectedBill = pendingBills.find((b) => b.id === selectedBillId) ?? null;
+  const maxPay = selectedBill ? selectedBill.amount - selectedBill.paid : 0;
+  const parsedAmount = parseFloat(amountStr);
+  const amountValid = !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount <= maxPay;
+
+  // Step 1 — pick bill
+  if (!selectedBill) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#F8FAFC', paddingTop: insetTop }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
+          <TouchableOpacity onPress={onBack} style={{ marginRight: 12, padding: 4 }}>
+            <Ionicons name="arrow-back" size={22} color="#0F172A" />
+          </TouchableOpacity>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F172A', flex: 1 }}>Pay Bill</Text>
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+          <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600', marginBottom: 14 }}>
+            Select a bill to pay
+          </Text>
+
+          {pendingBills.map((bill) => {
+            const due = bill.amount - bill.paid;
+            return (
+              <TouchableOpacity
+                key={bill.id}
+                onPress={() => { setSelectedBillId(bill.id); setAmountStr(''); }}
+                activeOpacity={0.75}
+                style={{
+                  backgroundColor: '#fff',
+                  borderRadius: 14,
+                  padding: 16,
+                  marginBottom: 10,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  borderWidth: 1,
+                  borderColor: '#E2E8F0',
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#0F172A', marginBottom: 3 }}>{bill.name}</Text>
+                  <Text style={{ fontSize: 12, color: '#94A3B8' }}>{bill.date}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end', marginLeft: 12 }}>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: '#EF4444' }}>{fmt(due)}</Text>
+                  <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>due</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#CBD5E1" style={{ marginLeft: 8 }} />
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // Step 2 — enter amount
+  return (
+    <View style={{ flex: 1, backgroundColor: '#F8FAFC', paddingTop: insetTop }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
+        <TouchableOpacity onPress={() => setSelectedBillId(null)} style={{ marginRight: 12, padding: 4 }}>
+          <Ionicons name="arrow-back" size={22} color="#0F172A" />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F172A' }}>{selectedBill.name}</Text>
+          <Text style={{ fontSize: 12, color: '#94A3B8', marginTop: 1 }}>Due: {fmt(maxPay)}</Text>
+        </View>
+      </View>
+
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 24 }}>
+          {/* Big amount input */}
+          <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600', marginBottom: 12, textAlign: 'center' }}>
+            Enter payment amount
+          </Text>
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            borderBottomWidth: 2,
+            borderBottomColor: amountStr === '' ? '#E2E8F0' : amountValid ? '#2563EB' : '#EF4444',
+            paddingBottom: 8, marginBottom: 8,
+          }}>
+            <Text style={{ fontSize: 32, fontWeight: '700', color: '#94A3B8', marginRight: 4 }}>₹</Text>
+            <TextInput
+              style={{ fontSize: 40, fontWeight: '800', color: '#0F172A', minWidth: 80, textAlign: 'center' }}
+              placeholder="0"
+              placeholderTextColor="#D1D5DB"
+              value={amountStr}
+              onChangeText={setAmountStr}
+              keyboardType="numeric"
+              autoFocus
+            />
+          </View>
+
+          {amountStr !== '' && !amountValid && (
+            <Text style={{ fontSize: 12, color: '#EF4444', fontWeight: '600', textAlign: 'center', marginBottom: 8 }}>
+              {parsedAmount > maxPay ? `Max is ${fmt(maxPay)}` : 'Enter a valid amount'}
+            </Text>
+          )}
+
+          {/* Pay full shortcut */}
+          <TouchableOpacity onPress={() => setAmountStr(String(maxPay))} style={{ alignSelf: 'center', marginTop: 12, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE' }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#2563EB' }}>Pay full  {fmt(maxPay)}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ paddingHorizontal: 16, paddingBottom: insetBottom + 16, paddingTop: 12, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#F1F5F9' }}>
+          <TouchableOpacity
+            onPress={() => { if (amountValid) onPayment(selectedBill.id, parsedAmount); }}
+            activeOpacity={amountValid ? 0.8 : 1}
+            style={{ backgroundColor: amountValid ? '#2563EB' : '#E2E8F0', borderRadius: 14, paddingVertical: 16, alignItems: 'center' }}
+          >
+            <Text style={{ fontSize: 16, fontWeight: '800', color: amountValid ? '#fff' : '#94A3B8' }}>
+              {amountValid ? `Confirm  ${fmt(parsedAmount)}` : 'Enter amount'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </View>
+  );
+});
+
 // Supplier Detail Screen Component (inline)
 const SupplierDetailScreen = ({ 
   supplier, 
@@ -203,8 +575,15 @@ const SupplierDetailScreen = ({
   const [payModal, setPayModal] = useState(false);
   const [clearedBillsModal, setClearedBillsModal] = useState(false);
   const [historyModal, setHistoryModal] = useState(false);
+  const [transactionHistoryFullScreen, setTransactionHistoryFullScreen] = useState(false);
+  const [payBillModalVisible, setPayBillModalVisible] = useState(false);
+  const [payBillSelectedId, setPayBillSelectedId] = useState<number | null>(null);
+  const [payBillAmountStr, setPayBillAmountStr] = useState('');
   const [billForm, setBillForm] = useState({ name: '', amount: '', items: '' });
   const [payForm, setPayForm] = useState({ billId: 0, amount: '' });
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
 
   // Handle Android hardware back button — go back to supplier list, not out of the app
   useFocusEffect(
@@ -214,13 +593,26 @@ const SupplierDetailScreen = ({
         if (payModal) { setPayModal(false); return true; }
         if (clearedBillsModal) { setClearedBillsModal(false); return true; }
         if (historyModal) { setHistoryModal(false); return true; }
+        if (transactionHistoryFullScreen) { setTransactionHistoryFullScreen(false); return true; }
+        if (payBillModalVisible) { setPayBillModalVisible(false); return true; }
         onBack();
         return true;
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
       return () => sub.remove();
-    }, [billModal, payModal, clearedBillsModal, historyModal, onBack])
+    }, [billModal, payModal, clearedBillsModal, historyModal, transactionHistoryFullScreen, payBillModalVisible, onBack])
   );
+
+  // If full-screen transaction history is open, show it
+  if (transactionHistoryFullScreen) {
+    return (
+      <TransactionHistoryScreen
+        supplier={supplier}
+        onBack={() => setTransactionHistoryFullScreen(false)}
+        insetTop={insets.top}
+      />
+    );
+  }
 
   const totalPending = getPending(supplier);
   const accentColor = getAvatarColor(supplier.id);
@@ -240,24 +632,37 @@ const SupplierDetailScreen = ({
     return Object.entries(groups).map(([title, data]) => ({ title, data }));
   })();
 
-  // History sections (date-grouped, bills only, no time in group key)
+  // History sections (date-grouped, ALL transactions — bills + payments)
   // Falls back to building from supplier.bills if transactions table is empty
   const historySections = (() => {
-    const billsOnly = supplier.transactions.filter(tx => tx.type === 'bill');
+    const allTxs = supplier.transactions;
 
-    // If no bill transactions exist (e.g. older records only saved in bills array),
-    // synthesize them from supplier.bills so history is never blank
+    // If no transactions exist (e.g. older records only saved in bills array),
+    // synthesize bill + payment entries from supplier.bills so history is never blank
     const source: Transaction[] =
-      billsOnly.length > 0
-        ? billsOnly
-        : supplier.bills.map((b) => ({
-            id: b.id,
-            date: b.date,
-            type: 'bill' as const,
-            billId: b.id,
-            billName: b.name,
-            amount: b.amount,
-          }));
+      allTxs.length > 0
+        ? allTxs
+        : supplier.bills.flatMap((b) => {
+            const entries: Transaction[] = [{
+              id: b.id,
+              date: b.date,
+              type: 'bill' as const,
+              billId: b.id,
+              billName: b.name,
+              amount: b.amount,
+            }];
+            if (b.paid > 0) {
+              entries.push({
+                id: b.id - 1,
+                date: b.date,
+                type: 'payment' as const,
+                billId: b.id,
+                billName: b.name,
+                amount: b.paid,
+              });
+            }
+            return entries;
+          });
 
     const sorted = [...source].sort((a, b) => b.id - a.id);
     const groups: Record<string, Transaction[]> = {};
@@ -346,7 +751,9 @@ const SupplierDetailScreen = ({
     onUpdate(updatedSupplier);
     setPayForm({ billId: 0, amount: '' });
     setPayModal(false);
-    Alert.alert('✅ Payment recorded', `${fmt(amount)} paid towards "${bill.name}"`);
+    setToastMessage(`${fmt(amount)} paid towards "${bill.name}"`);
+    setToastType('success');
+    setToastVisible(true);
   };
 
   return (
@@ -391,7 +798,7 @@ const SupplierDetailScreen = ({
             <Ionicons name="trash-outline" size={22} color="#EF4444" />
           </TouchableOpacity>
           <TouchableOpacity 
-            onPress={() => setHistoryModal(true)}
+            onPress={() => setTransactionHistoryFullScreen(true)}
             style={styles.deleteHeaderBtn}
           >
             <Ionicons name="time-outline" size={22} color="#2563EB" />
@@ -423,8 +830,9 @@ const SupplierDetailScreen = ({
             style={[styles.outlineBtn, pendingBills.length === 0 && { opacity: 0.4 }]}
             onPress={() => {
               if (pendingBills.length === 0) return;
-              setPayForm({ billId: pendingBills[0].id, amount: '' });
-              setPayModal(true);
+              setPayBillSelectedId(pendingBills.length === 1 ? pendingBills[0].id : null);
+              setPayBillAmountStr('');
+              setPayBillModalVisible(true);
             }}
           >
             <Ionicons name="cash-outline" size={17} color="#2563EB" style={{ marginRight: 6 }} />
@@ -446,8 +854,7 @@ const SupplierDetailScreen = ({
             {pendingBills.length > 0 ? (
               [...pendingBills].sort((a, b) => b.id - a.id).map((bill) => {
                 const remaining = bill.amount - bill.paid;
-                const progress = bill.amount > 0 ? bill.paid / bill.amount : 1;
-                const isCleared = remaining <= 0;
+                const progress = bill.amount > 0 ? bill.paid / bill.amount : 0;
                 return (
                   <View key={bill.id} style={styles.billCard}>
                     <View style={styles.billHeader}>
@@ -455,24 +862,45 @@ const SupplierDetailScreen = ({
                         <Text style={styles.billName}>{bill.name}</Text>
                         <Text style={styles.billDate}>{bill.date}</Text>
                       </View>
-                      {isCleared && (
-                        <View style={styles.clearedPill}>
-                          <Text style={styles.clearedPillText}>Cleared</Text>
-                        </View>
-                      )}
+                      <TouchableOpacity
+                        onPress={() => {
+                          Alert.alert(
+                            'Delete Bill',
+                            `Delete "${bill.name}"? This cannot be undone.`,
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Delete',
+                                style: 'destructive',
+                                onPress: () => {
+                                  const updatedBills = supplier.bills.filter(b => b.id !== bill.id);
+                                  const updatedTx = supplier.transactions.filter(tx => tx.billId !== bill.id);
+                                  onUpdate({ ...supplier, bills: updatedBills, transactions: updatedTx });
+                                },
+                              },
+                            ]
+                          );
+                        }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        style={{ padding: 4, marginLeft: 8 }}
+                      >
+                        <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                      </TouchableOpacity>
                     </View>
 
-                    <View style={styles.progressTrack}>
-                      <View
-                        style={[
-                          styles.progressFill,
-                          {
-                            width: `${Math.round(progress * 100)}%` as any,
-                            backgroundColor: isCleared ? '#16A34A' : '#2563EB',
-                          },
-                        ]}
-                      />
-                    </View>
+                    {progress > 0 && progress < 1 && (
+                      <View style={styles.progressTrack}>
+                        <View
+                          style={[
+                            styles.progressFill,
+                            {
+                              width: `${Math.round(progress * 100)}%` as any,
+                              backgroundColor: '#2563EB',
+                            },
+                          ]}
+                        />
+                      </View>
+                    )}
 
                     <View style={styles.billMeta}>
                       <View style={styles.billMetaCell}>
@@ -483,7 +911,7 @@ const SupplierDetailScreen = ({
                         <Text
                           style={[
                             styles.billMetaValue,
-                            { color: isCleared ? '#16A34A' : '#EF4444' },
+                            { color: '#EF4444' },
                           ]}
                         >
                           {fmt(remaining)}
@@ -576,69 +1004,119 @@ const SupplierDetailScreen = ({
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Pay Bill Modal */}
-      <Modal visible={payModal} transparent animationType="slide" onRequestClose={() => setPayModal(false)}>
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setPayModal(false)} />
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+      {/* Pay Bill Modal — inline bottom sheet */}
+      <Modal visible={payBillModalVisible} transparent animationType="slide" onRequestClose={() => setPayBillModalVisible(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setPayBillModalVisible(false)} />
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16, maxHeight: '90%' }]}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Pay Bill</Text>
 
-            <Text style={styles.fieldLabel}>Select Bill</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-              {pendingBills.map((b) => {
-                const rem = b.amount - b.paid;
-                const selected = payForm.billId === b.id;
-                return (
+            {/* Bill selector — only shown when there are multiple pending bills */}
+            {pendingBills.length > 1 && (
+              <>
+                <Text style={styles.fieldLabel}>Select Bill</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                  {[...pendingBills].sort((a, b) => b.id - a.id).map((bill) => {
+                    const due = bill.amount - bill.paid;
+                    const selected = payBillSelectedId === bill.id;
+                    return (
+                      <TouchableOpacity
+                        key={bill.id}
+                        onPress={() => { setPayBillSelectedId(bill.id); setPayBillAmountStr(''); }}
+                        style={[styles.billChip, selected && styles.billChipSelected]}
+                      >
+                        <Text style={[styles.billChipName, selected && { color: '#2563EB' }]}>{bill.name}</Text>
+                        <Text style={styles.billChipAmt}>{fmt(due)} due</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            )}
+
+            {/* Selected bill summary */}
+            {(() => {
+              const selBill = pendingBills.find(b => b.id === payBillSelectedId);
+              const maxPay = selBill ? selBill.amount - selBill.paid : 0;
+              const parsed = parseFloat(payBillAmountStr);
+              const valid = !isNaN(parsed) && parsed > 0 && parsed <= maxPay;
+
+              return (
+                <>
+                  {selBill && (
+                    <View style={styles.payBillInfo}>
+                      <Text style={styles.payBillInfoText}>
+                        {selBill.name} · Due: {fmt(maxPay)}
+                        {selBill.paid > 0 ? ` (Paid so far: ${fmt(selBill.paid)})` : ''}
+                      </Text>
+                    </View>
+                  )}
+
+                  <Text style={styles.fieldLabel}>Amount ₹</Text>
+                  <TextInput
+                    style={[
+                      styles.fieldInput,
+                      payBillAmountStr !== '' && !valid && { borderColor: '#EF4444' },
+                      payBillAmountStr !== '' && valid && { borderColor: '#16A34A' },
+                    ]}
+                    placeholder="₹ 0"
+                    placeholderTextColor="#CBD5E1"
+                    value={payBillAmountStr}
+                    onChangeText={setPayBillAmountStr}
+                    keyboardType="numeric"
+                    autoFocus={pendingBills.length === 1}
+                  />
+
+                  {selBill && (
+                    <TouchableOpacity
+                      onPress={() => setPayBillAmountStr(String(maxPay))}
+                      style={{ alignSelf: 'flex-start', marginTop: -8, marginBottom: 16, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE' }}
+                    >
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#2563EB' }}>Pay full {fmt(maxPay)}</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {payBillAmountStr !== '' && !valid && selBill && (
+                    <Text style={{ fontSize: 12, color: '#EF4444', fontWeight: '600', marginTop: -8, marginBottom: 12 }}>
+                      {parsed > maxPay ? `Max payable: ${fmt(maxPay)}` : 'Enter a valid amount'}
+                    </Text>
+                  )}
+
                   <TouchableOpacity
-                    key={b.id}
-                    style={[styles.billChip, selected && styles.billChipSelected]}
-                    onPress={() => setPayForm((p) => ({ ...p, billId: b.id }))}
+                    style={[styles.sheetPrimaryBtn, (!valid || !selBill) && { opacity: 0.4 }]}
+                    onPress={() => {
+                      if (!valid || !selBill) return;
+                      const newTx: Transaction = {
+                        id: uniqueId(),
+                        date: todayStr(),
+                        type: 'payment',
+                        billId: selBill.id,
+                        billName: selBill.name,
+                        amount: parsed,
+                      };
+                      const updatedBills = supplier.bills.map((b) =>
+                        b.id === selBill.id ? { ...b, paid: b.paid + parsed } : b
+                      );
+                      onUpdate({ ...supplier, bills: updatedBills, transactions: [...supplier.transactions, newTx] });
+                      setPayBillModalVisible(false);
+                      setPayBillAmountStr('');
+                      setPayBillSelectedId(null);
+                      setToastMessage(`${fmt(parsed)} paid towards "${selBill.name}"`);
+                      setToastType('success');
+                      setToastVisible(true);
+                    }}
                   >
-                    <Text style={[styles.billChipName, selected && { color: '#2563EB' }]}>{b.name}</Text>
-                    <Text style={[styles.billChipAmt, selected && { color: '#EF4444' }]}>
-                      {fmt(rem)} due
+                    <Text style={styles.sheetPrimaryBtnText}>
+                      {valid ? `Confirm  ${fmt(parsed)}` : 'Confirm Payment'}
                     </Text>
                   </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            {payForm.billId > 0 && (() => {
-              const selBill = supplier.bills.find((b) => b.id === payForm.billId);
-              return selBill ? (
-                <View style={styles.payBillInfo}>
-                  <Text style={styles.payBillInfoText}>
-                    Max payable: <Text style={{ color: '#EF4444', fontWeight: '700' }}>
-                      {fmt(selBill.amount - selBill.paid)}
-                    </Text>
-                  </Text>
-                </View>
-              ) : null;
+                  <TouchableOpacity onPress={() => setPayBillModalVisible(false)}>
+                    <Text style={styles.sheetCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </>
+              );
             })()}
-
-            <Text style={styles.fieldLabel}>Amount</Text>
-            <TextInput
-              style={styles.fieldInput}
-              placeholder="₹ 0"
-              placeholderTextColor="#CBD5E1"
-              value={payForm.amount}
-              onChangeText={(v) => setPayForm((p) => ({ ...p, amount: v }))}
-              keyboardType="numeric"
-            />
-
-            <TouchableOpacity
-              style={[styles.sheetPrimaryBtn, (!payForm.billId || !payForm.amount) && { opacity: 0.4 }]}
-              onPress={recordPayment}
-            >
-              <Text style={styles.sheetPrimaryBtnText}>Confirm Payment</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setPayModal(false)}>
-              <Text style={styles.sheetCancelText}>Cancel</Text>
-            </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -723,30 +1201,38 @@ const SupplierDetailScreen = ({
                   historySections.map((section) => (
                     <View key={section.title}>
                       <Text style={styles.historyModalDate}>{section.title}</Text>
-                      {section.data.map((tx, index) => (
-                        <View
-                          key={tx.id}
-                          style={[
-                            styles.historyModalItem,
-                            index < section.data.length - 1 && styles.historyModalItemBorder,
-                          ]}
-                        >
-                          <View style={[styles.historyModalIcon, { backgroundColor: '#FFF7ED' }]}>
-                            <Ionicons name="document-text" size={20} color="#F97316" />
-                          </View>
+                      {section.data.map((tx, index) => {
+                        const isBill = tx.type === 'bill';
+                        const bgColor = isBill ? '#FFF7ED' : '#F0FDF4';
+                        const iconColor = isBill ? '#F97316' : '#16A34A';
+                        const iconName = isBill ? 'document-text' : 'checkmark-circle';
+                        const txLabel = isBill ? 'Bill Added' : 'Payment';
+                        const amountColor = isBill ? '#0F172A' : '#16A34A';
+                        return (
+                          <View
+                            key={tx.id}
+                            style={[
+                              styles.historyModalItem,
+                              index < section.data.length - 1 && styles.historyModalItemBorder,
+                            ]}
+                          >
+                            <View style={[styles.historyModalIcon, { backgroundColor: bgColor }]}>
+                              <Ionicons name={iconName as any} size={20} color={iconColor} />
+                            </View>
 
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.historyModalItemTitle}>Bill Added</Text>
-                            <Text style={styles.historyModalItemBillName}>{tx.billName}</Text>
-                          </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.historyModalItemTitle}>{txLabel}</Text>
+                              <Text style={styles.historyModalItemBillName}>{tx.billName}</Text>
+                            </View>
 
-                          <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={[styles.historyModalAmount, { color: '#0F172A' }]}>
-                              {fmt(tx.amount)}
-                            </Text>
+                            <View style={{ alignItems: 'flex-end' }}>
+                              <Text style={[styles.historyModalAmount, { color: amountColor }]}>
+                                {isBill ? '' : '+'}{fmt(tx.amount)}
+                              </Text>
+                            </View>
                           </View>
-                        </View>
-                      ))}
+                        );
+                      })}
                     </View>
                   ))
                 ) : (
@@ -767,6 +1253,14 @@ const SupplierDetailScreen = ({
           </View>
         </View>
       </Modal>
+
+      {/* Toast Notification */}
+      <Toast
+        visible={toastVisible}
+        message={toastMessage}
+        type={toastType}
+        onHide={() => setToastVisible(false)}
+      />
     </View>
   );
 };
@@ -860,8 +1354,12 @@ const PaidBillsScreen = memo(({
         </TouchableOpacity>
         <Text style={{ fontSize: 18, fontWeight: '800', color: '#111', flex: 1 }}>Paid Bills</Text>
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600' }}>{txDateFilter === 'All' ? 'All time' : txDateFilter}</Text>
-          <Text style={{ fontSize: 15, fontWeight: '800', color: '#16A34A' }}>{fmt(filteredTotal)}</Text>
+          {txDateFilter !== 'All' && (
+            <>
+              <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600' }}>{txDateFilter}</Text>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: '#16A34A' }}>{fmt(filteredTotal)}</Text>
+            </>
+          )}
         </View>
       </View>
 
@@ -996,10 +1494,40 @@ const loadSuppliers = async () => {
 };
 
   const updateSupplier = (updatedSupplier: Supplier) => {
+    const oldSupplier = suppliers.find(s => s.id === updatedSupplier.id);
+    
     const updatedSuppliers = suppliers.map(s =>
       s.id === updatedSupplier.id ? updatedSupplier : s
     );
+    
+    // Save supplier first
     saveSuppliers(updatedSuppliers);
+    
+    // Then save any new transactions to the database
+    if (oldSupplier) {
+      const oldTxIds = new Set(oldSupplier.transactions.map(tx => tx.id));
+      const newTransactions = updatedSupplier.transactions.filter(tx => !oldTxIds.has(tx.id));
+      
+      // Save each new transaction to database
+      newTransactions.forEach(tx => {
+        if (tx.type === 'bill') {
+          const bill = updatedSupplier.bills.find(b => b.id === tx.billId);
+          if (bill) {
+            DatabaseService.addSupplierBill(updatedSupplier, bill).catch(err =>
+              console.error('Error saving bill transaction:', err)
+            );
+          }
+        } else if (tx.type === 'payment') {
+          const bill = updatedSupplier.bills.find(b => b.id === tx.billId);
+          if (bill) {
+            DatabaseService.addSupplierPayment(updatedSupplier, bill, tx.amount, tx.date).catch(err =>
+              console.error('Error saving payment transaction:', err)
+            );
+          }
+        }
+      });
+    }
+    
     setSelectedSupplier(updatedSupplier);
   };
 
@@ -1060,7 +1588,14 @@ const loadSuppliers = async () => {
 
   const updatedSuppliers = [...suppliers, newSupplier];
 
-  saveSuppliers(updatedSuppliers);
+  saveSuppliers(updatedSuppliers).then(() => {
+    // Save the first bill transaction to database if it exists
+    if (bills.length > 0) {
+      DatabaseService.addSupplierBill(newSupplier, bills[0]).catch(err =>
+        console.error('Error saving first bill transaction:', err)
+      );
+    }
+  });
 
   setNewSupplierName('');
   setNewSupplierCategory('');
@@ -1137,7 +1672,12 @@ const loadSuppliers = async () => {
                     const updatedSuppliers = suppliers.map(s =>
                       s.id === supplier.id ? updatedSupplier : s
                     );
-                    saveSuppliers(updatedSuppliers);
+                    
+                    saveSuppliers(updatedSuppliers).then(() => {
+                      DatabaseService.addSupplierBill(updatedSupplier, newBill).catch(err =>
+                        console.error('Error saving bill transaction:', err)
+                      );
+                    });
                     Alert.alert('Success', 'Bill added ✓');
                   },
                 },
@@ -1344,6 +1884,34 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F3FF',
+  },
+  
+  // Toast Notification
+  toastContainer: {
+    position: 'absolute',
+    bottom: 20,
+    left: 16,
+    right: 16,
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    zIndex: 9999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderLeftWidth: 4,
+    // Shadow for iOS
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.10,
+    shadowRadius: 8,
+    // Elevation for Android
+    elevation: 6,
+  },
+  toastText: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    flexWrap: 'wrap',
   },
   
   // Main Header

@@ -346,13 +346,22 @@ class DatabaseService {
       const currentIds = suppliers.map((s) => s.id);
       const toDelete = [...existingIds].filter((id) => !currentIds.includes(id));
       if (toDelete.length > 0) {
-        const { error } = await supabase
+        const { error: supplierError } = await supabase
           .from('user_suppliers')
           .delete()
           .in('id', toDelete)
           .eq('user_id', userId);
 
-        if (error) throw error;
+        if (supplierError) throw supplierError;
+
+        // Also delete associated transactions
+        const { error: txError } = await supabase
+          .from('user_supplier_transactions')
+          .delete()
+          .in('supplier_id', toDelete)
+          .eq('user_id', userId);
+
+        if (txError) throw txError;
       }
     } catch (error) {
       console.log('saveSuppliers error:', error);
