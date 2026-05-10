@@ -1,4 +1,6 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
+import { useThemeStore } from '@/lib/store';
+import { AppTheme } from '@/constants/theme';
 import { db as DatabaseService } from '@/lib/database';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -130,6 +132,7 @@ const MiniCalendar = memo(({
   markedDates: Set<string>;
 }) => {
   const today = new Date();
+  const { theme } = useThemeStore();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
 
@@ -162,13 +165,13 @@ const MiniCalendar = memo(({
     <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
         <TouchableOpacity onPress={prevMonth} style={{ padding: 6 }}>
-          <Ionicons name="chevron-back" size={20} color="#4F46E5" />
+          <Ionicons name="chevron-back" size={20} color={theme.colors.primary} />
         </TouchableOpacity>
         <Text style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: '800', color: '#111' }}>
           {MONTH_NAMES[viewMonth]} {viewYear}
         </Text>
         <TouchableOpacity onPress={nextMonth} style={{ padding: 6 }}>
-          <Ionicons name="chevron-forward" size={20} color="#4F46E5" />
+          <Ionicons name="chevron-forward" size={20} color={theme.colors.primary} />
         </TouchableOpacity>
       </View>
       <View style={{ flexDirection: 'row', marginBottom: 4 }}>
@@ -190,14 +193,14 @@ const MiniCalendar = memo(({
                 onPress={() => onSelect(new Date(viewYear, viewMonth, day))}
                 style={{
                   flex: 1, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 10,
-                  backgroundColor: isSelected ? '#4F46E5' : isToday ? '#EEF2FF' : 'transparent',
+                  backgroundColor: isSelected ? theme.colors.primary : isToday ? theme.colors.primaryLight : 'transparent',
                 }}
               >
-                <Text style={{ fontSize: 13, fontWeight: isSelected || isToday ? '800' : '500', color: isSelected ? '#fff' : isToday ? '#4F46E5' : '#111' }}>
+                <Text style={{ fontSize: 13, fontWeight: isSelected || isToday ? '800' : '500', color: isSelected ? '#fff' : isToday ? theme.colors.primary : '#111' }}>
                   {day}
                 </Text>
                 {hasData && !isSelected && (
-                  <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: '#4F46E5', marginTop: 1 }} />
+                  <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: theme.colors.primary, marginTop: 1 }} />
                 )}
               </TouchableOpacity>
             );
@@ -223,6 +226,7 @@ const TransactionHistoryScreen = memo(({
   onBack: () => void;
   insetTop: number;
 }) => {
+  const { theme } = useThemeStore();
   const [showCalendar, setShowCalendar] = useState(false);
   const [txDateFilter, setTxDateFilter] = useState<string>('All');
 
@@ -337,8 +341,8 @@ const TransactionHistoryScreen = memo(({
             onPress={() => { setTxDateFilter('All'); setShowCalendar(false); }}
             style={{
               paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
-              backgroundColor: txDateFilter === 'All' ? '#4F46E5' : '#F3F4F6',
-              borderWidth: 1, borderColor: txDateFilter === 'All' ? '#4F46E5' : '#E5E7EB',
+              backgroundColor: txDateFilter === 'All' ? theme.colors.primary : '#F3F4F6',
+              borderWidth: 1, borderColor: txDateFilter === 'All' ? theme.colors.primary : '#E5E7EB',
             }}
           >
             <Text style={{ fontSize: 12, fontWeight: '700', color: txDateFilter === 'All' ? '#fff' : '#6B7280' }}>All</Text>
@@ -348,23 +352,23 @@ const TransactionHistoryScreen = memo(({
             style={{
               flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
               paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
-              backgroundColor: txDateFilter !== 'All' ? '#EEF2FF' : '#F3F4F6',
-              borderWidth: 1, borderColor: txDateFilter !== 'All' ? '#4F46E5' : '#E5E7EB',
+              backgroundColor: txDateFilter !== 'All' ? theme.colors.primaryLight : '#F3F4F6',
+              borderWidth: 1, borderColor: txDateFilter !== 'All' ? theme.colors.primary : '#E5E7EB',
             }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name="calendar-outline" size={14} color={txDateFilter !== 'All' ? '#4F46E5' : '#9CA3AF'} />
-              <Text style={{ fontSize: 12, fontWeight: '700', color: txDateFilter !== 'All' ? '#4F46E5' : '#6B7280' }}>
+              <Ionicons name="calendar-outline" size={14} color={txDateFilter !== 'All' ? theme.colors.primary : '#9CA3AF'} />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: txDateFilter !== 'All' ? theme.colors.primary : '#6B7280' }}>
                 {txDateFilter !== 'All' ? txDateFilter : 'Pick a date'}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               {txDateFilter !== 'All' && (
                 <TouchableOpacity onPress={() => { setTxDateFilter('All'); setShowCalendar(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="close-circle" size={14} color="#4F46E5" />
+                  <Ionicons name="close-circle" size={14} color={theme.colors.primary} />
                 </TouchableOpacity>
               )}
-              <Ionicons name={showCalendar ? 'chevron-up' : 'chevron-down'} size={13} color={txDateFilter !== 'All' ? '#4F46E5' : '#9CA3AF'} />
+              <Ionicons name={showCalendar ? 'chevron-up' : 'chevron-down'} size={13} color={txDateFilter !== 'All' ? theme.colors.primary : '#9CA3AF'} />
             </View>
           </TouchableOpacity>
         </View>
@@ -429,6 +433,7 @@ const PayBillScreen = memo(({
   insetTop: number;
   insetBottom: number;
 }) => {
+  const { theme } = useThemeStore();
   const pendingBills = useMemo(
     () => [...supplier.bills.filter((b) => b.amount - b.paid > 0)].sort((a, b) => b.id - a.id),
     [supplier.bills]
@@ -515,7 +520,7 @@ const PayBillScreen = memo(({
           <View style={{
             flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
             borderBottomWidth: 2,
-            borderBottomColor: amountStr === '' ? '#E2E8F0' : amountValid ? '#2563EB' : '#EF4444',
+            borderBottomColor: amountStr === '' ? '#E2E8F0' : amountValid ? theme.colors.primary : '#EF4444',
             paddingBottom: 8, marginBottom: 8,
           }}>
             <Text style={{ fontSize: 32, fontWeight: '700', color: '#94A3B8', marginRight: 4 }}>₹</Text>
@@ -537,8 +542,8 @@ const PayBillScreen = memo(({
           )}
 
           {/* Pay full shortcut */}
-          <TouchableOpacity onPress={() => setAmountStr(String(maxPay))} style={{ alignSelf: 'center', marginTop: 12, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE' }}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: '#2563EB' }}>Pay full  {fmt(maxPay)}</Text>
+          <TouchableOpacity onPress={() => setAmountStr(String(maxPay))} style={{ alignSelf: 'center', marginTop: 12, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: theme.colors.primaryLight, borderWidth: 1, borderColor: theme.colors.border }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.primary }}>Pay full  {fmt(maxPay)}</Text>
           </TouchableOpacity>
         </View>
 
@@ -546,7 +551,7 @@ const PayBillScreen = memo(({
           <TouchableOpacity
             onPress={() => { if (amountValid) onPayment(selectedBill.id, parsedAmount); }}
             activeOpacity={amountValid ? 0.8 : 1}
-            style={{ backgroundColor: amountValid ? '#2563EB' : '#E2E8F0', borderRadius: 14, paddingVertical: 16, alignItems: 'center' }}
+            style={{ backgroundColor: amountValid ? theme.colors.primary : '#E2E8F0', borderRadius: 14, paddingVertical: 16, alignItems: 'center' }}
           >
             <Text style={{ fontSize: 16, fontWeight: '800', color: amountValid ? '#fff' : '#94A3B8' }}>
               {amountValid ? `Confirm  ${fmt(parsedAmount)}` : 'Enter amount'}
@@ -571,6 +576,8 @@ const SupplierDetailScreen = ({
   onDelete: (supplier: Supplier) => void;
 }) => {
   const insets = useSafeAreaInsets();
+  const { theme } = useThemeStore();
+  const styles = makeStyles(theme);
   const [billModal, setBillModal] = useState(false);
   const [payModal, setPayModal] = useState(false);
   const [clearedBillsModal, setClearedBillsModal] = useState(false);
@@ -801,7 +808,7 @@ const SupplierDetailScreen = ({
             onPress={() => setTransactionHistoryFullScreen(true)}
             style={styles.deleteHeaderBtn}
           >
-            <Ionicons name="time-outline" size={22} color="#2563EB" />
+            <Ionicons name="time-outline" size={22} color={theme.colors.primary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -822,7 +829,7 @@ const SupplierDetailScreen = ({
 
         {/* Action Buttons */}
         <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => setBillModal(true)}>
+          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.colors.primary }]} onPress={() => setBillModal(true)}>
             <Ionicons name="document-text-outline" size={17} color="#fff" style={{ marginRight: 6 }} />
             <Text style={styles.primaryBtnText}>Add Bill</Text>
           </TouchableOpacity>
@@ -835,8 +842,8 @@ const SupplierDetailScreen = ({
               setPayBillModalVisible(true);
             }}
           >
-            <Ionicons name="cash-outline" size={17} color="#2563EB" style={{ marginRight: 6 }} />
-            <Text style={styles.outlineBtnText}>Pay Bill</Text>
+            <Ionicons name="cash-outline" size={17} color={theme.colors.primary} style={{ marginRight: 6 }} />
+            <Text style={[styles.outlineBtnText, { color: theme.colors.primary }]}>Pay Bill</Text>
           </TouchableOpacity>
         </View>
 
@@ -847,7 +854,7 @@ const SupplierDetailScreen = ({
               <Text style={styles.sectionTitle}>Bills</Text>
               {clearedBills.length > 0 && (
                 <TouchableOpacity onPress={() => setClearedBillsModal(true)}>
-                  <Text style={styles.seeAllBtn}>See All</Text>
+                  <Text style={[styles.seeAllBtn, { color: theme.colors.primary }]}>See All</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -895,7 +902,7 @@ const SupplierDetailScreen = ({
                             styles.progressFill,
                             {
                               width: `${Math.round(progress * 100)}%` as any,
-                              backgroundColor: '#2563EB',
+                              backgroundColor: theme.colors.primary,
                             },
                           ]}
                         />
@@ -1026,7 +1033,7 @@ const SupplierDetailScreen = ({
                         onPress={() => { setPayBillSelectedId(bill.id); setPayBillAmountStr(''); }}
                         style={[styles.billChip, selected && styles.billChipSelected]}
                       >
-                        <Text style={[styles.billChipName, selected && { color: '#2563EB' }]}>{bill.name}</Text>
+                        <Text style={[styles.billChipName, selected && { color: theme.colors.primary }]}>{bill.name}</Text>
                         <Text style={styles.billChipAmt}>{fmt(due)} due</Text>
                       </TouchableOpacity>
                     );
@@ -1071,9 +1078,9 @@ const SupplierDetailScreen = ({
                   {selBill && (
                     <TouchableOpacity
                       onPress={() => setPayBillAmountStr(String(maxPay))}
-                      style={{ alignSelf: 'flex-start', marginTop: -8, marginBottom: 16, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE' }}
+                      style={{ alignSelf: 'flex-start', marginTop: -8, marginBottom: 16, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: theme.colors.primaryLight, borderWidth: 1, borderColor: theme.colors.border }}
                     >
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#2563EB' }}>Pay full {fmt(maxPay)}</Text>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.primary }}>Pay full {fmt(maxPay)}</Text>
                     </TouchableOpacity>
                   )}
 
@@ -1175,7 +1182,7 @@ const SupplierDetailScreen = ({
             </ScrollView>
 
             <TouchableOpacity 
-              style={styles.clearedBillsCloseBtn}
+              style={[styles.clearedBillsCloseBtn, { backgroundColor: theme.colors.primary }]}
               onPress={() => setClearedBillsModal(false)}
             >
               <Text style={styles.clearedBillsCloseBtnText}>Close</Text>
@@ -1245,7 +1252,7 @@ const SupplierDetailScreen = ({
             </ScrollView>
 
             <TouchableOpacity 
-              style={styles.clearedBillsCloseBtn}
+              style={[styles.clearedBillsCloseBtn, { backgroundColor: theme.colors.primary }]}
               onPress={() => setHistoryModal(false)}
             >
               <Text style={styles.clearedBillsCloseBtnText}>Close</Text>
@@ -1275,6 +1282,7 @@ const PaidBillsScreen = memo(({
   insetTop: number;
   onClose: () => void;
 }) => {
+  const { theme } = useThemeStore();
   const [showCalendar, setShowCalendar] = useState(false);
 
   // Collect only payment transactions
@@ -1370,8 +1378,8 @@ const PaidBillsScreen = memo(({
             onPress={() => { setTxDateFilter('All'); setShowCalendar(false); }}
             style={{
               paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
-              backgroundColor: txDateFilter === 'All' ? '#4F46E5' : '#F3F4F6',
-              borderWidth: 1, borderColor: txDateFilter === 'All' ? '#4F46E5' : '#E5E7EB',
+              backgroundColor: txDateFilter === 'All' ? theme.colors.primary : '#F3F4F6',
+              borderWidth: 1, borderColor: txDateFilter === 'All' ? theme.colors.primary : '#E5E7EB',
             }}
           >
             <Text style={{ fontSize: 12, fontWeight: '700', color: txDateFilter === 'All' ? '#fff' : '#6B7280' }}>All</Text>
@@ -1381,23 +1389,23 @@ const PaidBillsScreen = memo(({
             style={{
               flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
               paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
-              backgroundColor: txDateFilter !== 'All' ? '#EEF2FF' : '#F3F4F6',
-              borderWidth: 1, borderColor: txDateFilter !== 'All' ? '#4F46E5' : '#E5E7EB',
+              backgroundColor: txDateFilter !== 'All' ? theme.colors.primaryLight : '#F3F4F6',
+              borderWidth: 1, borderColor: txDateFilter !== 'All' ? theme.colors.primary : '#E5E7EB',
             }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name="calendar-outline" size={14} color={txDateFilter !== 'All' ? '#4F46E5' : '#9CA3AF'} />
-              <Text style={{ fontSize: 12, fontWeight: '700', color: txDateFilter !== 'All' ? '#4F46E5' : '#6B7280' }}>
+              <Ionicons name="calendar-outline" size={14} color={txDateFilter !== 'All' ? theme.colors.primary : '#9CA3AF'} />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: txDateFilter !== 'All' ? theme.colors.primary : '#6B7280' }}>
                 {txDateFilter !== 'All' ? txDateFilter : 'Pick a date'}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               {txDateFilter !== 'All' && (
                 <TouchableOpacity onPress={() => { setTxDateFilter('All'); setShowCalendar(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="close-circle" size={14} color="#4F46E5" />
+                  <Ionicons name="close-circle" size={14} color={theme.colors.primary} />
                 </TouchableOpacity>
               )}
-              <Ionicons name={showCalendar ? 'chevron-up' : 'chevron-down'} size={13} color={txDateFilter !== 'All' ? '#4F46E5' : '#9CA3AF'} />
+              <Ionicons name={showCalendar ? 'chevron-up' : 'chevron-down'} size={13} color={txDateFilter !== 'All' ? theme.colors.primary : '#9CA3AF'} />
             </View>
           </TouchableOpacity>
         </View>
@@ -1451,6 +1459,8 @@ const PaidBillsScreen = memo(({
 export default function SuppliersScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useThemeStore();
+  const styles = makeStyles(theme);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [addSupModalVisible, setAddSupModalVisible] = useState(false);
@@ -1783,7 +1793,7 @@ const loadSuppliers = async () => {
               </View>
             </View>
 
-            <TouchableOpacity style={styles.addSupplierBtn} onPress={addSupplier}>
+            <TouchableOpacity style={[styles.addSupplierBtn, { backgroundColor: theme.colors.primary }]} onPress={addSupplier}>
               <Text style={styles.addSupplierBtnText}>Add Supplier ✓</Text>
             </TouchableOpacity>
           </View>
@@ -1806,12 +1816,12 @@ const loadSuppliers = async () => {
 
   // Main suppliers list view
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {renderAddSupplierModal()}
       
       {/* Header */}
       <LinearGradient
-        colors={['#4F46E5', '#7C3AED', '#9333EA']}
+        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.mainHeader, { paddingTop: insets.top + 8 }]}
@@ -1825,7 +1835,7 @@ const loadSuppliers = async () => {
       </LinearGradient>
       
       {/* Body */}
-      <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+      <ScrollView style={[styles.body, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
         {suppliers.map((supplier) => {
           const { pending } = getSupplierTotals(supplier);
           const isPaid = pending === 0;
@@ -1854,9 +1864,9 @@ const loadSuppliers = async () => {
         
         {/* Add Supplier Card */}
         <TouchableOpacity style={styles.addSupplierCard} onPress={() => setAddSupModalVisible(true)}>
-          <Ionicons name="add-circle" size={40} color="#2563EB" />
+          <Ionicons name="add-circle" size={40} color={theme.colors.primary} />
           <Text style={styles.addSupplierTitle}>Add New Supplier</Text>
-          <Text style={styles.addSupplierHint}>Tap to add supplier and track bills</Text>
+          <Text style={[styles.addSupplierHint, { color: theme.colors.primary }]}>Tap to add supplier and track bills</Text>
         </TouchableOpacity>
         
         <View style={{ height: 20 }} />
@@ -1879,11 +1889,11 @@ const loadSuppliers = async () => {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: AppTheme) => StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F8FAFC' },
   container: {
     flex: 1,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: theme.colors.background,
   },
   
   // Toast Notification
@@ -1916,7 +1926,7 @@ const styles = StyleSheet.create({
   
   // Main Header
   mainHeader: {
-    backgroundColor: '#2563EB',
+    backgroundColor: theme.colors.primary,
     paddingHorizontal: 16,
     paddingBottom: 16,
   },
@@ -2109,7 +2119,7 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 20,
-    backgroundColor: '#2563EB',
+    backgroundColor: theme.colors.primary,
   },
   progressDone: {
     backgroundColor: '#22C55E',
@@ -2131,11 +2141,11 @@ const styles = StyleSheet.create({
   },
   cardActionOutline: {
     borderWidth: 1.5,
-    borderColor: '#2563EB',
+    borderColor: theme.colors.primary,
     backgroundColor: '#fff',
   },
   cardActionOutlineText: {
-    color: '#2563EB',
+    color: theme.colors.primary,
     fontSize: 12,
     fontWeight: '800',
   },
@@ -2194,7 +2204,7 @@ const styles = StyleSheet.create({
   },
   primaryBtn: {
     flex: 1,
-    backgroundColor: '#2563EB',
+    backgroundColor: theme.colors.primary,
     borderRadius: 14,
     paddingVertical: 13,
     flexDirection: 'row',
@@ -2205,14 +2215,14 @@ const styles = StyleSheet.create({
   outlineBtn: {
     flex: 1,
     borderWidth: 1.5,
-    borderColor: '#2563EB',
+    borderColor: theme.colors.primary,
     borderRadius: 14,
     paddingVertical: 13,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  outlineBtnText: { color: '#2563EB', fontSize: 14, fontWeight: '800' },
+  outlineBtnText: { color: theme.colors.primary, fontSize: 14, fontWeight: '800' },
   
   // Section
   section: { marginBottom: 24 },
@@ -2233,7 +2243,7 @@ const styles = StyleSheet.create({
   seeAllBtn: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#2563EB',
+    color: theme.colors.primary,
     textDecorationLine: 'underline',
   },
   
@@ -2390,7 +2400,7 @@ const styles = StyleSheet.create({
   },
   addSupplierHint: {
     fontSize: 12,
-    color: '#2563EB',
+    color: theme.colors.primary,
     fontWeight: '600',
   },
   
@@ -2405,7 +2415,7 @@ const styles = StyleSheet.create({
   inputLabel: { fontSize: 12, fontWeight: '700', color: '#64748B', marginBottom: 8 },
   inputBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', borderRadius: 12, paddingHorizontal: 12, height: 50 },
   inputField: { flex: 1, fontSize: 14, fontWeight: '600', color: '#333', height: 50, paddingVertical: 0 },
-  addSupplierBtn: { backgroundColor: '#4F46E5', padding: 15, borderRadius: 14, alignItems: 'center', marginTop: 10 },
+  addSupplierBtn: { backgroundColor: theme.colors.primary, padding: 15, borderRadius: 14, alignItems: 'center', marginTop: 10 },
   addSupplierBtnText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   
   // Sheet Modal
@@ -2450,7 +2460,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sheetPrimaryBtn: {
-    backgroundColor: '#2563EB',
+    backgroundColor: theme.colors.primary,
     borderRadius: 14,
     padding: 15,
     alignItems: 'center',
@@ -2476,7 +2486,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   billChipSelected: {
-    borderColor: '#2563EB',
+    borderColor: theme.colors.primary,
     backgroundColor: '#EFF6FF',
   },
   billChipName: { fontSize: 13, fontWeight: '700', color: '#0F172A', marginBottom: 2 },
@@ -2550,7 +2560,7 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   clearedBillsCloseBtn: {
-    backgroundColor: '#2563EB',
+    backgroundColor: theme.colors.primary,
     padding: 15,
     marginHorizontal: 20,
     marginBottom: 20,

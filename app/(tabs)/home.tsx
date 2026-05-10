@@ -15,7 +15,6 @@ import {
   Modal,
   PanResponder,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -28,18 +27,14 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+// ─── Import shared theme system ──────────────────────────────────────────────
+import { useThemeStore } from '@/lib/store';
+import { THEMES, DEFAULT_THEME_ID, type AppTheme, type ThemeId } from '@/constants/theme';
+
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Module-level RAM store for active sessions
 let RAM_SESSIONS: Session[] = [];
-
-const SAMPLE_PRODUCTS = [
-  { name: 'Puri Plate', price: 20 },
-  { name: 'Masala Puri', price: 25 },
-  { name: 'Tamarind Water', price: 10 },
-  { name: 'Special Plate', price: 40 },
-  { name: 'Idly 2pcs', price: 15 },
-];
 
 // Types
 interface BillItem { name: string; price: number; qty: number; }
@@ -69,6 +64,70 @@ const Toast = memo(({
   );
 });
 
+// ThemePickerModal
+const ThemePickerModal = memo(({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
+  const insets = useSafeAreaInsets();
+  const { themeId, setTheme, theme } = useThemeStore();
+  if (!visible) return null;
+  return (
+    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: insets.bottom + 16 }}>
+          <View style={{ width: 40, height: 4, backgroundColor: '#E5E7EB', borderRadius: 4, alignSelf: 'center', marginBottom: 16 }} />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+            <View>
+              <Text style={{ fontSize: 18, fontWeight: '900', color: '#111827' }}>Choose Theme</Text>
+              <Text style={{ fontSize: 12, color: '#9CA3AF', fontWeight: '500', marginTop: 2 }}>Personalise your app appearance</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="close" size={20} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingBottom: 8 }}>
+              {(Object.keys(THEMES) as ThemeId[]).map((id) => {
+                const t = THEMES[id];
+                const isActive = themeId === id;
+                const isDefault = id === DEFAULT_THEME_ID;
+                return (
+                  <TouchableOpacity
+                    key={id}
+                    style={{ width: '47%', borderRadius: 14, backgroundColor: '#F9FAFB', borderWidth: isActive ? 2.5 : 1.5, borderColor: isActive ? t.colors.primary : '#E5E7EB', overflow: 'hidden' }}
+                    onPress={() => setTheme(id)}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient colors={t.preview as [string, string]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ height: 72, justifyContent: 'space-between', padding: 10 }}>
+                      <View style={{ flexDirection: 'row', gap: 4 }}>
+                        {[0.9, 0.6, 0.4].map((op, i) => <View key={i} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: `rgba(255,255,255,${op})` }} />)}
+                      </View>
+                      {isActive && (
+                        <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end' }}>
+                          <Ionicons name="checkmark" size={14} color="#fff" />
+                        </View>
+                      )}
+                    </LinearGradient>
+                    <View style={{ padding: 10, gap: 2 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: '#111827' }}>{t.name}</Text>
+                        {isDefault && <View style={{ backgroundColor: '#EEF2FF', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }}><Text style={{ fontSize: 9, fontWeight: '700', color: '#4F46E5' }}>Default</Text></View>}
+                      </View>
+                      <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '500' }}>{t.description}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+          <TouchableOpacity onPress={onClose} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 14, marginTop: 10, backgroundColor: theme.colors.primary, elevation: 2 }}>
+            <Ionicons name="checkmark-circle-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+});
+
 // Live Billing Modal
 const LiveBillingModal = memo(({
   visible,
@@ -77,6 +136,7 @@ const LiveBillingModal = memo(({
   onComplete,
   session,
   products,
+  theme,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -84,6 +144,7 @@ const LiveBillingModal = memo(({
   onComplete: (customerName: string, phone: string, items: BillItem[]) => void;
   session: Session | null;
   products?: { name: string; price: number }[];
+  theme: AppTheme;
 }) => {
   const insets = useSafeAreaInsets();
   const [customerName, setCustomerName] = useState('');
@@ -167,7 +228,7 @@ const LiveBillingModal = memo(({
         statusBarTranslucent
       >
         <KeyboardAvoidingView 
-          style={styles.liveBillingFullScreen} 
+          style={{ flex: 1, backgroundColor: '#fff' }} 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <View style={[styles.liveBillingHeader, { paddingTop: insets.top + 10 }]}>
@@ -179,7 +240,7 @@ const LiveBillingModal = memo(({
               <Text style={styles.liveBillingSub}>Add items and create bill</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.lbCloseBtn}>
-              <Ionicons name="close" size={20} color="#2563EB" />
+              <Ionicons name="close" size={20} color={theme.colors.primary} />
             </TouchableOpacity>
           </View>
 
@@ -242,18 +303,18 @@ const LiveBillingModal = memo(({
                   <View key={product.name} style={styles.productRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.productName}>{product.name}</Text>
-                      <Text style={styles.productPrice}>₹ {product.price.toFixed(2)}</Text>
+                      <Text style={[styles.productPrice, { color: theme.colors.primary }]}>₹ {product.price.toFixed(2)}</Text>
                     </View>
                     <View style={styles.qtyControl}>
                       <TouchableOpacity style={styles.qtyBtn} onPress={() => removeItem(product.name)}>
-                        <Ionicons name="remove" size={16} color="#2563EB" />
+                        <Ionicons name="remove" size={16} color={theme.colors.primary} />
                       </TouchableOpacity>
                       <Text style={styles.qtyText}>{qty}</Text>
                       <TouchableOpacity style={styles.qtyBtn} onPress={() => addItem(product)}>
-                        <Ionicons name="add" size={16} color="#2563EB" />
+                        <Ionicons name="add" size={16} color={theme.colors.primary} />
                       </TouchableOpacity>
                     </View>
-                    <Text style={styles.lineTotal}>₹ {(qty * product.price).toFixed(2)}</Text>
+                    <Text style={[styles.lineTotal, { color: theme.colors.primary }]}>₹ {(qty * product.price).toFixed(2)}</Text>
                   </View>
                 );
               })}
@@ -263,10 +324,10 @@ const LiveBillingModal = memo(({
 
           <View style={styles.billSummaryBar}>
             <View style={styles.summaryLeft}>
-              <Ionicons name="document-text-outline" size={26} color="#2563EB" />
+              <Ionicons name="document-text-outline" size={26} color={theme.colors.primary} />
               <View style={{ marginLeft: 10 }}>
                 <Text style={styles.summaryItemsLabel}>Total Items</Text>
-                <Text style={styles.summaryItemsValue}>{totalQty} Items</Text>
+                <Text style={[styles.summaryItemsValue, { color: theme.colors.primary }]}>{totalQty} Items</Text>
               </View>
             </View>
             <View style={styles.summaryRight}>
@@ -277,10 +338,10 @@ const LiveBillingModal = memo(({
 
           <View style={[styles.lbBottomButtons, { paddingBottom: insets.bottom || 14 }]}>
             <TouchableOpacity style={styles.saveGoBackBtn} onPress={handleSaveAndBack}>
-              <Ionicons name="save-outline" size={18} color="#2563EB" style={{ marginRight: 6 }} />
-              <Text style={styles.saveGoBackText}>Save & Go Back</Text>
+              <Ionicons name="save-outline" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
+              <Text style={[styles.saveGoBackText, { color: theme.colors.primary }]}>Save & Go Back</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.completeBillBtn} onPress={handleComplete}>
+            <TouchableOpacity style={[styles.completeBillBtn, { backgroundColor: theme.colors.primary }]} onPress={handleComplete}>
               <Ionicons name="checkmark" size={18} color="#fff" style={{ marginRight: 6 }} />
               <Text style={styles.completeBillText}>Complete Bill</Text>
             </TouchableOpacity>
@@ -293,11 +354,12 @@ const LiveBillingModal = memo(({
 
 // Quick Bill Modal
 const QuickEntryModal = memo(({
-  visible, onClose, onSave,
+  visible, onClose, onSave, theme,
 }: {
   visible: boolean;
   onClose: () => void;
   onSave: (name: string, phone: string, amount: number, note: string) => void;
+  theme: AppTheme;
 }) => {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
@@ -351,7 +413,7 @@ const QuickEntryModal = memo(({
         statusBarTranslucent
       >
         <KeyboardAvoidingView 
-          style={styles.liveBillingFullScreen} 
+          style={{ flex: 1, backgroundColor: '#fff' }} 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <View style={[styles.liveBillingHeader, { paddingTop: insets.top + 10 }]}>
@@ -362,8 +424,8 @@ const QuickEntryModal = memo(({
               <Text style={styles.liveBillingTitle}>Quick Bill</Text>
               <Text style={styles.liveBillingSub}>Add name and amount quickly</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={[styles.lbCloseBtn, { backgroundColor: '#EDE9FE' }]}>
-              <Ionicons name="close" size={20} color="#6D28D9" />
+            <TouchableOpacity onPress={onClose} style={[styles.lbCloseBtn, { backgroundColor: `${theme.colors.primary}20` }]}>
+              <Ionicons name="close" size={20} color={theme.colors.primary} />
             </TouchableOpacity>
           </View>
 
@@ -373,11 +435,11 @@ const QuickEntryModal = memo(({
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.qeFastBadge}>
-              <View style={styles.qeIconBox}>
-                <Ionicons name="flash" size={22} color="#6D28D9" />
+              <View style={[styles.qeIconBox, { backgroundColor: `${theme.colors.primary}20` }]}>
+                <Ionicons name="flash" size={22} color={theme.colors.primary} />
               </View>
               <View style={{ marginLeft: 12 }}>
-                <Text style={styles.qeFastTitle}>Fast & Simple</Text>
+                <Text style={[styles.qeFastTitle, { color: theme.colors.primary }]}>Fast & Simple</Text>
                 <Text style={styles.qeFastSub}>Just enter details and save</Text>
               </View>
             </View>
@@ -411,7 +473,7 @@ const QuickEntryModal = memo(({
             <View style={styles.lbInputBox}>
               <Ionicons name="cash-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
               <TextInput
-                style={[styles.lbInput, { fontSize: 18, color: '#2563EB', fontWeight: '700' }]}
+                style={[styles.lbInput, { fontSize: 18, color: theme.colors.primary, fontWeight: '700' }]}
                 placeholder="0.00"
                 value={amount}
                 onChangeText={setAmount}
@@ -436,7 +498,7 @@ const QuickEntryModal = memo(({
           </ScrollView>
 
           <View style={[styles.qeBottomBar, { paddingBottom: insets.bottom || 14 }]}>
-            <TouchableOpacity style={styles.qeSaveBtn} onPress={handleSave}>
+            <TouchableOpacity style={[styles.qeSaveBtn, { backgroundColor: theme.colors.primary }]} onPress={handleSave}>
               <Ionicons name="wallet-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
               <Text style={styles.qeSaveBtnText}>Save Payment</Text>
             </TouchableOpacity>
@@ -449,10 +511,11 @@ const QuickEntryModal = memo(({
 
 // Review Bill Modal
 const ReviewBillModal = memo(({
-  visible, onClose, onConfirm, customerName = '', customerPhone = '', items = [], total = 0,
+  visible, onClose, onConfirm, customerName = '', customerPhone = '', items = [], total = 0, theme,
 }: {
   visible: boolean; onClose: () => void; onConfirm: () => void;
   customerName?: string; customerPhone?: string; items?: BillItem[]; total?: number;
+  theme: AppTheme;
 }) => {
   if (!visible) return null;
   
@@ -477,19 +540,19 @@ const ReviewBillModal = memo(({
                   <Text style={styles.reviewBillItemName}>{item.name}</Text>
                   <Text style={styles.reviewBillItemQty}>Qty: {item.qty}</Text>
                 </View>
-                <Text style={styles.reviewBillItemAmount}>₹{item.price * item.qty}</Text>
+                <Text style={[styles.reviewBillItemAmount, { color: theme.colors.primary }]}>₹{item.price * item.qty}</Text>
               </View>
             ))}
           </ScrollView>
           <View style={styles.reviewBillTotal}>
             <Text style={styles.reviewBillTotalLabel}>Total</Text>
-            <Text style={styles.reviewBillTotalAmount}>₹{total}</Text>
+            <Text style={[styles.reviewBillTotalAmount, { color: theme.colors.primary }]}>₹{total}</Text>
           </View>
           <View style={styles.reviewBillButtons}>
-            <TouchableOpacity style={styles.reviewBillBackBtn} onPress={onClose}>
-              <Text style={styles.reviewBillBackBtnText}>Edit Bill</Text>
+            <TouchableOpacity style={[styles.reviewBillBackBtn, { borderColor: theme.colors.primary }]} onPress={onClose}>
+              <Text style={[styles.reviewBillBackBtnText, { color: theme.colors.primary }]}>Edit Bill</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.reviewBillDoneBtn} onPress={onConfirm}>
+            <TouchableOpacity style={[styles.reviewBillDoneBtn, { backgroundColor: theme.colors.primary }]} onPress={onConfirm}>
               <Text style={styles.reviewBillDoneBtnText}>Confirm & Save</Text>
             </TouchableOpacity>
           </View>
@@ -501,9 +564,10 @@ const ReviewBillModal = memo(({
 
 // Swipeable Order Button
 const SwipeableOrderButton = memo(({
-  session, idx, CARD_COLORS, onPress, onDelete,
+  session, idx, CARD_COLORS, onPress, onDelete, theme,
 }: {
   session: Session; idx: number; CARD_COLORS: any[]; onPress: () => void; onDelete: () => void;
+  theme: AppTheme;
 }) => {
   const panX = useRef(new Animated.ValueXY()).current;
   const total = session.items.reduce((s, i) => s + i.price * i.qty, 0);
@@ -563,26 +627,27 @@ const SwipeableOrderButton = memo(({
   );
 });
 
-// Bill Detail Modal — shows full bill info including phone number
+// Bill Detail Modal
 const BillDetailModal = memo(({
   visible,
   bill,
   billNumber,
   onClose,
   onDelete,
+  theme,
 }: {
   visible: boolean;
   bill: SaleLog | null;
   billNumber: number;
   onClose: () => void;
   onDelete?: (bill: SaleLog) => void;
+  theme: AppTheme;
 }) => {
   if (!visible || !bill) return null;
   return (
     <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
       <View style={styles.reviewBillOverlay}>
         <View style={styles.reviewBillContainer}>
-          {/* Header */}
           <View style={styles.reviewBillHeader}>
             <Text style={styles.reviewBillTitle}>Bill-{billNumber}</Text>
             <TouchableOpacity onPress={onClose}>
@@ -590,7 +655,6 @@ const BillDetailModal = memo(({
             </TouchableOpacity>
           </View>
 
-          {/* Customer Info */}
           <View style={styles.reviewBillCustomerInfo}>
             <Text style={styles.reviewBillCustomerName}>{bill.customerName || 'Walk-in Customer'}</Text>
             {bill.phone ? (
@@ -605,7 +669,6 @@ const BillDetailModal = memo(({
             </View>
           </View>
 
-          {/* Items */}
           <ScrollView style={{ maxHeight: SCREEN_HEIGHT * 0.35 }} showsVerticalScrollIndicator={false}>
             {bill.items.map((item, idx) => (
               <View key={idx} style={styles.reviewBillItem}>
@@ -613,18 +676,16 @@ const BillDetailModal = memo(({
                   <Text style={styles.reviewBillItemName}>{item.name}</Text>
                   <Text style={styles.reviewBillItemQty}>Qty: {item.qty} × ₹{item.price}</Text>
                 </View>
-                <Text style={styles.reviewBillItemAmount}>₹{item.price * item.qty}</Text>
+                <Text style={[styles.reviewBillItemAmount, { color: theme.colors.primary }]}>₹{item.price * item.qty}</Text>
               </View>
             ))}
           </ScrollView>
 
-          {/* Total */}
           <View style={styles.reviewBillTotal}>
             <Text style={styles.reviewBillTotalLabel}>Total</Text>
-            <Text style={styles.reviewBillTotalAmount}>₹{bill.total}</Text>
+            <Text style={[styles.reviewBillTotalAmount, { color: theme.colors.primary }]}>₹{bill.total}</Text>
           </View>
 
-          {/* Buttons */}
           <View style={styles.reviewBillButtons}>
             {onDelete && (
               <TouchableOpacity
@@ -634,7 +695,7 @@ const BillDetailModal = memo(({
                 <Ionicons name="trash-outline" size={16} color="#DC2626" />
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.reviewBillDoneBtn} onPress={onClose}>
+            <TouchableOpacity style={[styles.reviewBillDoneBtn, { backgroundColor: theme.colors.primary }]} onPress={onClose}>
               <Text style={styles.reviewBillDoneBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
@@ -644,17 +705,18 @@ const BillDetailModal = memo(({
   );
 });
 
-// Profile Modal — redesigned with menu-style layout + pending payments entry
+// Profile Modal
 const ProfileModal = memo(({
   visible, bizName, bizLocation, userEmail, subStatus, isSubscribed, isTrialActive,
-  nextDue, pendingCount, pendingTotal, onClose, onEditProfile, onLogout, onUpgrade, onPendingPayments,
+  nextDue, pendingCount, pendingTotal, onClose, onEditProfile, onLogout, onUpgrade, onPendingPayments, onChooseTheme, theme,
 }: {
   visible: boolean; bizName: string; bizLocation: string; userEmail: string;
   subStatus: { label: string; color: string; bg: string; icon: any };
   isSubscribed: boolean; isTrialActive: boolean; nextDue: string;
   pendingCount: number; pendingTotal: number;
   onClose: () => void; onEditProfile: () => void; onLogout: () => void;
-  onUpgrade: () => void; onPendingPayments: () => void;
+  onUpgrade: () => void; onPendingPayments: () => void; onChooseTheme: () => void;
+  theme: AppTheme;
 }) => (
   <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
     <TouchableWithoutFeedback onPress={onClose}>
@@ -663,9 +725,8 @@ const ProfileModal = memo(({
           <View style={[styles.profilePanel, { paddingBottom: 32 }]}>
             <View style={styles.profileHandle} />
 
-            {/* Header: avatar + name + location */}
             <View style={styles.profileHeaderNew}>
-              <LinearGradient colors={['#4F46E5', '#7C3AED']} style={styles.profileAvatarNew}>
+              <LinearGradient colors={[theme.colors.gradientStart, theme.colors.gradientEnd]} style={styles.profileAvatarNew}>
                 <Text style={styles.profileAvatarText}>
                   {bizName ? bizName.charAt(0).toUpperCase() : (userEmail?.charAt(0).toUpperCase() || 'S')}
                 </Text>
@@ -686,11 +747,10 @@ const ProfileModal = memo(({
                 </View>
               </View>
               <TouchableOpacity onPress={onEditProfile} style={styles.editIconBtn}>
-                <Ionicons name="pencil" size={15} color="#4F46E5" />
+                <Ionicons name="pencil" size={15} color={theme.colors.primary} />
               </TouchableOpacity>
             </View>
 
-            {/* Stats row */}
             <View style={styles.statsRow}>
               <View style={[styles.statBox, { borderColor: '#EEF2FF' }]}>
                 <Ionicons name="mail-outline" size={15} color="#6B7280" />
@@ -704,9 +764,7 @@ const ProfileModal = memo(({
               </View>
             </View>
 
-            {/* Menu items */}
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: SCREEN_HEIGHT * 0.38 }}>
-              {/* Pending Payments */}
               <TouchableOpacity style={styles.menuItem} onPress={onPendingPayments}>
                 <View style={[styles.menuItemIcon, { backgroundColor: '#FFF7ED' }]}>
                   <Ionicons name="time-outline" size={20} color="#F59E0B" />
@@ -725,7 +783,17 @@ const ProfileModal = memo(({
                 <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
               </TouchableOpacity>
 
-              {/* Subscription */}
+              <TouchableOpacity style={styles.menuItem} onPress={onChooseTheme}>
+                <View style={[styles.menuItemIcon, { backgroundColor: '#F5F3FF' }]}>
+                  <Ionicons name="color-palette-outline" size={20} color="#7C3AED" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.menuItemTitle}>Choose Theme</Text>
+                  <Text style={styles.menuItemSub}>Personalise your app colours</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+
               <TouchableOpacity style={styles.menuItem} onPress={!isSubscribed ? onUpgrade : undefined} activeOpacity={isSubscribed ? 1 : 0.7}>
                 <View style={[styles.menuItemIcon, { backgroundColor: '#ECFDF5' }]}>
                   <Ionicons name="sparkles" size={20} color="#10B981" />
@@ -743,7 +811,6 @@ const ProfileModal = memo(({
               </TouchableOpacity>
             </ScrollView>
 
-            {/* Logout */}
             <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
               <Ionicons name="log-out-outline" size={18} color="#DC2626" style={{ marginRight: 8 }} />
               <Text style={styles.logoutBtnText}>Logout</Text>
@@ -755,13 +822,13 @@ const ProfileModal = memo(({
   </Modal>
 ));
 
-// Pending Payments Modal — add/view/mark-paid people who owe money
+// Pending Payments Modal
 interface PendingPayment { id: string; name: string; phone: string; amount: number; date: string; notes: string; place: string; }
 interface PaidPayment { id: string; name: string; phone: string; amount: number; date: string; notes: string; place: string; paid_at: string; }
 
 const PendingPaymentsModal = memo(({
-  visible, userId, onClose,
-}: { visible: boolean; userId: string; onClose: () => void; }) => {
+  visible, userId, onClose, theme,
+}: { visible: boolean; userId: string; onClose: () => void; theme: AppTheme; }) => {
   const insets = useSafeAreaInsets();
   const [payments, setPayments] = useState<PendingPayment[]>([]);
   const [paidPayments, setPaidPayments] = useState<PaidPayment[]>([]);
@@ -769,7 +836,6 @@ const PendingPaymentsModal = memo(({
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'pending' | 'paid'>('pending');
 
-  // Add form state
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [amount, setAmount] = useState('');
@@ -777,7 +843,6 @@ const PendingPaymentsModal = memo(({
   const [place, setPlace] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState<PendingPayment | null>(null);
 
-  // Detail sheet state (for "Mark as Paid" flow)
   const [detailPayment, setDetailPayment] = useState<PendingPayment | null>(null);
   const [showDetail, setShowDetail] = useState(false);
 
@@ -861,7 +926,6 @@ const PendingPaymentsModal = memo(({
 
   const handleMarkPaid = async (p: PendingPayment) => {
     try {
-      // Move to paid_payments table
       const now = new Date();
       const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       const paidAt = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
@@ -886,7 +950,6 @@ const PendingPaymentsModal = memo(({
     <Modal animationType="slide" transparent={false} visible={visible} onRequestClose={onClose} statusBarTranslucent>
       <Toast visible={showToast} message={toastMsg} type={toastType} onHide={() => setShowToast(false)} />
       <View style={{ flex: 1, backgroundColor: '#F5F3FF' }}>
-        {/* Header */}
         <LinearGradient colors={['#F59E0B', '#D97706']} style={[styles.ppHeader, { paddingTop: insets.top + 12 }]}>
           <TouchableOpacity onPress={onClose} style={styles.ppBackBtn}>
             <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -895,7 +958,6 @@ const PendingPaymentsModal = memo(({
             <Text style={styles.ppHeaderTitle}>Pending Payments</Text>
             <Text style={styles.ppHeaderSub}>{payments.length} person{payments.length !== 1 ? 's' : ''} · ₹{totalPending.toLocaleString('en-IN')} due</Text>
           </View>
-          {/* Add button — always visible on pending tab */}
           {activeTab === 'pending' && (
             <TouchableOpacity onPress={() => { resetForm(); setShowAdd(true); }} style={styles.ppAddBtn}>
               <Ionicons name="add" size={22} color="#D97706" />
@@ -903,7 +965,6 @@ const PendingPaymentsModal = memo(({
           )}
         </LinearGradient>
 
-        {/* Tab strip */}
         <View style={{ flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' }}>
           <TouchableOpacity
             style={{ flex: 1, paddingVertical: 10, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: activeTab === 'pending' ? '#F59E0B' : 'transparent' }}
@@ -919,7 +980,6 @@ const PendingPaymentsModal = memo(({
           </TouchableOpacity>
         </View>
 
-        {/* List */}
         <ScrollView style={{ flex: 1, padding: 16 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {loading ? (
             <View style={{ alignItems: 'center', paddingVertical: 60 }}>
@@ -1017,7 +1077,7 @@ const PendingPaymentsModal = memo(({
           <View style={{ height: 40 }} />
         </ScrollView>
 
-        {/* Payment Detail Bottom Sheet — triggered on card tap */}
+        {/* Payment Detail Bottom Sheet */}
         <Modal animationType="slide" transparent visible={showDetail} onRequestClose={() => setShowDetail(false)}>
           <TouchableWithoutFeedback onPress={() => setShowDetail(false)}>
             <View style={styles.modalOverlay}>
@@ -1026,7 +1086,6 @@ const PendingPaymentsModal = memo(({
                   <View style={styles.profileHandle} />
                   {detailPayment && (
                     <>
-                      {/* Person header */}
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
                         <View style={[styles.ppAvatar, { width: 52, height: 52, borderRadius: 26 }]}>
                           <Text style={[styles.ppAvatarText, { fontSize: 20 }]}>{detailPayment.name.charAt(0).toUpperCase()}</Text>
@@ -1038,7 +1097,6 @@ const PendingPaymentsModal = memo(({
                         <Text style={{ fontSize: 22, fontWeight: '900', color: '#D97706' }}>₹{detailPayment.amount.toLocaleString('en-IN')}</Text>
                       </View>
 
-                      {/* Detail rows */}
                       {[
                         { icon: 'call-outline', label: 'Phone', value: detailPayment.phone || '—' },
                         { icon: 'location-outline', label: 'Place', value: detailPayment.place || '—' },
@@ -1056,7 +1114,6 @@ const PendingPaymentsModal = memo(({
                         </View>
                       ))}
 
-                      {/* Action buttons */}
                       <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
                         <TouchableOpacity
                           style={[styles.saveGoBackBtn, { flex: 1 }]}
@@ -1087,7 +1144,6 @@ const PendingPaymentsModal = memo(({
             style={{ flex: 1, backgroundColor: '#fff' }}
           >
             <View style={{ flex: 1, backgroundColor: '#fff' }}>
-              {/* Header */}
               <LinearGradient colors={['#F59E0B', '#D97706']} style={{ paddingTop: insets.top + 12, paddingBottom: 16, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' }}>
                 <TouchableOpacity onPress={() => { setShowAdd(false); resetForm(); }} style={styles.ppBackBtn}>
                   <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -1099,7 +1155,6 @@ const PendingPaymentsModal = memo(({
               </LinearGradient>
 
               <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
-                {/* Duplicate phone warning */}
                 {duplicateWarning && (
                   <View style={{ backgroundColor: '#FEF3C7', borderRadius: 10, padding: 12, marginBottom: 14, flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderColor: '#FCD34D' }}>
                     <Ionicons name="warning-outline" size={18} color="#D97706" style={{ marginRight: 8, marginTop: 1 }} />
@@ -1181,7 +1236,7 @@ const PendingPaymentsModal = memo(({
   );
 });
 
-// Edit Profile Modal — standalone to prevent remount on parent re-render (fixes keyboard dismiss bug)
+// Edit Profile Modal
 const EditProfileModal = memo(({
   visible,
   editingBizName,
@@ -1267,7 +1322,7 @@ const EditProfileModal = memo(({
   </Modal>
 ));
 
-// ─── Inline Mini-Calendar ──────────────────────────────────────────────────
+// Inline Mini-Calendar
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAY_NAMES = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 
@@ -1276,9 +1331,10 @@ const MiniCalendar = memo(({
 }: {
   selectedDate: Date | null;
   onSelect: (d: Date) => void;
-  markedDates: Set<string>; // 'YYYY-MM-DD' strings
+  markedDates: Set<string>;
 }) => {
   const today = new Date();
+  const { theme } = useThemeStore();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
 
@@ -1309,32 +1365,28 @@ const MiniCalendar = memo(({
 
   return (
     <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-      {/* Month nav */}
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
         <TouchableOpacity onPress={prevMonth} style={{ padding: 6 }}>
-          <Ionicons name="chevron-back" size={20} color="#4F46E5" />
+          <Ionicons name="chevron-back" size={20} color={theme.colors.primary} />
         </TouchableOpacity>
         <Text style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: '800', color: '#111' }}>
           {MONTH_NAMES[viewMonth]} {viewYear}
         </Text>
         <TouchableOpacity onPress={nextMonth} style={{ padding: 6 }}>
-          <Ionicons name="chevron-forward" size={20} color="#4F46E5" />
+          <Ionicons name="chevron-forward" size={20} color={theme.colors.primary} />
         </TouchableOpacity>
       </View>
-      {/* Day headers */}
       <View style={{ flexDirection: 'row', marginBottom: 4 }}>
         {DAY_NAMES.map(d => (
           <Text key={d} style={{ flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#9CA3AF' }}>{d}</Text>
         ))}
       </View>
-      {/* Cells */}
       {Array.from({ length: Math.ceil(cells.length / 7) }, (_, row) => (
         <View key={row} style={{ flexDirection: 'row', marginBottom: 2 }}>
           {cells.slice(row * 7, row * 7 + 7).map((day, col) => {
             if (!day) return <View key={col} style={{ flex: 1, height: 36 }} />;
             const key = toKey(day);
             const isSelected = selectedKey === key;
-            const hasData = markedDates.has(key);
             const isToday = today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === day;
             return (
               <TouchableOpacity
@@ -1342,31 +1394,22 @@ const MiniCalendar = memo(({
                 onPress={() => onSelect(new Date(viewYear, viewMonth, day))}
                 style={{
                   flex: 1, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 10,
-                  backgroundColor: isSelected ? '#4F46E5' : isToday ? '#EEF2FF' : 'transparent',
+                  backgroundColor: isSelected ? theme.colors.primary : isToday ? theme.colors.primaryLight : 'transparent',
                 }}
               >
-                <Text style={{ fontSize: 13, fontWeight: isSelected || isToday ? '800' : '500', color: isSelected ? '#fff' : isToday ? '#4F46E5' : '#111' }}>
+                <Text style={{ fontSize: 13, fontWeight: isSelected || isToday ? '800' : '500', color: isSelected ? '#fff' : isToday ? theme.colors.primary : '#111' }}>
                   {day}
                 </Text>
-                {hasData && !isSelected && (
-                  <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: '#4F46E5', marginTop: 1 }} />
-                )}
               </TouchableOpacity>
             );
           })}
-          {/* Pad last row */}
-          {cells.slice(row * 7, row * 7 + 7).length < 7 &&
-            Array.from({ length: 7 - cells.slice(row * 7, row * 7 + 7).length }, (_, i) => (
-              <View key={`pad-${i}`} style={{ flex: 1, height: 36 }} />
-            ))
-          }
         </View>
       ))}
     </View>
   );
 });
 
-// View All Bills Modal — standalone component outside HomeScreen to prevent flicker
+// View All Bills Modal
 const ViewAllBillsModal = memo(({
   visible, onClose, insetTop, activeSessions, filteredBills, filteredTotal,
   billsDateFilter, setBillsDateFilter,
@@ -1387,21 +1430,10 @@ const ViewAllBillsModal = memo(({
   openBillDetail: (b: SaleLog, n: number) => void;
 }) => {
   const [showCalendar, setShowCalendar] = useState(false);
+  const { theme } = useThemeStore();
 
-  // Build a Set of 'YYYY-MM-DD' keys for dates that have bills
-  // Bills store dates like '3 May' — we mark today-ish but mostly just show all calendar days
-  // We'll mark dates that match by parsing the stored date string
-  const markedDates = useMemo((): Set<string> => {
-    const s = new Set<string>();
-    // We cannot reliably reverse-parse '3 May' without year, so we mark nothing extra
-    // The calendar is for free-pick; dots would need full date storage
-    return s;
-  }, []);
-
-  // Parse selected date from billsDateFilter label back to Date object
   const selectedCalDate = useMemo((): Date | null => {
     if (billsDateFilter === 'All') return null;
-    // try to parse e.g. '3 May' or '3 May 2025'
     try {
       const d = new Date(billsDateFilter + ' ' + new Date().getFullYear());
       if (!isNaN(d.getTime())) return d;
@@ -1419,7 +1451,6 @@ const ViewAllBillsModal = memo(({
   return (
     <Modal animationType="slide" transparent={false} visible={visible} onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#F9FAFB', paddingTop: insetTop }}>
-        {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#fff' }}>
           <TouchableOpacity onPress={onClose} style={{ marginRight: 12 }}>
             <Ionicons name="arrow-back" size={22} color="#333" />
@@ -1427,13 +1458,11 @@ const ViewAllBillsModal = memo(({
           <Text style={{ fontSize: 18, fontWeight: '800', color: '#111', flex: 1 }}>All Bills</Text>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600' }}>{billsDateFilter === 'All' ? 'All time' : billsDateFilter}</Text>
-            <Text style={{ fontSize: 15, fontWeight: '800', color: '#2563EB' }}>₹{filteredTotal.toLocaleString('en-IN')}</Text>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: theme.colors.primary }}>₹{filteredTotal.toLocaleString('en-IN')}</Text>
           </View>
         </View>
 
-        {/* Search + Date filter bar */}
         <View style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingHorizontal: 16, paddingVertical: 10 }}>
-          {/* Search input */}
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10 }}>
             <Ionicons name="search" size={15} color="#9CA3AF" style={{ marginRight: 6 }} />
             <TextInput
@@ -1449,14 +1478,13 @@ const ViewAllBillsModal = memo(({
               </TouchableOpacity>
             )}
           </View>
-          {/* Date filter row */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
               onPress={() => { setBillsDateFilter('All'); setShowCalendar(false); }}
               style={{
                 paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
-                backgroundColor: billsDateFilter === 'All' ? '#4F46E5' : '#F3F4F6',
-                borderWidth: 1, borderColor: billsDateFilter === 'All' ? '#4F46E5' : '#E5E7EB',
+                backgroundColor: billsDateFilter === 'All' ? theme.colors.primary : '#F3F4F6',
+                borderWidth: 1, borderColor: billsDateFilter === 'All' ? theme.colors.primary : '#E5E7EB',
               }}
             >
               <Text style={{ fontSize: 12, fontWeight: '700', color: billsDateFilter === 'All' ? '#fff' : '#6B7280' }}>All</Text>
@@ -1466,39 +1494,37 @@ const ViewAllBillsModal = memo(({
               style={{
                 flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
                 paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
-                backgroundColor: billsDateFilter !== 'All' ? '#EEF2FF' : '#F3F4F6',
-                borderWidth: 1, borderColor: billsDateFilter !== 'All' ? '#4F46E5' : '#E5E7EB',
+                backgroundColor: billsDateFilter !== 'All' ? theme.colors.primaryLight : '#F3F4F6',
+                borderWidth: 1, borderColor: billsDateFilter !== 'All' ? theme.colors.primary : '#E5E7EB',
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Ionicons name="calendar-outline" size={14} color={billsDateFilter !== 'All' ? '#4F46E5' : '#9CA3AF'} />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: billsDateFilter !== 'All' ? '#4F46E5' : '#6B7280' }}>
+                <Ionicons name="calendar-outline" size={14} color={billsDateFilter !== 'All' ? theme.colors.primary : '#9CA3AF'} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: billsDateFilter !== 'All' ? theme.colors.primary : '#6B7280' }}>
                   {billsDateFilter !== 'All' ? billsDateFilter : 'Pick a date'}
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 {billsDateFilter !== 'All' && (
                   <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); setBillsDateFilter('All'); setShowCalendar(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name="close-circle" size={14} color="#4F46E5" />
+                    <Ionicons name="close-circle" size={14} color={theme.colors.primary} />
                   </TouchableOpacity>
                 )}
-                <Ionicons name={showCalendar ? 'chevron-up' : 'chevron-down'} size={13} color={billsDateFilter !== 'All' ? '#4F46E5' : '#9CA3AF'} />
+                <Ionicons name={showCalendar ? 'chevron-up' : 'chevron-down'} size={13} color={billsDateFilter !== 'All' ? theme.colors.primary : '#9CA3AF'} />
               </View>
             </TouchableOpacity>
           </View>
-          {/* Inline calendar dropdown */}
           {showCalendar && (
             <View style={{ marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#fff', overflow: 'hidden' }}>
               <MiniCalendar
                 selectedDate={selectedCalDate}
                 onSelect={handleCalendarSelect}
-                markedDates={markedDates}
+                markedDates={new Set()}
               />
             </View>
           )}
         </View>
 
-        {/* Stats row */}
         <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', marginBottom: 8, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '700' }}>BILLS</Text>
@@ -1506,7 +1532,7 @@ const ViewAllBillsModal = memo(({
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '700' }}>TOTAL</Text>
-            <Text style={{ fontSize: 18, fontWeight: '900', color: '#2563EB' }}>₹{filteredTotal.toLocaleString('en-IN')}</Text>
+            <Text style={{ fontSize: 18, fontWeight: '900', color: theme.colors.primary }}>₹{filteredTotal.toLocaleString('en-IN')}</Text>
           </View>
           {billsDateFilter === 'All' && activeSessions.length > 0 && (
             <View style={{ flex: 1 }}>
@@ -1517,7 +1543,6 @@ const ViewAllBillsModal = memo(({
         </View>
 
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          {/* Active (pending) sessions — only show on All tab */}
           {billsDateFilter === 'All' && activeSessions.map((session) => (
             <TouchableOpacity
               key={session.id}
@@ -1537,7 +1562,6 @@ const ViewAllBillsModal = memo(({
             </TouchableOpacity>
           ))}
 
-          {/* Completed bills — NO onClose() so panel stays open */}
           {filteredBills.length === 0 && (billsDateFilter !== 'All' || activeSessions.length === 0) ? (
             <View style={{ alignItems: 'center', paddingVertical: 60 }}>
               <Ionicons name="document-outline" size={48} color="#D1D5DB" />
@@ -1550,7 +1574,7 @@ const ViewAllBillsModal = memo(({
               onPress={() => openBillDetail(bill, filteredBills.length - index)}
             >
               <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '800', color: '#2563EB' }}>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: theme.colors.primary }}>
                   {(bill.customerName || 'W').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
                 </Text>
               </View>
@@ -1578,6 +1602,7 @@ export default function HomeScreen() {
   const user = useAuthStore((state) => state.user);
   const setUser = useAuthStore((state) => state.setUser);
   const setSession = useAuthStore((state) => state.setSession);
+  const { theme } = useThemeStore();
 
   const [bizName, setBizName] = useState('');
   const [bizLocation, setBizLocation] = useState('');
@@ -1590,6 +1615,7 @@ export default function HomeScreen() {
   const [currentDateTime, setCurrentDateTime] = useState('');
   const [nextDue, setNextDue] = useState('');
   const [profileVisible, setProfileVisible] = useState(false);
+  const [themePickerVisible, setThemePickerVisible] = useState(false);
   const [products, setProducts] = useState<{ name: string; price: number }[]>([]);
   const [trialStart, setTrialStart] = useState<Date | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -1642,7 +1668,7 @@ export default function HomeScreen() {
         },
       ]
     );
-  }, [showSuccess, showError]);
+  }, []);
 
   const showSuccess = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -1800,12 +1826,6 @@ const loadData = useCallback(async () => {
   }
 }, []);
 
-  // Save business details to Supabase
-  const saveBusinessDetails = useCallback(async () => {
-    // This is kept for reference but no longer used
-    // Business details are now handled on the complete-profile screen
-  }, []);
-
   const updateDateTime = useCallback(() => {
     const now = new Date();
     const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -1847,19 +1867,20 @@ const loadData = useCallback(async () => {
               setProfileVisible(false);
               RAM_SESSIONS = [];
               await AsyncStorage.multiRemove(['trialStart', 'isSubscribed', 'supabase_session', 'salesLog']);
-              await supabase.auth.signOut();
               setUser(null);
               setSession(null);
-            } catch (error) {
-              console.error('Logout error:', error);
-              setUser(null);
-              setSession(null);
-            }
+             const { error } = await supabase.auth.signOut();
+              if (error) console.error('Supabase sign out error:', error);
+              router.replace('/login');
+              } catch (error) {
+                console.error('Logout error:', error);
+                router.replace('/login');
+              }
           },
         },
       ]
     );
-  }, [setUser, setSession]);
+  }, [router, setUser, setSession]);
 
   // Initialize data on mount
   useEffect(() => {
@@ -1882,7 +1903,6 @@ const loadData = useCallback(async () => {
   }, [loadData, loadBusinessDetails, updateDateTime, user?.id]);
 
   // Reload products every time the home tab comes into focus
-  // (covers the case where user adds a product in the Products tab and returns)
   useFocusEffect(
     useCallback(() => {
       DatabaseService.loadProducts().then((storedProducts) => {
@@ -1961,15 +1981,12 @@ const loadData = useCallback(async () => {
   try {
     console.log('💰 Saving bill:', newBill);
     
-    // Save to database
     await DatabaseService.addSaleLog(newBill, salesLog);
     
-    // Update local state
     const updatedBills = [newBill, ...salesLog];
     setSalesLog(updatedBills);
     setTodayTotal(prev => prev + reviewData.total);
 
-    // Remove from active sessions if needed
     if (reviewData.sessionId) {
       RAM_SESSIONS = RAM_SESSIONS.filter(s => s.id !== reviewData.sessionId);
       setActiveSessions([...RAM_SESSIONS]);
@@ -2013,15 +2030,9 @@ const loadData = useCallback(async () => {
 
   const subStatus = getSubscriptionStatus();
 
-  // View All Bills Modal
+  // View All Bills Modal state
   const [billsDateFilter, setBillsDateFilter] = useState<string>('All');
   const [billsSearchQuery, setBillsSearchQuery] = useState<string>('');
-
-  const allBillDates = useMemo(() => {
-    const dates = new Set<string>();
-    salesLog.forEach(b => { if (b.date) dates.add(b.date); });
-    return ['All', ...Array.from(dates)];
-  }, [salesLog]);
 
   const filteredBills = useMemo(() => {
     let bills = billsDateFilter === 'All' ? salesLog : salesLog.filter(b => b.date === billsDateFilter);
@@ -2034,25 +2045,8 @@ const loadData = useCallback(async () => {
 
   const filteredTotal = useMemo(() => filteredBills.reduce((s, b) => s + b.total, 0), [filteredBills]);
 
-  // ViewAllBillsModal is defined as a standalone component outside HomeScreen (see below)
-
-  const viewAllBillsProps = {
-    visible: viewAllBillsVisible,
-    onClose: () => setViewAllBillsVisible(false),
-    insetTop: insets.top,
-    activeSessions,
-    filteredBills,
-    filteredTotal,
-    billsDateFilter,
-    setBillsDateFilter,
-    billsSearchQuery,
-    setBillsSearchQuery,
-    openSession,
-    openBillDetail,
-  };
-
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Toast visible={showToast} message={toastMessage} type={toastType} onHide={() => setShowToast(false)} />
       <ProfileModal
         visible={profileVisible}
@@ -2065,6 +2059,7 @@ const loadData = useCallback(async () => {
         nextDue={nextDue}
         pendingCount={pendingCount}
         pendingTotal={pendingTotal}
+        theme={theme}
         onClose={() => setProfileVisible(false)}
         onEditProfile={() => {
           setProfileVisible(false);
@@ -2079,6 +2074,14 @@ const loadData = useCallback(async () => {
           setProfileVisible(false);
           setTimeout(() => setPendingPaymentsVisible(true), 300);
         }}
+        onChooseTheme={() => {
+          setProfileVisible(false);
+          setTimeout(() => setThemePickerVisible(true), 300);
+        }}
+      />
+      <ThemePickerModal
+        visible={themePickerVisible}
+        onClose={() => setThemePickerVisible(false)}
       />
       <EditProfileModal
         visible={editProfileModalVisible}
@@ -2096,19 +2099,20 @@ const loadData = useCallback(async () => {
         billNumber={selectedBillNumber}
         onClose={() => setBillDetailVisible(false)}
         onDelete={handleDeleteBill}
+        theme={theme}
       />
       <PendingPaymentsModal
         visible={pendingPaymentsVisible}
         userId={user?.id || ''}
         onClose={() => {
           setPendingPaymentsVisible(false);
-          // Refresh pending count after closing
           if (user?.id) {
             supabase.from('pending_payments').select('amount').eq('user_id', user.id).then(({ data }) => {
               if (data) { setPendingCount(data.length); setPendingTotal(data.reduce((s: number, r: any) => s + Number(r.amount), 0)); }
             });
           }
         }}
+        theme={theme}
       />
 
       <LiveBillingModal
@@ -2118,12 +2122,14 @@ const loadData = useCallback(async () => {
         onComplete={handleComplete}
         session={editingSession}
         products={products}
+        theme={theme}
       />
 
       <QuickEntryModal
         visible={quickEntryVisible}
         onClose={() => setQuickEntryVisible(false)}
         onSave={handleQuickEntrySave}
+        theme={theme}
       />
 
       <ReviewBillModal
@@ -2134,16 +2140,30 @@ const loadData = useCallback(async () => {
         customerPhone={reviewData.customerPhone}
         items={reviewData.items}
         total={reviewData.total}
+        theme={theme}
       />
 
-      <ViewAllBillsModal {...viewAllBillsProps} />
+      <ViewAllBillsModal
+        visible={viewAllBillsVisible}
+        onClose={() => setViewAllBillsVisible(false)}
+        insetTop={insets.top}
+        activeSessions={activeSessions}
+        filteredBills={filteredBills}
+        filteredTotal={filteredTotal}
+        billsDateFilter={billsDateFilter}
+        setBillsDateFilter={setBillsDateFilter}
+        billsSearchQuery={billsSearchQuery}
+        setBillsSearchQuery={setBillsSearchQuery}
+        openSession={openSession}
+        openBillDetail={openBillDetail}
+      />
 
-      {/* Header */}
+      {/* Header - Redesigned with compact collection card */}
       <LinearGradient
-        colors={['#4F46E5', '#7C3AED', '#9333EA']}
+        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={[styles.header, { paddingTop: insets.top + 10 }]}
+        style={[styles.header, { paddingTop: insets.top + 10, paddingBottom: 12 }]}
       >
         <View style={styles.headerTop}>
           <View>
@@ -2151,67 +2171,66 @@ const loadData = useCallback(async () => {
             <Text style={styles.shopDateTime}>{currentDateTime}</Text>
           </View>
           <TouchableOpacity 
-  style={styles.profileBtn} 
-  onPress={() => setProfileVisible(true)}
->
-  <Text style={styles.headerProfileLetter}>
-    {user?.email?.charAt(0).toUpperCase() || 'S'}
-  </Text>
-</TouchableOpacity>
+            style={styles.profileBtn} 
+            onPress={() => setProfileVisible(true)}
+          >
+            <Text style={styles.headerProfileLetter}>
+              {user?.email?.charAt(0).toUpperCase() || 'S'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.collectionCard}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.collectionLabel}>TODAY'S COLLECTION</Text>
-            <Text style={styles.collectionValue}>₹{todayTotal.toLocaleString('en-IN')}</Text>
-            <Text style={styles.collectionSub}>{salesLog.length} bill{salesLog.length !== 1 ? 's' : ''} today</Text>
+        {/* Compact Collection Card - bills count next to amount */}
+        <View style={[styles.collectionCard, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
+          <View style={styles.collectionRow}>
+            <View>
+              <Text style={styles.collectionLabel}>TODAY'S COLLECTION</Text>
+              <Text style={styles.collectionValue}>₹{todayTotal.toLocaleString('en-IN')}</Text>
+            </View>
+            <View style={styles.billsCountBadge}>
+              <Ionicons name="receipt-outline" size={14} color="#fff" />
+              <Text style={styles.billsCountText}>{salesLog.length} bill{salesLog.length !== 1 ? 's' : ''}</Text>
+            </View>
           </View>
         </View>
       </LinearGradient>
 
       {/* Quick Actions */}
       <View style={styles.quickActionsContainer}>
-        <Text style={styles.quickActionsTitle}>Quick Actions</Text>
+        <Text style={[styles.quickActionsTitle, { color: theme.colors.textPrimary }]}>Quick Actions</Text>
         <View style={styles.quickActionsRow}>
           <TouchableOpacity
-  style={[styles.qaBtn, { backgroundColor: '#4F46E5' }]}
-  onPress={startNewBilling}
->
-  <View style={styles.quickActionHorizontal}>
-    <View style={styles.quickActionSmallIcon}>
-      <Ionicons name="document-text-outline" size={20} color="#fff" />
-    </View>
+            style={[styles.qaBtn, { backgroundColor: theme.colors.primary }]}
+            onPress={startNewBilling}
+          >
+            <View style={styles.quickActionHorizontal}>
+              <View style={styles.quickActionSmallIcon}>
+                <Ionicons name="document-text-outline" size={20} color="#fff" />
+              </View>
+              <Text style={styles.quickActionMainText}>New Bill</Text>
+            </View>
+          </TouchableOpacity>
 
-    <Text style={styles.quickActionMainText}>New Bill</Text>
-  </View>
-</TouchableOpacity>
-
-         <TouchableOpacity
-  style={[styles.qaBtn, { backgroundColor: '#6D28D9' }]}
-  onPress={() => setQuickEntryVisible(true)}
->
-  <View style={styles.quickActionHorizontal}>
-    <View style={styles.quickActionSmallIcon}>
-      <Ionicons name="flash" size={20} color="#fff" />
-    </View>
-
-    <Text
-  style={styles.quickActionMainText}
-  numberOfLines={1}
->
-  Quick Bill
-</Text>
-  </View>
-</TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.qaBtn, { backgroundColor: theme.colors.secondary }]}
+            onPress={() => setQuickEntryVisible(true)}
+          >
+            <View style={styles.quickActionHorizontal}>
+              <View style={styles.quickActionSmallIcon}>
+                <Ionicons name="flash" size={20} color="#fff" />
+              </View>
+              <Text style={styles.quickActionMainText}>Quick Bill</Text>
+            </View>
+          </TouchableOpacity>
         </View>
       </View>
 
       {/* Today's Bills Header */}
       <View style={styles.billsHeaderContainer}>
         <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Today's Bills</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Today's Bills</Text>
           <TouchableOpacity onPress={() => setViewAllBillsVisible(true)}>
-            <Text style={styles.viewAllText}>View All</Text>
+            <Text style={[styles.viewAllText, { color: theme.colors.primary }]}>View All</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -2231,26 +2250,27 @@ const loadData = useCallback(async () => {
                 CARD_COLORS={CARD_COLORS}
                 onPress={() => openSession(session)}
                 onDelete={() => deleteActiveOrder(session.id)}
+                theme={theme}
               />
             ))}
 
             {salesLog.map((bill, index) => (
               <TouchableOpacity
                 key={`bill-${bill.id}-${index}`}
-                style={styles.billCard}
+                style={[styles.billCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
                 onPress={() => openBillDetail(bill, salesLog.length - index)}
               >
-                <View style={styles.billAvatarBox}>
-                  <Text style={styles.billAvatarText}>
+                <View style={[styles.billAvatarBox, { backgroundColor: `${theme.colors.primary}20` }]}>
+                  <Text style={[styles.billAvatarText, { color: theme.colors.primary }]}>
                     {bill.customerName.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)}
                   </Text>
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.billCustomer}>{bill.customerName}</Text>
+                  <Text style={[styles.billCustomer, { color: theme.colors.textPrimary }]}>{bill.customerName}</Text>
                   <Text style={styles.billTime}>{bill.time} · {bill.date}</Text>
                 </View>
                 <View style={styles.billRight}>
-                  <Text style={styles.billAmount}>₹{bill.total.toLocaleString('en-IN')}</Text>
+                  <Text style={[styles.billAmount, { color: theme.colors.primary }]}>₹{bill.total.toLocaleString('en-IN')}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#bbb" style={{ marginLeft: 6 }} />
               </TouchableOpacity>
@@ -2265,23 +2285,25 @@ const loadData = useCallback(async () => {
 
 // Styles
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F3FF' },
-  header: { paddingHorizontal: 16, paddingBottom: 22 },
+  container: { flex: 1 },
+  header: { paddingHorizontal: 16, paddingBottom: 12 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
   shopName: { color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
   shopDateTime: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '600', marginTop: 2 },
   profileBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   headerProfileLetter: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  collectionCard: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center' },
+  collectionCard: { borderRadius: 16, padding: 14 },
+  collectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   collectionLabel: { fontSize: 10, color: 'rgba(255,255,255,0.8)', fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
-  collectionValue: { fontSize: 38, fontWeight: '900', color: '#fff', letterSpacing: -2, marginTop: 2 },
-  collectionSub: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 4, fontWeight: '600' },
+  collectionValue: { fontSize: 32, fontWeight: '900', color: '#fff', letterSpacing: -1, marginTop: 2 },
+  billsCountBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, gap: 5 },
+  billsCountText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   body: { flex: 1, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 20 },
-  quickActionsContainer: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, backgroundColor: '#F5F3FF' },
-  billsHeaderContainer: { paddingHorizontal: 16, paddingVertical: 6, backgroundColor: '#F5F3FF' },
+  quickActionsContainer: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 },
+  billsHeaderContainer: { paddingHorizontal: 16, paddingVertical: 6 },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#111' },
-  viewAllText: { fontSize: 13, fontWeight: '700', color: '#2563EB' },
+  sectionTitle: { fontSize: 16, fontWeight: '800' },
+  viewAllText: { fontSize: 13, fontWeight: '700' },
   activeOrderButton: { borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4 },
   aoLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   aoIconBox: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
@@ -2290,50 +2312,30 @@ const styles = StyleSheet.create({
   aoItemCount: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.9)' },
   aoTotal: { fontSize: 16, fontWeight: '900', color: '#fff' },
   deleteButton: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 60, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EF4444', borderRadius: 14 },
-  quickActionsTitle: { fontSize: 16, fontWeight: '800', color: '#111', marginBottom: 10, marginTop: 6 },
-  quickActionsRow: {
-  flexDirection: 'row',
-  gap: 12,
-  marginBottom: 4,
-},
-qaBtn: {
-  flex: 1,
-  height: 70,
-  borderRadius: 16,
-  justifyContent: 'center',
-  alignItems: 'center',
-  elevation: 3,
-  shadowColor: '#000',
-  shadowOffset: {
-    width: 0,
-    height: 2,
-  },
-  shadowOpacity: 0.12,
-  shadowRadius: 4,
-},
-  qaLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  qaBtnTitle: { fontSize: 14, fontWeight: '800', color: '#fff' },
-  qaBtnSub: { fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginTop: 1 },
-  billCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', borderWidth: 0.5, borderColor: '#E5E7EB', elevation: 1 },
-  billAvatarBox: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
-  billAvatarText: { fontSize: 14, fontWeight: '800', color: '#2563EB' },
-  billCustomer: { fontSize: 18, fontWeight: '900', color: '#0F172A' },
+  quickActionsTitle: { fontSize: 16, fontWeight: '800', marginBottom: 10, marginTop: 6 },
+  quickActionsRow: { flexDirection: 'row', gap: 12, marginBottom: 4 },
+  qaBtn: { flex: 1, height: 70, borderRadius: 16, justifyContent: 'center', alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4 },
+  quickActionHorizontal: { flexDirection: 'row', alignItems: 'center', width: '85%' },
+  quickActionSmallIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center', marginRight: 8 },
+  quickActionMainText: { fontSize: 14, fontWeight: '800', color: '#fff', flexShrink: 1 },
+  billCard: { borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', borderWidth: 0.5, elevation: 1 },
+  billAvatarBox: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  billAvatarText: { fontSize: 14, fontWeight: '800' },
+  billCustomer: { fontSize: 18, fontWeight: '900' },
   billTime: { fontSize: 11, color: '#9CA3AF', marginTop: 4, fontWeight: '600' },
   billRight: { alignItems: 'flex-end' },
-  billAmount: { fontSize: 24, fontWeight: '900', color: '#2563EB' },
+  billAmount: { fontSize: 24, fontWeight: '900' },
   emptyState: { alignItems: 'center', paddingVertical: 30 },
   emptyText: { color: '#bbb', fontSize: 13, fontWeight: '600' },
-  liveBillingFullScreen: { flex: 1, backgroundColor: '#fff' },
+  
+  // Live Billing Modal Styles
   liveBillingHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   lbBackBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
-  lbCloseBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
+  lbCloseBtn: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   liveBillingTitle: { fontSize: 18, fontWeight: '900', color: '#111' },
   liveBillingSub: { fontSize: 12, color: '#9CA3AF', fontWeight: '600', marginTop: 1 },
   liveBillingContent: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
   customerSection: { marginBottom: 20 },
-  customerAvatarRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  customerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
-  customerSectionTitle: { fontSize: 15, fontWeight: '800', color: '#111', marginLeft: 10 },
   lbInputBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 2 },
   lbInput: { flex: 1, padding: 12, fontSize: 14, fontWeight: '600', color: '#333' },
   addItemsSection: { marginBottom: 12 },
@@ -2342,36 +2344,40 @@ qaBtn: {
   searchInput: { flex: 1, paddingVertical: 11, fontSize: 14, color: '#333', fontWeight: '600' },
   productRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' },
   productName: { fontSize: 14, fontWeight: '700', color: '#111' },
-  productPrice: { fontSize: 12, fontWeight: '700', color: '#2563EB', marginTop: 2 },
+  productPrice: { fontSize: 12, fontWeight: '700', marginTop: 2 },
   qtyControl: { flexDirection: 'row', alignItems: 'center', gap: 10, marginRight: 12 },
   qtyBtn: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
   qtyText: { fontSize: 14, fontWeight: '800', color: '#111', minWidth: 18, textAlign: 'center' },
-  lineTotal: { fontSize: 13, fontWeight: '800', color: '#333', minWidth: 55, textAlign: 'right' },
+  lineTotal: { fontSize: 13, fontWeight: '800', minWidth: 55, textAlign: 'right' },
   billSummaryBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#EEF2FF', paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#D1D5DB' },
   summaryLeft: { flexDirection: 'row', alignItems: 'center' },
   summaryItemsLabel: { fontSize: 11, color: '#555', fontWeight: '600' },
-  summaryItemsValue: { fontSize: 13, fontWeight: '800', color: '#2563EB', marginTop: 2 },
+  summaryItemsValue: { fontSize: 13, fontWeight: '800', marginTop: 2 },
   summaryRight: { alignItems: 'flex-end' },
   summaryTotalLabel: { fontSize: 11, color: '#555', fontWeight: '600' },
   summaryTotalValue: { fontSize: 22, fontWeight: '900', color: '#111', marginTop: 2 },
   lbBottomButtons: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 12, gap: 12, backgroundColor: '#fff' },
-  saveGoBackBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#2563EB', borderRadius: 12, paddingVertical: 13 },
-  saveGoBackText: { color: '#2563EB', fontSize: 14, fontWeight: '800' },
-  completeBillBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', borderRadius: 12, paddingVertical: 13, elevation: 2 },
+  saveGoBackBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderRadius: 12, paddingVertical: 13 },
+  saveGoBackText: { fontSize: 14, fontWeight: '800' },
+  completeBillBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 12, paddingVertical: 13, elevation: 2 },
   completeBillText: { color: '#fff', fontSize: 14, fontWeight: '800' },
-  qeFastBadge: { backgroundColor: '#F5F3FF', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
-  qeIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#EDE9FE', alignItems: 'center', justifyContent: 'center' },
-  qeFastTitle: { fontSize: 15, fontWeight: '800', color: '#6D28D9' },
-  qeFastSub: { fontSize: 12, color: '#7C3AED', fontWeight: '600', marginTop: 2 },
+  
+  // Quick Entry Modal Styles
+  qeFastBadge: { borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', marginBottom: 24, backgroundColor: '#F5F3FF' },
+  qeIconBox: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  qeFastTitle: { fontSize: 15, fontWeight: '800' },
+  qeFastSub: { fontSize: 12, fontWeight: '600', marginTop: 2, color: '#7C3AED' },
   qeLabel: { fontSize: 13, fontWeight: '700', color: '#111', marginBottom: 8 },
   qeBottomBar: { paddingHorizontal: 16, paddingTop: 12, backgroundColor: '#fff' },
-  qeSaveBtn: { backgroundColor: '#6D28D9', borderRadius: 14, paddingVertical: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', elevation: 3 },
+  qeSaveBtn: { borderRadius: 14, paddingVertical: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', elevation: 3 },
   qeSaveBtnText: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  
+  // Profile Modal Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   profilePanel: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
   profileHandle: { width: 40, height: 4, backgroundColor: '#eee', borderRadius: 4, alignSelf: 'center', marginBottom: 20 },
   profileHeader: { alignItems: 'center', marginBottom: 20 },
-  profileAvatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#4F46E5', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  profileAvatar: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   profileAvatarText: { fontSize: 26, fontWeight: '900', color: '#fff' },
   profileBizName: { fontSize: 20, fontWeight: '900', color: '#111', textAlign: 'center' },
   profileBizTypeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EEF2FF', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, marginTop: 6, gap: 4 },
@@ -2385,10 +2391,12 @@ qaBtn: {
   subStatusCard: { borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1 },
   subStatusLabel: { fontSize: 14, fontWeight: '800' },
   subStatusNote: { fontSize: 12, color: '#6B7280', fontWeight: '500', lineHeight: 18 },
-  upgradeBtn: { backgroundColor: '#4F46E5', borderRadius: 12, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 4, elevation: 2 },
+  upgradeBtn: { borderRadius: 12, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 4, elevation: 2 },
   upgradeBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#FEE2E2', backgroundColor: '#FFF5F5', borderRadius: 12, paddingVertical: 13, marginTop: 6 },
   logoutBtnText: { color: '#DC2626', fontSize: 14, fontWeight: '800' },
+  
+  // Review Bill Modal Styles
   reviewBillOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
   reviewBillContainer: { backgroundColor: '#fff', borderRadius: 16, width: '100%', maxHeight: '85%' },
   reviewBillHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
@@ -2399,17 +2407,21 @@ qaBtn: {
   reviewBillItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   reviewBillItemName: { fontSize: 14, fontWeight: '700', color: '#222' },
   reviewBillItemQty: { fontSize: 12, color: '#666', fontWeight: '600', marginTop: 2 },
-  reviewBillItemAmount: { fontSize: 14, fontWeight: '900', color: '#2563EB' },
+  reviewBillItemAmount: { fontSize: 14, fontWeight: '900' },
   reviewBillTotal: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 2, borderTopColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
   reviewBillTotalLabel: { fontSize: 14, fontWeight: '800', color: '#666' },
-  reviewBillTotalAmount: { fontSize: 18, fontWeight: '900', color: '#2563EB' },
+  reviewBillTotalAmount: { fontSize: 18, fontWeight: '900' },
   reviewBillButtons: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
-  reviewBillBackBtn: { flex: 1, paddingVertical: 12, borderWidth: 2, borderColor: '#2563EB', borderRadius: 10, alignItems: 'center' },
-  reviewBillBackBtnText: { color: '#2563EB', fontWeight: '800', fontSize: 14 },
-  reviewBillDoneBtn: { flex: 1, paddingVertical: 12, backgroundColor: '#2563EB', borderRadius: 10, alignItems: 'center' },
+  reviewBillBackBtn: { flex: 1, paddingVertical: 12, borderWidth: 2, borderRadius: 10, alignItems: 'center' },
+  reviewBillBackBtnText: { fontWeight: '800', fontSize: 14 },
+  reviewBillDoneBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   reviewBillDoneBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  
+  // Toast
   toastContainer: { position: 'absolute', bottom: 100, left: 20, right: 20, padding: 12, borderRadius: 10, alignItems: 'center', zIndex: 9999 },
   toastText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  
+  // Edit Profile
   editProfileBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#EEF2FF', borderRadius: 8, gap: 4 },
   editProfileBtnText: { fontSize: 12, fontWeight: '700', color: '#2563EB' },
   editProfileForm: { paddingHorizontal: 6 },
@@ -2417,8 +2429,9 @@ qaBtn: {
   formLabel: { fontSize: 12, fontWeight: '700', color: '#64748B', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   formInputBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', borderRadius: 12, paddingHorizontal: 12, height: 50 },
   formInput: { flex: 1, fontSize: 14, fontWeight: '600', color: '#333', height: 50, paddingVertical: 0 },
-  saveProfileBtn: { backgroundColor: '#4F46E5', padding: 15, borderRadius: 14, alignItems: 'center', marginTop: 10 },
+  saveProfileBtn: { padding: 15, borderRadius: 14, alignItems: 'center', marginTop: 10, backgroundColor: '#4F46E5' },
   saveProfileBtnText: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  
   // Profile redesign styles
   profileHeaderNew: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 14 },
   profileAvatarNew: { width: 58, height: 58, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
@@ -2437,6 +2450,7 @@ qaBtn: {
   menuItemSub: { fontSize: 12, color: '#9CA3AF', fontWeight: '500', marginTop: 2 },
   menuBadge: { backgroundColor: '#FEF3C7', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, marginRight: 4 },
   menuBadgeText: { fontSize: 11, fontWeight: '800', color: '#D97706' },
+  
   // Pending Payments styles
   ppHeader: { paddingHorizontal: 16, paddingBottom: 16, flexDirection: 'row', alignItems: 'center' },
   ppHeaderTitle: { fontSize: 18, fontWeight: '900', color: '#fff' },
@@ -2454,44 +2468,4 @@ qaBtn: {
   ppAmount: { fontSize: 17, fontWeight: '900', color: '#D97706' },
   ppDeleteBtn: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 3 },
   ppDeleteText: { fontSize: 11, color: '#10B981', fontWeight: '700' },
-  quickActionCenter: {
-  flex: 1,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-
-quickActionIconCircle: {
-  width: 48,
-  height: 48,
-  borderRadius: 24,
-  backgroundColor: 'rgba(255,255,255,0.18)',
-  justifyContent: 'center',
-  alignItems: 'center',
-  marginBottom: 8,
-},
-
-quickActionMainText: {
-  fontSize: 14,
-  fontWeight: '800',
-  color: '#fff',
-  flexShrink: 1,
-},
-
-quickActionHorizontal: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  width: '85%',
-},
-
-quickActionSmallIcon: {
-  width: 36,
-  height: 36,
-  borderRadius: 18,
-  backgroundColor: 'rgba(255,255,255,0.18)',
-  justifyContent: 'center',
-  alignItems: 'center',
-  marginRight: 8,
-},
-
-
 });

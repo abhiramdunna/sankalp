@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ThemeId, AppTheme, THEMES, DEFAULT_THEME_ID, DEFAULT_THEME } from '@/constants/theme';
 
 interface User {
   id: string;
@@ -28,6 +29,12 @@ interface AuthState {
   clearAuth: () => void;
 }
 
+interface ThemeState {
+  themeId: ThemeId;
+  theme: AppTheme;
+  setTheme: (id: ThemeId) => void;
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -51,8 +58,29 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'auth-storage',
       storage: createJSONStorage(() => AsyncStorage),
-      // isNewSignup is intentionally NOT persisted — resets on app restart
       partialize: (state) => ({ user: state.user, session: state.session }),
+    }
+  )
+);
+
+export const useThemeStore = create<ThemeState>()(
+  persist(
+    (set) => ({
+      themeId: DEFAULT_THEME_ID,
+      theme: DEFAULT_THEME,
+      setTheme: (id: ThemeId) =>
+        set({ themeId: id, theme: THEMES[id] }),
+    }),
+    {
+      name: 'theme-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({ themeId: state.themeId }),
+      // Re-hydrate the full theme object from the stored themeId on startup
+      onRehydrateStorage: () => (state) => {
+        if (state && state.themeId) {
+          state.theme = THEMES[state.themeId] ?? DEFAULT_THEME;
+        }
+      },
     }
   )
 );

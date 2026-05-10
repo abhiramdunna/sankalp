@@ -1,6 +1,7 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useThemeStore } from '@/lib/store';
+import { AppTheme } from '@/constants/theme';
 import { db as DatabaseService } from '@/lib/database';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -57,6 +58,8 @@ interface AppAlertConfig {
 
 export default function ProductsScreen() {
   const router = useRouter();
+  const { theme } = useThemeStore();
+  const styles = makeStyles(theme); // FIX: was missing — caused "Property 'styles' doesn't exist"
 
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
@@ -76,8 +79,7 @@ const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [customItemName, setCustomItemName] = useState('');
   const [customItemAmount, setCustomItemAmount] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [newProductUnit, setNewProductUnit] = useState('pieces');
-  const [unitPickerVisible, setUnitPickerVisible] = useState(false);
+  const [newProductUnit, setNewProductUnit] = useState('');
   const [addProductVisible, setAddProductVisible] = useState(false);
   const [customerToggle, setCustomerToggle] = useState(false);
 
@@ -85,6 +87,7 @@ const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editName, setEditName] = useState('');
   const [editPrice, setEditPrice] = useState('');
+  const [editUnit, setEditUnit] = useState('');
   const [editModalVisible, setEditModalVisible] = useState(false);
 
   // Custom alert state — replaces all Alert.alert calls
@@ -107,8 +110,6 @@ const [isInitialLoad, setIsInitialLoad] = useState(true);
   };
 
   const dismissAlert = () => setAppAlert(prev => ({ ...prev, visible: false }));
-
-  const unitOptions = ['pieces', 'kgs', 'liters', 'grams', 'ml', 'units'];
 
   useEffect(() => {
     loadProducts();
@@ -263,7 +264,7 @@ const saveSessions = async (updatedSessions: Session[]) => {
     await DatabaseService.saveProducts(updatedProducts)
     setNewProductName('');
     setNewProductPrice('');
-    setNewProductUnit('pieces');
+    setNewProductUnit('');
     setAddProductVisible(false);
     showAlert('Product Added', `"${newProduct.name}" has been saved to your catalogue.`, 'success');
   };
@@ -287,6 +288,7 @@ const saveSessions = async (updatedSessions: Session[]) => {
     setEditingProduct(product);
     setEditName(product.name);
     setEditPrice(product.price.toString());
+    setEditUnit(product.unit || '');
     setEditModalVisible(true);
   };
 
@@ -301,7 +303,7 @@ const saveSessions = async (updatedSessions: Session[]) => {
       return;
     }
     const updated = products.map(p =>
-      p.id === editingProduct?.id ? { ...p, name: editName.trim(), price } : p
+      p.id === editingProduct?.id ? { ...p, name: editName.trim(), price, unit: editUnit.trim() } : p
     );
     setProducts(updated);
     await DatabaseService.saveProducts(updated);
@@ -352,7 +354,7 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
   const alertIconMap = {
     success: { icon: 'checkmark-circle' as const, color: '#22C55E', bg: '#F0FDF4' },
     error: { icon: 'close-circle' as const, color: '#EF4444', bg: '#FEF2F2' },
-    info: { icon: 'information-circle' as const, color: '#2563EB', bg: '#EFF6FF' },
+    info: { icon: 'information-circle' as const, color: theme.colors.primary, bg: theme.colors.primaryLight },
     confirm: { icon: 'alert-circle' as const, color: '#F59E0B', bg: '#FFFBEB' },
   };
 
@@ -385,9 +387,9 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
               )}
               <TouchableOpacity
                 style={[
-                  styles.alertOkBtn,
-                  appAlert.type === 'confirm' && { backgroundColor: '#EF4444' },
-                  appAlert.type === 'success' && { backgroundColor: '#22C55E' },
+                  styles.alertOkBtn, { backgroundColor: theme.colors.primary },
+                  appAlert.type === 'confirm' && { backgroundColor: theme.colors.danger },
+                  appAlert.type === 'success' && { backgroundColor: theme.colors.success },
                 ]}
                 onPress={() => {
                   dismissAlert();
@@ -422,10 +424,12 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
               <View style={styles.pickerRow}>
                 <View>
                   <Text style={styles.pickerProdName}>{item.name}</Text>
-                  <Text style={styles.pickerProdPrice}>₹{item.price}</Text>
+                  <Text style={styles.pickerProdPrice}>
+                    ₹{item.price}{item.unit ? ` · ${item.unit}` : ''}
+                  </Text>
                 </View>
                 <TouchableOpacity
-                  style={styles.pickerAddBtn}
+                  style={[styles.pickerAddBtn, { backgroundColor: theme.colors.primary }]}
                   onPress={() => { addItemToBill(item.name, item.price, item.id); setPickerVisible(false); }}
                 >
                   <Text style={styles.pickerAddText}>+ Add</Text>
@@ -433,34 +437,6 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
               </View>
             )}
           />
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  );
-
-  const renderUnitPickerModal = () => (
-    <Modal animationType="slide" transparent visible={unitPickerVisible} onRequestClose={() => setUnitPickerVisible(false)}>
-      <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setUnitPickerVisible(false)}>
-        <View style={styles.pickerBox}>
-          <View style={styles.pickerHeader}>
-            <Text style={styles.pickerTitle}>Select Unit</Text>
-            <TouchableOpacity onPress={() => setUnitPickerVisible(false)}>
-              <Text style={styles.pickerClose}>×</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.unitGrid}>
-            {unitOptions.map((unit) => (
-              <TouchableOpacity
-                key={unit}
-                style={[styles.unitOption, newProductUnit === unit && styles.unitOptionSelected]}
-                onPress={() => { setNewProductUnit(unit); setUnitPickerVisible(false); }}
-              >
-                <Text style={[styles.unitOptionText, newProductUnit === unit && styles.unitOptionTextSelected]}>
-                  {unit}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
         </View>
       </TouchableOpacity>
     </Modal>
@@ -521,17 +497,21 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
                     </View>
                   </View>
                   <View>
-                    <Text style={styles.inputLabel}>Unit</Text>
-                    <TouchableOpacity
-                      style={[styles.lbInputBox, { paddingHorizontal: 12, paddingVertical: 8 }]}
-                      onPress={() => setUnitPickerVisible(true)}
-                    >
+                    <Text style={styles.inputLabel}>Unit <Text style={{ color: '#9CA3AF', fontWeight: '500', textTransform: 'none' }}>(optional — e.g. per kg, per plate)</Text></Text>
+                    <View style={styles.lbInputBox}>
                       <Ionicons name="cube-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
-                      <Text style={[styles.lbInput, { flex: 1 }]}>{newProductUnit}</Text>
-                      <Ionicons name="chevron-down" size={18} color="#2563EB" />
-                    </TouchableOpacity>
+                      <TextInput
+                        style={styles.lbInput}
+                        placeholder="e.g. per kg, per litre, idly plate"
+                        value={newProductUnit}
+                        onChangeText={setNewProductUnit}
+                        placeholderTextColor="#999"
+                        autoCorrect={false}
+                        returnKeyType="done"
+                      />
+                    </View>
                   </View>
-                  <TouchableOpacity style={styles.saveBtn} onPress={addProduct}>
+                  <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.colors.primary }]} onPress={addProduct}>
                     <Text style={styles.saveBtnText}>Save Product ✓</Text>
                   </TouchableOpacity>
                 </View>
@@ -597,7 +577,22 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
                       />
                     </View>
                   </View>
-                  <TouchableOpacity style={styles.saveBtn} onPress={saveEditedProduct}>
+                  <View>
+                    <Text style={styles.inputLabel}>Unit <Text style={{ color: '#9CA3AF', fontWeight: '500', textTransform: 'none' }}>(optional — e.g. per kg, per plate)</Text></Text>
+                    <View style={styles.lbInputBox}>
+                      <Ionicons name="cube-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+                      <TextInput
+                        style={styles.lbInput}
+                        placeholder="e.g. per kg, per litre, idly plate"
+                        value={editUnit}
+                        onChangeText={setEditUnit}
+                        placeholderTextColor="#999"
+                        autoCorrect={false}
+                        returnKeyType="done"
+                      />
+                    </View>
+                  </View>
+                  <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.colors.primary }]} onPress={saveEditedProduct}>
                     <Text style={styles.saveBtnText}>Save Changes ✓</Text>
                   </TouchableOpacity>
                 </View>
@@ -611,7 +606,7 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
 
   if (sessionId && sessions.length === 0) {
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Text style={styles.loadingText}>Loading session...</Text>
     </View>
   );
@@ -620,11 +615,11 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
   // ─── Live Bill UI ──────────────────────────────────────────────────────────
   if (currentSession != null) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         {renderAppAlert()}
         {renderPickerModal()}
 
-        <View style={styles.billHeader}>
+        <View style={[styles.billHeader, { backgroundColor: theme.colors.primary }]}>
           <View style={styles.headerText}>
             <Text style={styles.billHeaderTitle}>Live Bill · లైవ్ బిల్లు</Text>
             <Text style={styles.headerSub}>Add items · collect when done</Text>
@@ -657,7 +652,7 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
 
         <View style={styles.totalBar}>
           <Text style={styles.totalLabel}>Running Total · మొత్తం</Text>
-          <Text style={styles.totalValue}>₹{billTotal.toLocaleString('en-IN')}</Text>
+          <Text style={[styles.totalValue, { color: theme.colors.primary }]}>₹{billTotal.toLocaleString('en-IN')}</Text>
         </View>
 
         <ScrollView style={styles.itemsArea}>
@@ -675,13 +670,13 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
                 </Text>
                 <View style={styles.itemControls}>
                   <TouchableOpacity style={styles.qtyBtn} onPress={() => adjustQuantity(index, -1)}>
-                    <Text style={styles.qtyBtnText}>−</Text>
+                    <Text style={[styles.qtyBtnText, { color: theme.colors.primary }]}>−</Text>
                   </TouchableOpacity>
                   <Text style={styles.qtyNum}>{item.qty}</Text>
                   <TouchableOpacity style={styles.qtyBtn} onPress={() => adjustQuantity(index, 1)}>
-                    <Text style={styles.qtyBtnText}>+</Text>
+                    <Text style={[styles.qtyBtnText, { color: theme.colors.primary }]}>+</Text>
                   </TouchableOpacity>
-                  <Text style={styles.itemPrice}>₹{(item.price * item.qty).toLocaleString('en-IN')}</Text>
+                  <Text style={[styles.itemPrice, { color: theme.colors.primary }]}>₹{(item.price * item.qty).toLocaleString('en-IN')}</Text>
                   <TouchableOpacity onPress={() => removeItem(index)}>
                     <Text style={styles.removeBtn}>×</Text>
                   </TouchableOpacity>
@@ -709,7 +704,7 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
               keyboardType="numeric"
               placeholderTextColor="#999"
             />
-            <TouchableOpacity style={styles.customAddBtn} onPress={addCustomItem}>
+            <TouchableOpacity style={[styles.customAddBtn, { backgroundColor: theme.colors.primary }]} onPress={addCustomItem}>
               <Text style={styles.customAddText}>+</Text>
             </TouchableOpacity>
           </View>
@@ -740,16 +735,16 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
             ))}
           </View>
           <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.outlineBtn} onPress={() => setPickerVisible(true)}>
-              <Text style={styles.outlineBtnText}>📋 From catalogue</Text>
+            <TouchableOpacity style={[styles.outlineBtn, { borderColor: theme.colors.primary }]} onPress={() => setPickerVisible(true)}>
+              <Text style={[styles.outlineBtnText, { color: theme.colors.primary }]}>📋 From catalogue</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.fillBtn} onPress={addFromNumpad}>
+            <TouchableOpacity style={[styles.fillBtn, { backgroundColor: theme.colors.primary }]} onPress={addFromNumpad}>
               <Text style={styles.fillBtnText}>+ Add item</Text>
             </TouchableOpacity>
           </View>
           {!customerToggle ? (
             <TouchableOpacity
-              style={[styles.collectBtn, !currentSession.items.length && styles.collectBtnDisabled]}
+              style={[styles.collectBtn, { backgroundColor: theme.colors.primary }, !currentSession.items.length && styles.collectBtnDisabled]}
               onPress={collectBill}
               disabled={!currentSession.items.length}
             >
@@ -757,10 +752,10 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
             </TouchableOpacity>
           ) : (
             <View style={styles.buttonRow}>
-              <TouchableOpacity style={styles.outlineBtn} onPress={() => router.back()}>
-                <Text style={styles.outlineBtnText}>← Go Back</Text>
+              <TouchableOpacity style={[styles.outlineBtn, { borderColor: theme.colors.primary }]} onPress={() => router.back()}>
+                <Text style={[styles.outlineBtnText, { color: theme.colors.primary }]}>← Go Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.fillBtn} onPress={collectBill}>
+              <TouchableOpacity style={[styles.fillBtn, { backgroundColor: theme.colors.primary }]} onPress={collectBill}>
                 <Text style={styles.fillBtnText}>Bill ✓</Text>
               </TouchableOpacity>
             </View>
@@ -777,8 +772,8 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
             <Text style={styles.navLabel}>Analytics</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.navItem} onPress={() => {}}>
-            <Ionicons name="pricetag" size={24} color="#2563EB" />
-            <Text style={[styles.navLabel, { color: '#2563EB' }]}>Products</Text>
+            <Ionicons name="pricetag" size={24} color={theme.colors.primary} />
+            <Text style={[styles.navLabel, { color: theme.colors.primary }]}>Products</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.navItem} onPress={() => router.push('/suppliers')}>
             <Ionicons name="people" size={24} color="#64748B" />
@@ -810,14 +805,13 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
 }
 
  return (
-  <View style={styles.container}>
+  <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
     {renderAppAlert()}
-    {renderUnitPickerModal()}
     {renderAddProductModal()}
     {renderEditProductModal()}
 
     <LinearGradient
-      colors={['#4F46E5', '#7C3AED', '#9333EA']}
+      colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={[styles.header, { paddingTop: insets.top + 8 }]}
@@ -826,7 +820,7 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
     </LinearGradient>
 
     <ScrollView
-      style={styles.catalogueSection}
+      style={[styles.catalogueSection, { backgroundColor: theme.colors.background }]}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: 36 }}
       keyboardShouldPersistTaps="handled"
@@ -903,13 +897,12 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
               key={item.id}
               style={styles.productCard}
             >
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.productName}>
                   {item.name}
                 </Text>
-
-                <Text style={styles.productPrice}>
-                  ₹{item.price}
+                <Text style={[styles.productPrice, { color: theme.colors.primary }]}>
+                  ₹{item.price}{item.unit ? <Text style={{ fontSize: 11, fontWeight: '600', color: '#9CA3AF' }}>{`  ${item.unit}`}</Text> : null}
                 </Text>
               </View>
 
@@ -951,10 +944,10 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
         <Ionicons
           name="add-circle"
           size={50}
-          color="#2563EB"
+          color={theme.colors.primary}
         />
 
-        <Text style={styles.addProductButtonText}>
+        <Text style={[styles.addProductButtonText, { color: theme.colors.primary }]}>
           Add Product
         </Text>
       </TouchableOpacity>
@@ -963,10 +956,10 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
 );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F3FF', flexDirection: 'column' },
+const makeStyles = (theme: AppTheme) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.colors.background, flexDirection: 'column' },
   modalContainer: { flex: 1, justifyContent: 'flex-end' },
-  header: { backgroundColor: '#2563EB', paddingHorizontal: 16, paddingBottom: 16 },
+  header: { backgroundColor: theme.colors.primary, paddingHorizontal: 16, paddingBottom: 16 },
   headerTitle: { color: '#fff', fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
   loadingText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: '#94A3B8' },
 
@@ -1034,7 +1027,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: '#2563EB',
+    backgroundColor: theme.colors.primary,
     alignItems: 'center',
   },
   alertOkText: {
@@ -1044,7 +1037,7 @@ const styles = StyleSheet.create({
   },
 
   // ── Bill UI ─────────────────────────────────────────────────────────────────
-  billHeader: { backgroundColor: '#2563EB', padding: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  billHeader: { backgroundColor: theme.colors.primary, padding: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerText: { flex: 1 },
   billHeaderTitle: { color: '#fff', fontSize: 16, fontWeight: '900' },
   headerSub: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '600', marginTop: 1 },
@@ -1054,11 +1047,11 @@ const styles = StyleSheet.create({
   customerDisplay: { backgroundColor: 'rgba(252,128,25,0.15)', padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8, justifyContent: 'space-between' },
   customerIcon: { fontSize: 18 },
   customerInfo: { flex: 1 },
-  customerName: { fontSize: 14, fontWeight: '800', color: '#2563EB' },
+  customerName: { fontSize: 14, fontWeight: '800', color: theme.colors.primary },
   customerPhone: { fontSize: 11, color: 'rgba(252,128,25,0.7)', fontWeight: '600' },
   totalBar: { backgroundColor: '#fff', padding: 12, paddingHorizontal: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 0.5, borderBottomColor: '#E2E8F0' },
   totalLabel: { fontSize: 12, color: '#94A3B8', fontWeight: '700' },
-  totalValue: { fontSize: 28, fontWeight: '900', color: '#2563EB', letterSpacing: -0.5 },
+  totalValue: { fontSize: 28, fontWeight: '900', color: theme.colors.primary, letterSpacing: -0.5 },
   itemsArea: { padding: 12, maxHeight: 250 },
   emptyBill: { alignItems: 'center', padding: 30 },
   emptyBillText: { color: '#bbb', fontSize: 13 },
@@ -1068,16 +1061,16 @@ const styles = StyleSheet.create({
   customBadge: { fontSize: 10, color: '#64748B', fontWeight: '600' },
   itemControls: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   qtyBtn: { width: 26, height: 26, backgroundColor: '#F8FAFC', borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  qtyBtnText: { fontSize: 16, fontWeight: '800', color: '#2563EB' },
+  qtyBtnText: { fontSize: 16, fontWeight: '800', color: theme.colors.primary },
   qtyNum: { fontSize: 13, fontWeight: '800', color: '#0F172A', minWidth: 20, textAlign: 'center' },
-  itemPrice: { fontSize: 13, fontWeight: '800', color: '#2563EB', minWidth: 52, textAlign: 'right' },
+  itemPrice: { fontSize: 13, fontWeight: '800', color: theme.colors.primary, minWidth: 52, textAlign: 'right' },
   removeBtn: { fontSize: 18, color: '#ddd', paddingHorizontal: 4 },
   customItemSection: { padding: 12, backgroundColor: '#fff', borderTopWidth: 0.5, borderTopColor: '#E2E8F0' },
   customLabel: { fontSize: 10, color: '#64748B', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   customRow: { flexDirection: 'row', gap: 8, alignItems: 'center', height: 42 },
   customInput: { flex: 2, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#fff', fontSize: 13, fontWeight: '600', color: '#333', height: 42 },
   customAmount: { flex: 1 },
-  customAddBtn: { paddingHorizontal: 16, backgroundColor: '#2563EB', borderRadius: 10, alignItems: 'center', justifyContent: 'center', height: 42 },
+  customAddBtn: { paddingHorizontal: 16, backgroundColor: theme.colors.primary, borderRadius: 10, alignItems: 'center', justifyContent: 'center', height: 42 },
   customAddText: { color: '#fff', fontSize: 16, fontWeight: '800' },
   numpad: { backgroundColor: '#fff', borderTopWidth: 0.5, borderTopColor: '#E2E8F0', padding: 12 },
   numpadInputRow: { flexDirection: 'row', gap: 8, marginBottom: 8, alignItems: 'center', height: 44 },
@@ -1089,11 +1082,11 @@ const styles = StyleSheet.create({
   grayKey: { backgroundColor: '#E2E8F0' },
   numpadKeyText: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
   buttonRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  outlineBtn: { flex: 1, padding: 12, backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#2563EB', borderRadius: 10, alignItems: 'center' },
-  outlineBtnText: { color: '#2563EB', fontSize: 12, fontWeight: '800' },
-  fillBtn: { flex: 1, padding: 12, backgroundColor: '#2563EB', borderRadius: 10, alignItems: 'center' },
+  outlineBtn: { flex: 1, padding: 12, backgroundColor: '#fff', borderWidth: 1.5, borderColor: theme.colors.primary, borderRadius: 10, alignItems: 'center' },
+  outlineBtnText: { color: theme.colors.primary, fontSize: 12, fontWeight: '800' },
+  fillBtn: { flex: 1, padding: 12, backgroundColor: theme.colors.primary, borderRadius: 10, alignItems: 'center' },
   fillBtnText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  collectBtn: { padding: 14, backgroundColor: '#2563EB', borderRadius: 14, alignItems: 'center', marginTop: 4 },
+  collectBtn: { padding: 14, backgroundColor: theme.colors.primary, borderRadius: 14, alignItems: 'center', marginTop: 4 },
   collectBtnDisabled: { backgroundColor: '#ddd' },
   collectBtnText: { color: '#fff', fontSize: 16, fontWeight: '900' },
 
@@ -1103,20 +1096,20 @@ const styles = StyleSheet.create({
   navLabel: { fontSize: 9, color: '#64748B', fontWeight: '700', marginTop: 2 },
 
   // ── Catalogue ───────────────────────────────────────────────────────────────
-  catalogueSection: { flex: 1, padding: 14, backgroundColor: '#F5F3FF' },
+  catalogueSection: { flex: 1, padding: 14, backgroundColor: theme.colors.background },
   productList: { paddingBottom: 20 },
   searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, paddingHorizontal: 12, marginBottom: 10, height: 40, gap: 8 },
   searchInput: { flex: 1, fontSize: 14, fontWeight: '600', color: '#0F172A', height: 40 },
   productCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 0.5, borderColor: '#E2E8F0' },
   productName: { fontSize: 14, fontWeight: '800', color: '#0F172A' },
-  productPrice: { fontSize: 13, color: '#2563EB', marginTop: 3, fontWeight: '700' },
+  productPrice: { fontSize: 13, color: theme.colors.primary, marginTop: 3, fontWeight: '700' },
   productActions: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  editBtn: { paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#fff8f0', borderWidth: 1, borderColor: '#2563EB', borderRadius: 9 },
+  editBtn: { paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#fff8f0', borderWidth: 1, borderColor: theme.colors.primary, borderRadius: 9 },
   editBtnText: { fontSize: 12 },
   deleteBtn: { paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#FCEBEB', borderRadius: 9 },
   deleteBtnText: { fontSize: 12, color: '#A32D2D', fontWeight: '700' },
   addProductButton: { alignItems: 'center', justifyContent: 'center', paddingVertical: 20, gap: 8 },
-  addProductButtonText: { fontSize: 14, fontWeight: '700', color: '#2563EB' },
+  addProductButtonText: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
 
   // ── Modals ──────────────────────────────────────────────────────────────────
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
@@ -1126,14 +1119,9 @@ const styles = StyleSheet.create({
   pickerClose: { fontSize: 26, color: '#64748B' },
   pickerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: '#fafafa', borderRadius: 12, marginBottom: 8, borderWidth: 0.5, borderColor: '#E2E8F0' },
   pickerProdName: { fontSize: 14, fontWeight: '800', color: '#0F172A' },
-  pickerProdPrice: { fontSize: 12, color: '#2563EB', marginTop: 2, fontWeight: '700' },
-  pickerAddBtn: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#2563EB', borderRadius: 8 },
+  pickerProdPrice: { fontSize: 12, color: theme.colors.primary, marginTop: 2, fontWeight: '700' },
+  pickerAddBtn: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: theme.colors.primary, borderRadius: 8 },
   pickerAddText: { color: '#fff', fontSize: 13, fontWeight: '800' },
-  unitGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: 12, gap: 10, justifyContent: 'space-around' },
-  unitOption: { width: '45%', paddingVertical: 12, paddingHorizontal: 10, borderRadius: 10, borderWidth: 1.5, borderColor: '#ddd', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  unitOptionSelected: { borderColor: '#2563EB', backgroundColor: 'rgba(37,99,235,0.08)' },
-  unitOptionText: { fontSize: 13, fontWeight: '700', color: '#64748B', textTransform: 'capitalize' },
-  unitOptionTextSelected: { color: '#2563EB' },
   addProductModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '90%' },
   addProductModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   addProductModalTitle: { fontSize: 18, fontWeight: '900', color: '#0F172A' },
@@ -1141,6 +1129,6 @@ const styles = StyleSheet.create({
   inputLabel: { fontSize: 12, fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
   lbInputBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', borderRadius: 12, paddingHorizontal: 12, height: 50 },
   lbInput: { flex: 1, fontSize: 14, fontWeight: '600', color: '#333', height: 50 },
-  saveBtn: { backgroundColor: '#2563EB', padding: 12, borderRadius: 12, alignItems: 'center' },
+  saveBtn: { backgroundColor: theme.colors.primary, padding: 12, borderRadius: 12, alignItems: 'center' },
   saveBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
 });

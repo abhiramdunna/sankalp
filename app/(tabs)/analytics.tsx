@@ -2,7 +2,8 @@
 // Matches home.tsx style system: #2563EB blue, same nav, same card patterns
 
 import { Ionicons } from '@expo/vector-icons';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useThemeStore } from '@/lib/store';
+import { AppTheme } from '@/constants/theme';
 import { db as DatabaseService } from '@/lib/database';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -41,14 +42,8 @@ interface SaleLog {
 }
 
 // ─────────────────────────────────────────────
-// PRODUCTS
-// ─────────────────────────────────────────────
-
-
-// ─────────────────────────────────────────────
 // DUMMY SALES DATA
 // ─────────────────────────────────────────────
-
 
 // 30 daily data points for April (all zeros - no data yet)
 const APRIL_DATA = [
@@ -105,6 +100,7 @@ interface CalendarPickerProps {
   initialStart?: Date;
   initialEnd?: Date;
   initialSingle?: Date;
+  theme: AppTheme; // FIX: receive theme as prop
 }
 
 const SimpleCalendarPicker: React.FC<CalendarPickerProps> = ({
@@ -114,7 +110,10 @@ const SimpleCalendarPicker: React.FC<CalendarPickerProps> = ({
   initialStart,
   initialEnd,
   initialSingle,
+  theme, // FIX: destructure theme prop
 }) => {
+  const calendarStyles = makeCalendarStyles(theme); // FIX: build styles with theme
+
   const [tempStart, setTempStart] = useState(initialStart || new Date());
   const [tempEnd, setTempEnd] = useState(initialEnd || new Date());
   const [tempSingle, setTempSingle] = useState(initialSingle || new Date());
@@ -145,7 +144,7 @@ const SimpleCalendarPicker: React.FC<CalendarPickerProps> = ({
   const handleDayPress = (day: number | null) => {
     if (day === null) return;
     const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-    
+
     if (mode === 'range') {
       if (selecting === 'start') {
         setTempStart(newDate);
@@ -219,11 +218,11 @@ const SimpleCalendarPicker: React.FC<CalendarPickerProps> = ({
 
           <View style={calendarStyles.monthHeader}>
             <TouchableOpacity onPress={handlePrevMonth}>
-              <Ionicons name="chevron-back" size={20} color="#2563EB" />
+              <Ionicons name="chevron-back" size={20} color={theme.colors.primary} />
             </TouchableOpacity>
             <Text style={calendarStyles.monthTitle}>{monthName} {year}</Text>
             <TouchableOpacity onPress={handleNextMonth}>
-              <Ionicons name="chevron-forward" size={20} color="#2563EB" />
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.primary} />
             </TouchableOpacity>
           </View>
 
@@ -292,9 +291,10 @@ interface DateFilterMenuProps {
   onClose: () => void;
   currentStartDate?: Date;
   currentEndDate?: Date;
+  theme: AppTheme; // FIX: receive theme as prop
 }
 
-const DateFilterMenu: React.FC<DateFilterMenuProps> = ({ visible, onSelect, onClose, currentStartDate, currentEndDate }) => {
+const DateFilterMenu: React.FC<DateFilterMenuProps> = ({ visible, onSelect, onClose, currentStartDate, currentEndDate, theme }) => {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
@@ -319,7 +319,6 @@ const DateFilterMenu: React.FC<DateFilterMenuProps> = ({ visible, onSelect, onCl
   weekStart.setDate(weekStart.getDate() - today.getDay());
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
-  // Format current custom range
   const formatDate = (date: Date) => {
     const d = String(date.getDate()).padStart(2, '0');
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -334,9 +333,9 @@ const DateFilterMenu: React.FC<DateFilterMenuProps> = ({ visible, onSelect, onCl
     {
       key: 'month',
       label: 'This Month',
-      desc: `1st Apr to Today (${today.getDate()} Apr)`,
+      desc: `1st ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][today.getMonth()]} to Today (${today.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][today.getMonth()]})`,
       icon: 'calendar-sharp',
-      color: '#2563EB',
+      color: theme.colors.primary, // FIX: theme now in scope
       start: monthStart,
       end: today,
     },
@@ -361,7 +360,7 @@ const DateFilterMenu: React.FC<DateFilterMenuProps> = ({ visible, onSelect, onCl
     {
       key: 'week',
       label: 'This Week',
-      desc: `${weekStart.getDate()} Apr - ${today.getDate()} Apr`,
+      desc: `${weekStart.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][weekStart.getMonth()]} - ${today.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][today.getMonth()]}`,
       icon: 'calendar-sharp',
       color: '#F97316',
       start: weekStart,
@@ -418,7 +417,7 @@ const DateFilterMenu: React.FC<DateFilterMenuProps> = ({ visible, onSelect, onCl
               <Text style={dropdownStyles.menuItemLabel}>{item.label}</Text>
               <Text style={dropdownStyles.menuItemDesc}>{item.desc}</Text>
             </View>
-            <Ionicons name="checkmark" size={20} color="#2563EB" style={{ opacity: 0 }} />
+            <Ionicons name="checkmark" size={20} color={theme.colors.primary} style={{ opacity: 0 }} />
           </TouchableOpacity>
         ))}
       </Animated.View>
@@ -434,9 +433,10 @@ interface ChartProps {
   labels: string[];
   activeIdx: number;
   onPressIdx: (i: number) => void;
+  theme: AppTheme; // FIX: receive theme as prop
 }
 
-const BarChart: React.FC<ChartProps> = ({ data, labels, activeIdx, onPressIdx }) => {
+const BarChart: React.FC<ChartProps> = ({ data, labels, activeIdx, onPressIdx, theme }) => {
   if (!data || data.length === 0) {
     return (
       <View style={{ width: CHART_W, height: CHART_H, justifyContent: 'center', alignItems: 'center' }}>
@@ -448,7 +448,6 @@ const BarChart: React.FC<ChartProps> = ({ data, labels, activeIdx, onPressIdx })
   const max = Math.max(...data);
   const range = max || 1;
 
-  // Calculate bar width and spacing
   const barWidth = Math.max(8, CHART_W / data.length * 0.6);
   const spacing = CHART_W / data.length;
 
@@ -483,10 +482,10 @@ const BarChart: React.FC<ChartProps> = ({ data, labels, activeIdx, onPressIdx })
               style={{
                 width: barWidth,
                 height: barHeight,
-                backgroundColor: isActive ? '#2563EB' : '#3B82F6',
+                backgroundColor: isActive ? theme.colors.primary : theme.colors.secondary, // FIX: theme now in scope
                 borderRadius: 4,
                 elevation: isActive ? 4 : 0,
-                shadowColor: '#2563EB',
+                shadowColor: theme.colors.primary,
                 shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: isActive ? 0.3 : 0,
                 shadowRadius: 4,
@@ -503,12 +502,12 @@ const BarChart: React.FC<ChartProps> = ({ data, labels, activeIdx, onPressIdx })
             position: 'absolute',
             left: Math.max(0, Math.min((activeIdx * spacing) + spacing / 2 - 60, CHART_W - 115)),
             top: Math.max(10, CHART_H - (data[activeIdx] / range) * (CHART_H - 20) - 70),
-            backgroundColor: '#1E3A8A',
+            backgroundColor: theme.colors.primary,
             borderRadius: 10,
             paddingHorizontal: 12,
             paddingVertical: 8,
             elevation: 6,
-            shadowColor: '#1E3A8A',
+            shadowColor: theme.colors.primary,
             shadowOffset: { width: 0, height: 3 },
             shadowOpacity: 0.35,
             shadowRadius: 6,
@@ -536,16 +535,18 @@ type TrendKey = 'Daily' | 'Weekly' | 'Monthly';
 export default function AnalyticsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useThemeStore();
+  const styles = makeStyles(theme);
+  const calendarStyles = makeCalendarStyles(theme);
 
   const [salesLog, setSalesLog] = useState<SaleLog[]>([]);
-  
+
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterKey>('month');
   const [activeTrend, setActiveTrend] = useState<TrendKey>('Daily');
   const [showTrendMenu, setShowTrendMenu] = useState(false);
-  const [activeChartIdx, setActiveChartIdx] = useState(19); // 20 Apr
-const [availableProducts, setAvailableProducts] = useState<{ name: string; price: number }[]>([]);  
-  // Date selection states
+  const [activeChartIdx, setActiveChartIdx] = useState(19);
+  const [availableProducts, setAvailableProducts] = useState<{ name: string; price: number }[]>([]);
   const [showDateMenu, setShowDateMenu] = useState(false);
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
   const [startDate, setStartDate] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -553,126 +554,116 @@ const [availableProducts, setAvailableProducts] = useState<{ name: string; price
   const [filterLabel, setFilterLabel] = useState('This Month');
   const [showTransactionsModal, setShowTransactionsModal] = useState(false);
 
- 
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
 
-// analytics.tsx - Update the useFocusEffect
+      (async () => {
+        try {
+          setLoading(true);
+          console.log('🔄 Loading sales data...');
 
-useFocusEffect(
-  useCallback(() => {
-    let isMounted = true;
-    
-    (async () => {
-      try {
-        setLoading(true);
-        console.log('🔄 Loading sales data...');
-        
-        const storedSales = await DatabaseService.loadSalesLog();
-        console.log('📊 Loaded sales:', storedSales?.length || 0, 'records');
-        
-        if (isMounted) {
-          setSalesLog(storedSales || []);
+          const storedSales = await DatabaseService.loadSalesLog();
+          console.log('📊 Loaded sales:', storedSales?.length || 0, 'records');
+
+          if (isMounted) {
+            setSalesLog(storedSales || []);
+          }
+
+          const storedProducts = await DatabaseService.loadProducts();
+          if (isMounted && Array.isArray(storedProducts)) {
+            setAvailableProducts(
+              storedProducts.map((p: any) => ({
+                name: p.name,
+                price: p.price
+              }))
+            );
+          }
+        } catch (e) {
+          console.error('❌ Error loading analytics data:', e);
+          if (isMounted) {
+            setSalesLog([]);
+          }
+        } finally {
+          if (isMounted) {
+            setLoading(false);
+          }
         }
+      })();
 
-        const storedProducts = await DatabaseService.loadProducts();
-        if (isMounted && Array.isArray(storedProducts)) {
-          setAvailableProducts(
-            storedProducts.map((p: any) => ({
-              name: p.name,
-              price: p.price
-            }))
-          );
-        }
-      } catch (e) {
-        console.error('❌ Error loading analytics data:', e);
-        if (isMounted) {
-          setSalesLog([]);
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    })();
-    
-    return () => {
-      isMounted = false;
-    };
-  }, [])
-);
+      return () => {
+        isMounted = false;
+      };
+    }, [])
+  );
 
-  
+  const filterSalesByDateRange = (sales: SaleLog[], start: Date, end: Date) => {
+    const startOfDay = new Date(start);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(end);
+    endOfDay.setHours(23, 59, 59, 999);
 
-  // analytics.tsx - Fix the date filtering
-
-const filterSalesByDateRange = (sales: SaleLog[], start: Date, end: Date) => {
-  const startOfDay = new Date(start);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(end);
-  endOfDay.setHours(23, 59, 59, 999);
-
-  const months: Record<string, number> = {
-    'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
-    'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
-  };
-
-  return sales.filter(bill => {
-    if (!bill.date) return false;
-
-    // Date string format: "21 Apr 2025 14:30" or "21 Apr 2025" or "21 Apr"
-    const parts = bill.date.trim().split(' ');
-    if (parts.length < 2) return false;
-
-    const day = parseInt(parts[0]);
-    const monthStr = parts[1];
-    if (isNaN(day) || !(monthStr in months)) return false;
-
-    const monthNum = months[monthStr];
-
-    // Use year from the string if present, otherwise fall back to current year
-    let billYear: number;
-    if (parts.length >= 3 && /^\d{4}$/.test(parts[2])) {
-      billYear = parseInt(parts[2]);
-    } else {
-      const currentYear = new Date().getFullYear();
-      const currentMonth = new Date().getMonth();
-      billYear = monthNum > currentMonth ? currentYear - 1 : currentYear;
-    }
-
-    const billDate = new Date(billYear, monthNum, day);
-    return billDate >= startOfDay && billDate <= endOfDay;
-  });
-};
-
-  // Generate chart data for selected date range
-  const generateChartData = (sales: SaleLog[], start: Date, end: Date, trend: TrendKey) => {
-    const filtered = filterSalesByDateRange(sales, start, end);
-
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const monthsMap: Record<string, number> = {
+    const months: Record<string, number> = {
       'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
       'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
     };
 
-    // Helper: parse bill date string → Date
-    const parseBillDate = (dateStr: string): Date | null => {
-      const parts = dateStr.trim().split(' ');
-      if (parts.length < 2) return null;
+    return sales.filter(bill => {
+      if (!bill.date) return false;
+
+      const parts = bill.date.trim().split(' ');
+      if (parts.length < 2) return false;
+
       const day = parseInt(parts[0]);
       const monthStr = parts[1];
-      if (isNaN(day) || !(monthStr in monthsMap)) return null;
-      const monthNum = monthsMap[monthStr];
-      let year: number;
+      if (isNaN(day) || !(monthStr in months)) return false;
+
+      const monthNum = months[monthStr];
+
+      let billYear: number;
       if (parts.length >= 3 && /^\d{4}$/.test(parts[2])) {
-        year = parseInt(parts[2]);
+        billYear = parseInt(parts[2]);
       } else {
-        const cy = new Date().getFullYear();
-        year = monthNum > new Date().getMonth() ? cy - 1 : cy;
+        const currentYear = new Date().getFullYear();
+        billYear = monthNum > new Date().getMonth() ? currentYear - 1 : currentYear;
       }
-      return new Date(year, monthNum, day);
-    };
+
+      const billDate = new Date(billYear, monthNum, day);
+      billDate.setHours(0, 0, 0, 0);
+
+      return billDate >= startOfDay && billDate <= endOfDay;
+    });
+  };
+
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthsMap: Record<string, number> = {
+    'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+    'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+  };
+
+  const parseBillDate = (dateStr: string): Date | null => {
+    const parts = dateStr.trim().split(' ');
+    if (parts.length < 2) return null;
+    const day = parseInt(parts[0]);
+    const monthStr = parts[1];
+    if (isNaN(day) || !(monthStr in monthsMap)) return null;
+    const monthNum = monthsMap[monthStr];
+    let year: number;
+    if (parts.length >= 3 && /^\d{4}$/.test(parts[2])) {
+      year = parseInt(parts[2]);
+    } else {
+      const cy = new Date().getFullYear();
+      year = monthNum > new Date().getMonth() ? cy - 1 : cy;
+    }
+    const d = new Date(year, monthNum, day);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  const generateChartData = (sales: SaleLog[], start: Date, end: Date, trend: TrendKey) => {
+    const filtered = filterSalesByDateRange(sales, start, end);
 
     if (trend === 'Monthly') {
-      // Group by "Mon YYYY"
       const byMonth: Record<string, number> = {};
       filtered.forEach(bill => {
         if (!bill.date) return;
@@ -682,22 +673,21 @@ const filterSalesByDateRange = (sales: SaleLog[], start: Date, end: Date) => {
         byMonth[key] = (byMonth[key] || 0) + bill.total;
       });
 
-      // Generate all months in range
       const data: number[] = [];
       const labels: string[] = [];
-      const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+      const current = new Date(start.getFullYear(), start.getMonth(), 1);
       const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
-      while (cur <= endMonth) {
-        const key = `${monthNames[cur.getMonth()]} ${cur.getFullYear()}`;
+
+      while (current <= endMonth) {
+        const key = `${monthNames[current.getMonth()]} ${current.getFullYear()}`;
         data.push(byMonth[key] || 0);
         labels.push(key);
-        cur.setMonth(cur.getMonth() + 1);
+        current.setMonth(current.getMonth() + 1);
       }
       return { data, labels };
     }
 
     if (trend === 'Weekly') {
-      // Group into 7-day buckets starting from `start`
       const byWeek: Record<number, number> = {};
       filtered.forEach(bill => {
         if (!bill.date) return;
@@ -715,8 +705,6 @@ const filterSalesByDateRange = (sales: SaleLog[], start: Date, end: Date) => {
       for (let w = 0; w < numWeeks; w++) {
         const weekStart = new Date(start);
         weekStart.setDate(weekStart.getDate() + w * 7);
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekEnd.getDate() + 6);
         data.push(byWeek[w] || 0);
         labels.push(`${weekStart.getDate()} ${monthNames[weekStart.getMonth()]}`);
       }
@@ -764,11 +752,9 @@ const filterSalesByDateRange = (sales: SaleLog[], start: Date, end: Date) => {
     return { data, labels };
   };
 
-  // Get filtered data
-  const filteredSales = useMemo(() => filterSalesByDateRange(salesLog, startDate, endDate), 
+  const filteredSales = useMemo(() => filterSalesByDateRange(salesLog, startDate, endDate),
     [salesLog, startDate, endDate]);
 
-  // Get past 7 days sales (for top products calculation)
   const currentWeekSales = useMemo(() => {
     const now = new Date();
     const weekStart = new Date(now);
@@ -777,37 +763,31 @@ const filterSalesByDateRange = (sales: SaleLog[], start: Date, end: Date) => {
     return filterSalesByDateRange(salesLog, weekStart, now);
   }, [salesLog]);
 
-  // Compute analytics from filtered sales log
   const analytics = useMemo(() => {
-    // Calculate from filtered sales log data
     const totalRevenue = filteredSales.reduce((sum, bill) => sum + bill.total, 0);
     const totalBills = filteredSales.length;
     const avgBill = totalBills > 0 ? Math.round(totalRevenue / totalBills) : 0;
-    
-    // Group by date to find best day
+
     const byDate: Record<string, number> = {};
     filteredSales.forEach(bill => {
       const date = bill.date || 'Unknown';
       byDate[date] = (byDate[date] || 0) + bill.total;
     });
-    
+
     const dateEntries = Object.entries(byDate).sort((a, b) => b[1] - a[1]);
     const bestDay = dateEntries[0]?.[0] || 'N/A';
     const bestDayAmount = dateEntries[0]?.[1] || 0;
-    
-    const pendingBills = 0; // No pending data yet
-    const avgBillChange = 0; // Comparison data not available yet
-    const monthChange = 0; // Comparison data not available yet
 
-    // Product performance from CURRENT MONTH sales only (not filtered range)
+    const pendingBills = 0;
+    const avgBillChange = 0;
+    const monthChange = 0;
+
     const perf: Record<string, { qty: number; revenue: number }> = {};
-    
-    // Initialize all products with 0 revenue
-availableProducts.forEach((product: { name: string; price: number }) => {
-        perf[product.name] = { qty: 0, revenue: 0 };
+
+    availableProducts.forEach((product: { name: string; price: number }) => {
+      perf[product.name] = { qty: 0, revenue: 0 };
     });
-    
-    // Update with actual sales data
+
     currentWeekSales.forEach(s =>
       s.items.forEach(it => {
         if (!perf[it.name]) perf[it.name] = { qty: 0, revenue: 0 };
@@ -837,8 +817,7 @@ availableProducts.forEach((product: { name: string; price: number }) => {
     };
   }, [filteredSales, currentWeekSales, availableProducts]);
 
-  // Generate chart data
-  const chartData = useMemo(() => generateChartData(salesLog, startDate, endDate, activeTrend), 
+  const chartData = useMemo(() => generateChartData(salesLog, startDate, endDate, activeTrend),
     [salesLog, startDate, endDate, activeTrend]);
 
   const FILTERS: { key: FilterKey; label: string }[] = [
@@ -857,7 +836,6 @@ availableProducts.forEach((product: { name: string; price: number }) => {
   const TransactionsModal = () => (
     <Modal animationType="slide" transparent visible={showTransactionsModal} onRequestClose={() => setShowTransactionsModal(false)}>
       <View style={{ flex: 1, backgroundColor: '#fff', paddingTop: insets.top }}>
-        {/* Header */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' }}>
           <Text style={{ fontSize: 18, fontWeight: '800', color: '#111' }}>Transactions</Text>
           <TouchableOpacity onPress={() => setShowTransactionsModal(false)}>
@@ -865,14 +843,12 @@ availableProducts.forEach((product: { name: string; price: number }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Date Range Info */}
         <View style={{ paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#F3F4F6' }}>
           <Text style={{ fontSize: 12, fontWeight: '600', color: '#6B7280' }}>
             {formatDateRange(startDate, endDate)} • {filteredSales.length} transaction{filteredSales.length !== 1 ? 's' : ''}
           </Text>
         </View>
 
-        {/* Transactions List */}
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
           {filteredSales.length === 0 ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 }}>
@@ -891,14 +867,14 @@ availableProducts.forEach((product: { name: string; price: number }) => {
                       {bill.date} • {bill.time}
                     </Text>
                   </View>
-                  <Text style={{ fontSize: 15, fontWeight: '800', color: '#2563EB' }}>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: theme.colors.primary }}>
                     ₹{bill.total.toLocaleString('en-IN')}
                   </Text>
                 </View>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                   {bill.items.slice(0, 3).map((item, i) => (
-                    <View key={i} style={{ backgroundColor: '#EEF2FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-                      <Text style={{ fontSize: 11, color: '#2563EB', fontWeight: '600' }}>
+                    <View key={i} style={{ backgroundColor: theme.colors.primaryLight, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                      <Text style={{ fontSize: 11, color: theme.colors.primary, fontWeight: '600' }}>
                         {item.name} x{item.qty}
                       </Text>
                     </View>
@@ -916,12 +892,11 @@ availableProducts.forEach((product: { name: string; price: number }) => {
           )}
         </ScrollView>
 
-        {/* Footer */}
         {filteredSales.length > 0 && (
           <View style={{ borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingHorizontal: 16, paddingVertical: 16 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ fontSize: 14, fontWeight: '600', color: '#6B7280' }}>Total</Text>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: '#2563EB' }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: theme.colors.primary }}>
                 ₹{filteredSales.reduce((sum, bill) => sum + bill.total, 0).toLocaleString('en-IN')}
               </Text>
             </View>
@@ -934,9 +909,9 @@ availableProducts.forEach((product: { name: string; price: number }) => {
   // ── Loading state ──
   if (loading) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <LinearGradient
-          colors={['#4F46E5', '#7C3AED', '#9333EA']}
+          colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[styles.header, { paddingTop: insets.top + 8 }]}
@@ -950,19 +925,18 @@ availableProducts.forEach((product: { name: string; price: number }) => {
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: '#9CA3AF', fontWeight: '700', fontSize: 14 }}>Loading...</Text>
         </View>
-        
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
 
       {/* ══════════════════════════════════════
           HEADER
       ══════════════════════════════════════ */}
       <LinearGradient
-        colors={['#4F46E5', '#7C3AED', '#9333EA']}
+        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.header, { paddingTop: insets.top + 8 }]}
@@ -984,7 +958,7 @@ availableProducts.forEach((product: { name: string; price: number }) => {
           <Text style={styles.filterLabelBold}>{filterLabel}</Text>
           <Text style={styles.filterSeparator}>•</Text>
           <Text style={styles.dateRangeLight}>
-            {String(startDate.getDate()).padStart(2, '0')} {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][startDate.getMonth()]} – {String(endDate.getDate()).padStart(2, '0')} {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][endDate.getMonth()]}
+            {String(startDate.getDate()).padStart(2, '0')} {monthNames[startDate.getMonth()]} – {String(endDate.getDate()).padStart(2, '0')} {monthNames[endDate.getMonth()]}
           </Text>
           <Ionicons
             name="chevron-down"
@@ -994,11 +968,12 @@ availableProducts.forEach((product: { name: string; price: number }) => {
           />
         </TouchableOpacity>
 
-        {/* Date Filter Dropdown */}
+        {/* Date Filter Dropdown — FIX: pass theme prop */}
         <DateFilterMenu
           visible={showDateMenu}
           currentStartDate={startDate}
           currentEndDate={endDate}
+          theme={theme}
           onSelect={(key, start, end) => {
             setFilterLabel(key === 'month' ? 'This Month' : key === 'today' ? 'Today' : key === 'yesterday' ? 'Yesterday' : key === 'week' ? 'This Week' : 'Custom Range');
             if (key === 'custom') {
@@ -1018,14 +993,14 @@ availableProducts.forEach((product: { name: string; price: number }) => {
           SCROLL BODY
       ══════════════════════════════════════ */}
       <ScrollView
-        style={styles.scrollView}
+        style={[styles.scrollView, { backgroundColor: theme.colors.background }]}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 36 }}
       >
 
         {/* ── Monthly Collection Card ── */}
         <LinearGradient
-          colors={['#4F46E5', '#7C3AED', '#9333EA']}
+          colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.collectionCard}
@@ -1136,7 +1111,7 @@ availableProducts.forEach((product: { name: string; price: number }) => {
                 onPress={() => setShowTrendMenu(v => !v)}
               >
                 <Text style={styles.trendDropdownText}>{activeTrend}</Text>
-                <Ionicons name="chevron-down" size={14} color="#2563EB" />
+                <Ionicons name="chevron-down" size={14} color={theme.colors.primary} />
               </TouchableOpacity>
               {showTrendMenu && (
                 <View style={styles.trendMenu}>
@@ -1168,12 +1143,13 @@ availableProducts.forEach((product: { name: string; price: number }) => {
               ))}
             </View>
 
-            {/* The chart */}
+            {/* The chart — FIX: pass theme prop */}
             <BarChart
               data={chartData.data}
               labels={chartData.labels}
               activeIdx={Math.min(activeChartIdx, chartData.data.length - 1)}
               onPressIdx={setActiveChartIdx}
+              theme={theme}
             />
           </View>
 
@@ -1195,7 +1171,7 @@ availableProducts.forEach((product: { name: string; price: number }) => {
         {/* ── Quick Insights ── */}
         <View style={styles.insightsCard}>
           <View style={styles.insightsHeader}>
-            <Ionicons name="bar-chart" size={16} color="#2563EB" />
+            <Ionicons name="bar-chart" size={16} color={theme.colors.primary} />
             <Text style={styles.insightsTitle}>QUICK INSIGHTS</Text>
           </View>
           <View style={styles.insightsBody}>
@@ -1315,17 +1291,13 @@ availableProducts.forEach((product: { name: string; price: number }) => {
       {/* ── Transactions Modal ── */}
       <TransactionsModal />
 
-      {/* ══════════════════════════════════════
-          BOTTOM NAV — identical to home.tsx
-      ══════════════════════════════════════ */}
-      
-
-      {/* Date Picker Modal */}
+      {/* Date Picker Modal — FIX: pass theme prop */}
       {showCustomCalendar && (
         <SimpleCalendarPicker
           mode="range"
           initialStart={startDate}
           initialEnd={endDate}
+          theme={theme}
           onConfirm={(start, end) => {
             if (start && end) {
               setStartDate(start);
@@ -1342,18 +1314,18 @@ availableProducts.forEach((product: { name: string; price: number }) => {
 }
 
 // ─────────────────────────────────────────────
-// STYLES
+// STYLES — all use makeStyles(theme) factory
 // ─────────────────────────────────────────────
-const styles = StyleSheet.create({
+const makeStyles = (theme: AppTheme) => StyleSheet.create({
 
   container: {
     flex: 1,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: theme.colors.background,
   },
 
   // ── Header ──
   header: {
-    backgroundColor: '#2563EB',
+    backgroundColor: theme.colors.primary,
     paddingHorizontal: 16,
     paddingBottom: 16,
   },
@@ -1384,7 +1356,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // ── Unified Filter Chip (Premium Fintech Style) ──
+  // ── Unified Filter Chip ──
   unifiedFilterChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1470,7 +1442,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.85)',
   },
   filterPillTextActive: {
-    color: '#2563EB',
+    color: theme.colors.primary, // FIX: now inside makeStyles, theme is the parameter
   },
   dateRangeBadge: {
     flexDirection: 'row',
@@ -1497,11 +1469,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 16,
     marginBottom: 12,
-    backgroundColor: '#2563EB',
+    backgroundColor: theme.colors.primary,
     borderRadius: 20,
     padding: 20,
     elevation: 8,
-    shadowColor: '#1D4ED8',
+    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 12,
@@ -1514,22 +1486,21 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     color: 'rgba(255,255,255,0.75)',
-    letterSpacing: 1.2,
+    letterSpacing: 1,
     textTransform: 'uppercase',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   collectionAmount: {
-    fontSize: 40,
+    fontSize: 38,
     fontWeight: '900',
     color: '#fff',
-    letterSpacing: -1.5,
+    letterSpacing: -1,
     marginBottom: 4,
   },
   collectionDateRange: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.7)',
     fontWeight: '600',
-    marginBottom: 10,
   },
   collectionChangeRow: {
     flexDirection: 'row',
@@ -1613,16 +1584,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#9CA3AF',
   },
-  metricChangeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    flexWrap: 'wrap',
-  },
-  metricChangeText: {
-    fontSize: 10,
+  metricSubRed: {
+    fontSize: 11,
     fontWeight: '700',
-    color: '#22C55E',
+    color: '#EF4444',
+  },
+  metricName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#333',
     flexShrink: 1,
   },
 
@@ -1657,7 +1627,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: theme.colors.primaryLight,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -1665,7 +1635,7 @@ const styles = StyleSheet.create({
   trendDropdownText: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#2563EB',
+    color: theme.colors.primary,
   },
   trendMenu: {
     position: 'absolute',
@@ -1690,7 +1660,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F0F0F0',
   },
   trendMenuItemActive: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: theme.colors.primaryLight,
   },
   trendMenuText: {
     fontSize: 13,
@@ -1698,7 +1668,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   trendMenuTextActive: {
-    color: '#2563EB',
+    color: theme.colors.primary,
     fontWeight: '800',
   },
 
@@ -1755,7 +1725,7 @@ const styles = StyleSheet.create({
   insightsTitle: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#2563EB',
+    color: theme.colors.primary,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
@@ -1836,7 +1806,7 @@ const styles = StyleSheet.create({
   productBarValue: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#2563EB',
+    color: theme.colors.primary,
   },
   productBarTrack: {
     height: 8,
@@ -1853,7 +1823,7 @@ const styles = StyleSheet.create({
   exportBtn: {
     marginHorizontal: 16,
     marginBottom: 8,
-    backgroundColor: '#2563EB',
+    backgroundColor: theme.colors.primary,
     borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1861,7 +1831,7 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     gap: 8,
     elevation: 4,
-    shadowColor: '#2563EB',
+    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1872,7 +1842,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
-  // ── Bottom Nav — exact match to home.tsx ──
+  // ── Bottom Nav ──
   bottomNav: {
     backgroundColor: '#fff',
     flexDirection: 'row',
@@ -1896,7 +1866,7 @@ const styles = StyleSheet.create({
 // ─────────────────────────────────────────────
 // CALENDAR STYLES
 // ─────────────────────────────────────────────
-const calendarStyles = StyleSheet.create({
+const makeCalendarStyles = (theme: AppTheme) => StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -1941,7 +1911,7 @@ const calendarStyles = StyleSheet.create({
   monthTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#2563EB',
+    color: theme.colors.primary,
   },
   weekDays: {
     flexDirection: 'row',
@@ -1975,10 +1945,10 @@ const calendarStyles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   selectedDay: {
-    backgroundColor: '#2563EB',
+    backgroundColor: theme.colors.primary,
   },
   inRangeDay: {
-    backgroundColor: '#DBEAFE',
+    backgroundColor: theme.colors.primaryLight,
   },
   dayText: {
     fontSize: 13,
@@ -2018,7 +1988,7 @@ const calendarStyles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: '#2563EB',
+    backgroundColor: theme.colors.primary,
     alignItems: 'center',
   },
   confirmBtnText: {
@@ -2029,7 +1999,7 @@ const calendarStyles = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────
-// DROPDOWN MENU STYLES
+// DROPDOWN MENU STYLES (no theme needed — all static)
 // ─────────────────────────────────────────────
 const dropdownStyles = StyleSheet.create({
   overlay: {

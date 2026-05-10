@@ -1,28 +1,32 @@
+// app/(tabs)/_layout.tsx
 import { Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useThemeStore } from '@/lib/store';
 
 export default function RootLayout() {
+  const { theme } = useThemeStore();
+
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
       <Tabs
         screenOptions={({ route }) => ({
           headerStyle: {
-            backgroundColor: '#2563EB',
+            backgroundColor: theme.colors.primary,
           },
-          headerTintColor: '#fff',
+          headerTintColor: theme.colors.primaryText,
           headerTitleStyle: {
             fontWeight: 'bold',
           },
           headerTitleAlign: 'center',
-          tabBarActiveTintColor: '#2563EB',
-          tabBarInactiveTintColor: '#9CA3AF',
+          tabBarActiveTintColor: theme.colors.tabActive,
+          tabBarInactiveTintColor: theme.colors.tabInactive,
           tabBarStyle: {
-            backgroundColor: '#fff',
+            backgroundColor: theme.colors.tabBar,
             borderTopWidth: 0.5,
-            borderTopColor: '#E5E7EB',
+            borderTopColor: theme.colors.tabBarBorder,
             height: 78,
             paddingBottom: 8,
             paddingTop: 8,
@@ -40,7 +44,7 @@ export default function RootLayout() {
             title: 'Home',
             headerShown: false,
             tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons name={focused ? "home" : "home-outline"} size={size} color={color} />
+              <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
             ),
           }}
         />
@@ -50,7 +54,7 @@ export default function RootLayout() {
             title: 'Analytics',
             headerShown: false,
             tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons name={focused ? "stats-chart" : "stats-chart-outline"} size={size} color={color} />
+              <Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={size} color={color} />
             ),
           }}
         />
@@ -60,7 +64,7 @@ export default function RootLayout() {
             title: 'Products',
             headerShown: false,
             tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons name={focused ? "pricetag" : "pricetag-outline"} size={size} color={color} />
+              <Ionicons name={focused ? 'pricetag' : 'pricetag-outline'} size={size} color={color} />
             ),
           }}
         />
@@ -70,7 +74,7 @@ export default function RootLayout() {
             title: 'Suppliers',
             headerShown: false,
             tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons name={focused ? "people" : "people-outline"} size={size} color={color} />
+              <Ionicons name={focused ? 'people' : 'people-outline'} size={size} color={color} />
             ),
           }}
         />
