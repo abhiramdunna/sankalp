@@ -617,69 +617,164 @@ const filterSalesByDateRange = (sales: SaleLog[], start: Date, end: Date) => {
 
   return sales.filter(bill => {
     if (!bill.date) return false;
-    
-    // Parse date string like "21 Apr"
+
+    // Date string format: "21 Apr 2025 14:30" or "21 Apr 2025" or "21 Apr"
     const parts = bill.date.trim().split(' ');
     if (parts.length < 2) return false;
-    
+
     const day = parseInt(parts[0]);
     const monthStr = parts[1];
     if (isNaN(day) || !(monthStr in months)) return false;
 
     const monthNum = months[monthStr];
-    const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth();
-    
-    // Handle year logic - if month > current month, use previous year
-    let billYear = currentYear;
-    if (monthNum > currentMonth) {
-      billYear = currentYear - 1;
+
+    // Use year from the string if present, otherwise fall back to current year
+    let billYear: number;
+    if (parts.length >= 3 && /^\d{4}$/.test(parts[2])) {
+      billYear = parseInt(parts[2]);
+    } else {
+      const currentYear = new Date().getFullYear();
+      const currentMonth = new Date().getMonth();
+      billYear = monthNum > currentMonth ? currentYear - 1 : currentYear;
     }
-    
+
     const billDate = new Date(billYear, monthNum, day);
-    
-    console.log(`Checking bill date: ${bill.date} -> ${billDate.toISOString()} against range: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
-    
     return billDate >= startOfDay && billDate <= endOfDay;
   });
 };
 
   // Generate chart data for selected date range
-  const generateChartData = (sales: SaleLog[], start: Date, end: Date) => {
+  const generateChartData = (sales: SaleLog[], start: Date, end: Date, trend: TrendKey) => {
     const filtered = filterSalesByDateRange(sales, start, end);
-    
-    // Group by date
+
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthsMap: Record<string, number> = {
+      'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+      'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+    };
+
+    // Helper: parse bill date string → Date
+    const parseBillDate = (dateStr: string): Date | null => {
+      const parts = dateStr.trim().split(' ');
+      if (parts.length < 2) return null;
+      const day = parseInt(parts[0]);
+      const monthStr = parts[1];
+      if (isNaN(day) || !(monthStr in monthsMap)) return null;
+      const monthNum = monthsMap[monthStr];
+      let year: number;
+      if (parts.length >= 3 && /^\d{4}$/.test(parts[2])) {
+        year = parseInt(parts[2]);
+      } else {
+        const cy = new Date().getFullYear();
+        year = monthNum > new Date().getMonth() ? cy - 1 : cy;
+      }
+      return new Date(year, monthNum, day);
+    };
+
+    if (trend === 'Monthly') {
+      // Group by "Mon YYYY"
+      const byMonth: Record<string, number> = {};
+      filtered.forEach(bill => {
+        if (!bill.date) return;
+        const d = parseBillDate(bill.date);
+        if (!d) return;
+        const key = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+        byMonth[key] = (byMonth[key] || 0) + bill.total;
+      });
+
+      // Generate all months in range
+      const data: number[] = [];
+      const labels: string[] = [];
+      const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+      const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+      while (cur <= endMonth) {
+        const key = `${monthNames[cur.getMonth()]} ${cur.getFullYear()}`;
+        data.push(byMonth[key] || 0);
+        labels.push(key);
+        cur.setMonth(cur.getMonth() + 1);
+      }
+      return { data, labels };
+    }
+
+    if (trend === 'Weekly') {
+      // Group into 7-day buckets starting from `start`
+      const byWeek: Record<number, number> = {};
+      filtered.forEach(bill => {
+        if (!bill.date) return;
+        const d = parseBillDate(bill.date);
+        if (!d) return;
+        const diffDays = Math.floor((d.getTime() - new Date(start).setHours(0,0,0,0)) / (1000 * 60 * 60 * 24));
+        const weekIdx = Math.max(0, Math.floor(diffDays / 7));
+        byWeek[weekIdx] = (byWeek[weekIdx] || 0) + bill.total;
+      });
+
+      const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const numWeeks = Math.ceil(totalDays / 7);
+      const data: number[] = [];
+      const labels: string[] = [];
+      for (let w = 0; w < numWeeks; w++) {
+        const weekStart = new Date(start);
+        weekStart.setDate(weekStart.getDate() + w * 7);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        data.push(byWeek[w] || 0);
+        labels.push(`${weekStart.getDate()} ${monthNames[weekStart.getMonth()]}`);
+      }
+      return { data, labels };
+    }
+
+    // Daily (default)
     const byDate: Record<string, number> = {};
     filtered.forEach(bill => {
-      const date = bill.date || 'Unknown';
-      byDate[date] = (byDate[date] || 0) + bill.total;
+      if (!bill.date) return;
+      const parts = bill.date.trim().split(' ');
+      if (parts.length < 2) return;
+      const day = parseInt(parts[0]);
+      const monthStr = parts[1];
+      if (isNaN(day) || !(monthStr in monthsMap)) return;
+      const monthNum = monthsMap[monthStr];
+      let year: number;
+      if (parts.length >= 3 && /^\d{4}$/.test(parts[2])) {
+        year = parseInt(parts[2]);
+      } else {
+        const cy = new Date().getFullYear();
+        year = monthNum > new Date().getMonth() ? cy - 1 : cy;
+      }
+      const key = `${day} ${monthStr} ${year}`;
+      byDate[key] = (byDate[key] || 0) + bill.total;
     });
 
-    // Generate all dates in range
-    const dates = [];
-    const labels = [];
+    const data: number[] = [];
+    const labels: string[] = [];
     const current = new Date(start);
-    while (current <= end) {
+    current.setHours(0, 0, 0, 0);
+    const endDay = new Date(end);
+    endDay.setHours(23, 59, 59, 999);
+
+    while (current <= endDay) {
       const d = current.getDate();
-      const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][current.getMonth()];
-      const dateStr = `${d} ${m}`;
-      dates.push(byDate[dateStr] || 0);
-      labels.push(dateStr);
+      const m = monthNames[current.getMonth()];
+      const y = current.getFullYear();
+      const key = `${d} ${m} ${y}`;
+      data.push(byDate[key] || 0);
+      labels.push(`${d} ${m}`);
       current.setDate(current.getDate() + 1);
     }
 
-    return { data: dates, labels };
+    return { data, labels };
   };
 
   // Get filtered data
   const filteredSales = useMemo(() => filterSalesByDateRange(salesLog, startDate, endDate), 
     [salesLog, startDate, endDate]);
 
-  // Get current month sales (for top products calculation)
-  const currentMonthSales = useMemo(() => {
-    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const monthEnd = new Date();
-    return filterSalesByDateRange(salesLog, monthStart, monthEnd);
+  // Get past 7 days sales (for top products calculation)
+  const currentWeekSales = useMemo(() => {
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - 6);
+    weekStart.setHours(0, 0, 0, 0);
+    return filterSalesByDateRange(salesLog, weekStart, now);
   }, [salesLog]);
 
   // Compute analytics from filtered sales log
@@ -713,7 +808,7 @@ availableProducts.forEach((product: { name: string; price: number }) => {
     });
     
     // Update with actual sales data
-    currentMonthSales.forEach(s =>
+    currentWeekSales.forEach(s =>
       s.items.forEach(it => {
         if (!perf[it.name]) perf[it.name] = { qty: 0, revenue: 0 };
         perf[it.name].qty += it.qty;
@@ -722,6 +817,7 @@ availableProducts.forEach((product: { name: string; price: number }) => {
     );
 
     const topProducts = Object.entries(perf)
+      .filter(([name]) => availableProducts.some((p: { name: string; price: number }) => p.name === name))
       .map(([name, d]) => ({ name, ...d }))
       .sort((a, b) => b.revenue - a.revenue);
 
@@ -739,11 +835,11 @@ availableProducts.forEach((product: { name: string; price: number }) => {
       topProduct,
       topProducts,
     };
-  }, [filteredSales, currentMonthSales, availableProducts]);
+  }, [filteredSales, currentWeekSales, availableProducts]);
 
   // Generate chart data
-  const chartData = useMemo(() => generateChartData(salesLog, startDate, endDate), 
-    [salesLog, startDate, endDate]);
+  const chartData = useMemo(() => generateChartData(salesLog, startDate, endDate, activeTrend), 
+    [salesLog, startDate, endDate, activeTrend]);
 
   const FILTERS: { key: FilterKey; label: string }[] = [
     { key: 'month', label: 'This Month' },
@@ -752,7 +848,9 @@ availableProducts.forEach((product: { name: string; price: number }) => {
   ];
 
   const TRENDS: TrendKey[] = ['Daily', 'Weekly', 'Monthly'];
-  const Y_TICKS = [2500, 2000, 1500, 1000, 500, 0];
+  const chartMax = chartData.data.length > 0 ? Math.max(...chartData.data, 1) : 1;
+  const yTickStep = Math.ceil(chartMax / 5 / 100) * 100 || 500;
+  const Y_TICKS = Array.from({ length: 6 }, (_, i) => Math.round(yTickStep * (5 - i)));
   const BAR_COLORS = ['#2563EB', '#6366F1', '#22C55E', '#F97316', '#EC4899'];
 
   // ── Transactions Modal Component ──
@@ -937,11 +1035,6 @@ availableProducts.forEach((product: { name: string; price: number }) => {
               <Text style={styles.collectionLabel}>COLLECTION</Text>
               <AnimatedCounter value={analytics.totalRevenue} textStyle={styles.collectionAmount} />
               <Text style={styles.collectionDateRange}>{formatDateRange(startDate, endDate)}</Text>
-              <View style={styles.collectionChangeRow}>
-                <Ionicons name="arrow-up" size={14} color="#22C55E" />
-                <Text style={styles.collectionChangeVal}>{analytics.monthChange}%</Text>
-                <Text style={styles.collectionChangeSub}> vs. previous period</Text>
-              </View>
             </View>
             <TouchableOpacity
               style={{
@@ -962,44 +1055,73 @@ availableProducts.forEach((product: { name: string; price: number }) => {
           </View>
         </LinearGradient>
 
-        {/* ── 3 Metric Cards ── */}
+        {/* ── Metric Cards — Row 1: Total Bills + Average Bill ── */}
         <View style={styles.metricRow}>
 
           {/* Total Bills */}
-          <View style={styles.metricCard}>
-            <View style={[styles.metricIconBox, { backgroundColor: '#EEF2FF' }]}>
-              <Ionicons name="document-text-outline" size={22} color="#6366F1" />
+          <View style={[styles.metricCard, { flex: 1 }]}>
+            <View style={styles.metricCardHeader}>
+              <View style={[styles.metricIconBox, { backgroundColor: '#EEF2FF' }]}>
+                <Ionicons name="receipt-outline" size={20} color="#6366F1" />
+              </View>
+              <Text style={styles.metricLabel}>TOTAL BILLS</Text>
             </View>
-            <Text style={styles.metricLabel}>TOTAL BILLS</Text>
             <Text style={styles.metricValue}>{analytics.totalBills}</Text>
-            <Text style={styles.metricSubGreen}>{analytics.pendingBills} pending</Text>
+            <Text style={styles.metricSubGrey}>
+              {analytics.totalBills === 0 ? 'No bills yet' : `in selected period`}
+            </Text>
           </View>
 
           {/* Average Bill */}
-          <View style={styles.metricCard}>
-            <View style={[styles.metricIconBox, { backgroundColor: '#F0FDF4' }]}>
-              <Ionicons name="grid-outline" size={22} color="#22C55E" />
+          <View style={[styles.metricCard, { flex: 1 }]}>
+            <View style={styles.metricCardHeader}>
+              <View style={[styles.metricIconBox, { backgroundColor: '#F0FDF4' }]}>
+                <Ionicons name="analytics-outline" size={20} color="#22C55E" />
+              </View>
+              <Text style={styles.metricLabel}>AVG BILL</Text>
             </View>
-            <Text style={styles.metricLabel}>AVERAGE BILL</Text>
-            <Text style={styles.metricValue}>₹{analytics.avgBill}</Text>
-            <View style={styles.metricChangeRow}>
-              <Ionicons name="arrow-up" size={10} color="#22C55E" />
-              <Text style={styles.metricChangeText}>{analytics.avgBillChange}% vs last month</Text>
-            </View>
-          </View>
-
-          {/* Top Product */}
-          <View style={styles.metricCard}>
-            <View style={[styles.metricIconBox, { backgroundColor: '#FFF7ED' }]}>
-              <Ionicons name="star-outline" size={22} color="#F97316" />
-            </View>
-            <Text style={styles.metricLabel}>TOP PRODUCT</Text>
-            <Text style={[styles.metricValue, { fontSize: 14, lineHeight: 20 }]} numberOfLines={2}>
-              {analytics.topProduct.name}
+            <Text style={styles.metricValue}>
+              ₹{analytics.avgBill.toLocaleString('en-IN')}
             </Text>
-            <Text style={styles.metricSubGrey}>Most Used</Text>
+            <Text style={styles.metricSubGrey}>per transaction</Text>
           </View>
 
+        </View>
+
+        {/* ── Metric Cards — Row 2: Top Product (full width) ── */}
+        <View style={[styles.metricRow, { marginTop: 0 }]}>
+          <View style={[styles.metricCard, { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14 }]}>
+            <View style={[styles.metricIconBox, { backgroundColor: '#FFF7ED', marginBottom: 0, flexShrink: 0 }]}>
+              <Ionicons name="star" size={20} color="#F97316" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.metricLabel}>TOP PRODUCT — PAST 7 DAYS</Text>
+              <Text style={[styles.metricValue, { fontSize: 17, marginBottom: 2 }]} numberOfLines={1}>
+                {analytics.topProduct.name}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <Text style={styles.metricSubGrey}>
+                  {analytics.topProduct.qty > 0 ? `${analytics.topProduct.qty} sold` : 'No sales yet'}
+                </Text>
+                {analytics.topProduct.revenue > 0 && (
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#F97316' }}>
+                    ₹{analytics.topProduct.revenue.toLocaleString('en-IN')}
+                  </Text>
+                )}
+              </View>
+            </View>
+            {analytics.topProducts.length > 1 && (
+              <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
+                <Text style={{ fontSize: 9, fontWeight: '700', color: '#9CA3AF', marginBottom: 4 }}>TOP 3</Text>
+                {analytics.topProducts.slice(0, 3).map((p, i) => (
+                  <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: ['#F97316','#6366F1','#22C55E'][i] }} />
+                    <Text style={{ fontSize: 9, fontWeight: '600', color: '#64748B' }} numberOfLines={1}>{p.name}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
         </View>
 
         {/* ── Collection Trend Line Chart ── */}
@@ -1097,12 +1219,65 @@ availableProducts.forEach((product: { name: string; price: number }) => {
                 <Ionicons name="flash" size={26} color="#3B82F6" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.insightItemTitle}>Billing Activity: Normal</Text>
+                <Text style={styles.insightItemTitle}>Billing Activity</Text>
                 <Text style={styles.insightItemSub}>
-                  {analytics.totalBills} bills this month
+                  {analytics.totalBills} bill{analytics.totalBills !== 1 ? 's' : ''} • ₹{analytics.totalRevenue.toLocaleString('en-IN')} total
                 </Text>
               </View>
             </View>
+
+            {/* Busiest Hour */}
+            {(() => {
+              const hourCounts: Record<number, number> = {};
+              filteredSales.forEach(s => {
+                if (s.time) {
+                  const h = parseInt(s.time.split(':')[0]);
+                  if (!isNaN(h)) hourCounts[h] = (hourCounts[h] || 0) + 1;
+                }
+              });
+              const entries = Object.entries(hourCounts).sort((a, b) => Number(b[1]) - Number(a[1]));
+              if (entries.length === 0) return null;
+              const [busiestH, count] = entries[0];
+              const h = parseInt(busiestH);
+              const label = h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`;
+              return (
+                <View style={styles.insightItem}>
+                  <View style={[styles.insightIconBox, { backgroundColor: '#FFF7ED' }]}>
+                    <Ionicons name="time" size={26} color="#F97316" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.insightItemTitle}>Busiest Hour: {label}</Text>
+                    <Text style={styles.insightItemSub}>{count} bill{count !== 1 ? 's' : ''} billed at this hour</Text>
+                  </View>
+                </View>
+              );
+            })()}
+
+            {/* Repeat Customers */}
+            {(() => {
+              const phoneCounts: Record<string, number> = {};
+              filteredSales.forEach(s => {
+                if (s.phone && s.phone.trim()) {
+                  phoneCounts[s.phone] = (phoneCounts[s.phone] || 0) + 1;
+                }
+              });
+              const repeats = Object.values(phoneCounts).filter(c => c > 1).length;
+              const uniqueCustomers = Object.keys(phoneCounts).length;
+              if (uniqueCustomers === 0) return null;
+              return (
+                <View style={styles.insightItem}>
+                  <View style={[styles.insightIconBox, { backgroundColor: '#FDF4FF' }]}>
+                    <Ionicons name="people" size={26} color="#A855F7" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.insightItemTitle}>{uniqueCustomers} Unique Customer{uniqueCustomers !== 1 ? 's' : ''}</Text>
+                    <Text style={styles.insightItemSub}>
+                      {repeats > 0 ? `${repeats} returned more than once` : 'All first-time visits'}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })()}
 
           </View>
         </View>
@@ -1111,7 +1286,7 @@ availableProducts.forEach((product: { name: string; price: number }) => {
         {analytics.topProducts.length > 0 && (
           <View style={styles.topProductsCard}>
             <Text style={styles.topProductsTitle}>TOP PRODUCTS</Text>
-            <Text style={styles.topProductsSub}>By revenue this month</Text>
+            <Text style={styles.topProductsSub}>By revenue — past 7 days</Text>
             {analytics.topProducts.slice(0, 5).map((p, i) => {
               const maxRev = Math.max(...analytics.topProducts.map(prod => prod.revenue), 1);
               const pct = maxRev > 0 ? (p.revenue / maxRev) * 100 : 0;
@@ -1384,14 +1559,13 @@ const styles = StyleSheet.create({
   metricRow: {
     flexDirection: 'row',
     marginHorizontal: 12,
-    marginBottom: 12,
-    gap: 8,
+    marginBottom: 10,
+    gap: 10,
   },
   metricCard: {
-    flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 18,
+    padding: 16,
     borderWidth: 0.5,
     borderColor: '#E5E7EB',
     elevation: 2,
@@ -1400,27 +1574,34 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 4,
   },
-  metricIconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+  metricCardHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 10,
     marginBottom: 10,
   },
+  metricIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 0,
+  },
   metricLabel: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '800',
     color: '#9CA3AF',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
-    marginBottom: 4,
+    flexShrink: 1,
   },
   metricValue: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '900',
-    color: '#111',
+    color: '#0F172A',
     marginBottom: 4,
+    letterSpacing: -0.5,
   },
   metricSubGreen: {
     fontSize: 11,
@@ -1429,7 +1610,7 @@ const styles = StyleSheet.create({
   },
   metricSubGrey: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#9CA3AF',
   },
   metricChangeRow: {

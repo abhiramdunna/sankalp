@@ -237,6 +237,23 @@ class DatabaseService {
     }
   }
 
+  async deleteSaleLog(id: number) {
+    try {
+      const userId = this.getCurrentUserId();
+
+      const { error } = await supabase
+        .from('user_sales')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.log('deleteSaleLog error:', error);
+      throw error;
+    }
+  }
+
   /* =========================
      SUPPLIERS
   ========================= */

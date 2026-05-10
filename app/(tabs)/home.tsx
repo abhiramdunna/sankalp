@@ -569,11 +569,13 @@ const BillDetailModal = memo(({
   bill,
   billNumber,
   onClose,
+  onDelete,
 }: {
   visible: boolean;
   bill: SaleLog | null;
   billNumber: number;
   onClose: () => void;
+  onDelete?: (bill: SaleLog) => void;
 }) => {
   if (!visible || !bill) return null;
   return (
@@ -622,8 +624,16 @@ const BillDetailModal = memo(({
             <Text style={styles.reviewBillTotalAmount}>₹{bill.total}</Text>
           </View>
 
-          {/* Close button */}
+          {/* Buttons */}
           <View style={styles.reviewBillButtons}>
+            {onDelete && (
+              <TouchableOpacity
+                style={[styles.reviewBillBackBtn, { borderColor: '#DC2626', flex: 0, paddingHorizontal: 16 }]}
+                onPress={() => onDelete(bill)}
+              >
+                <Ionicons name="trash-outline" size={16} color="#DC2626" />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.reviewBillDoneBtn} onPress={onClose}>
               <Text style={styles.reviewBillDoneBtnText}>Close</Text>
             </TouchableOpacity>
@@ -1608,6 +1618,32 @@ export default function HomeScreen() {
     setBillDetailVisible(true);
   }, []);
 
+  const handleDeleteBill = useCallback((bill: SaleLog) => {
+    Alert.alert(
+      'Delete Bill',
+      `Delete bill for ${bill.customerName || 'Walk-in Customer'} (₹${bill.total})? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await DatabaseService.deleteSaleLog(bill.id);
+              setSalesLog(prev => prev.filter(b => b.id !== bill.id));
+              setTodayTotal(prev => prev - bill.total);
+              setBillDetailVisible(false);
+              setSelectedBill(null);
+              showSuccess('Bill deleted');
+            } catch (e) {
+              showError('Failed to delete bill');
+            }
+          },
+        },
+      ]
+    );
+  }, [showSuccess, showError]);
+
   const showSuccess = useCallback((msg: string) => {
     setToastMessage(msg);
     setToastType('success');
@@ -1811,20 +1847,19 @@ const loadData = useCallback(async () => {
               setProfileVisible(false);
               RAM_SESSIONS = [];
               await AsyncStorage.multiRemove(['trialStart', 'isSubscribed', 'supabase_session', 'salesLog']);
+              await supabase.auth.signOut();
               setUser(null);
               setSession(null);
-             const { error } = await supabase.auth.signOut();
-              if (error) console.error('Supabase sign out error:', error);
-              router.replace('/login');
-              } catch (error) {
-                console.error('Logout error:', error);
-                router.replace('/login');
-              }
+            } catch (error) {
+              console.error('Logout error:', error);
+              setUser(null);
+              setSession(null);
+            }
           },
         },
       ]
     );
-  }, [router, setUser, setSession]);
+  }, [setUser, setSession]);
 
   // Initialize data on mount
   useEffect(() => {
@@ -2060,6 +2095,7 @@ const loadData = useCallback(async () => {
         bill={selectedBill}
         billNumber={selectedBillNumber}
         onClose={() => setBillDetailVisible(false)}
+        onDelete={handleDeleteBill}
       />
       <PendingPaymentsModal
         visible={pendingPaymentsVisible}
