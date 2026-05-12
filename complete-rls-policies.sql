@@ -1,4 +1,4 @@
--- ========================================
+  -- ========================================
 -- COMPLETE RLS POLICIES FOR SANKALP APP
 -- ========================================
 -- This script adds all missing tables and RLS policies
@@ -94,9 +94,13 @@ CREATE TABLE IF NOT EXISTS public.user_sales (
   total DECIMAL(10, 2) NOT NULL,
   date TEXT,
   time TEXT,
+  payment_mode TEXT DEFAULT 'cash' CHECK (payment_mode IN ('cash', 'upi')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Add payment_mode column if it doesn't exist
+ALTER TABLE IF EXISTS public.user_sales ADD COLUMN IF NOT EXISTS payment_mode TEXT DEFAULT 'cash' CHECK (payment_mode IN ('cash', 'upi'));
 
 ALTER TABLE public.user_sales ENABLE ROW LEVEL SECURITY;
 

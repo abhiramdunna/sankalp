@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useState, memo, useRef, useMemo } from '
 import {
   Alert,
   Animated,
+  Easing,
   KeyboardAvoidingView,
   Modal,
   PanResponder,
@@ -39,7 +40,7 @@ let RAM_SESSIONS: Session[] = [];
 // Types
 interface BillItem { name: string; price: number; qty: number; }
 interface Session { id: number; customerName: string; phone: string; items: BillItem[]; }
-interface SaleLog { id: number; total: number; time: string; date: string; items: BillItem[]; customerName: string; phone: string; }
+interface SaleLog { id: number; total: number; time: string; date: string; items: BillItem[]; customerName: string; phone: string; paymentMode?: 'cash' | 'upi'; }
 
 // Toast Component
 const Toast = memo(({
@@ -147,6 +148,7 @@ const LiveBillingModal = memo(({
   theme: AppTheme;
 }) => {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [items, setItems] = useState<BillItem[]>([]);
@@ -199,21 +201,55 @@ const LiveBillingModal = memo(({
     ? productsToUse.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : productsToUse;
 
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+  const slideY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+
+  useEffect(() => {
+    if (visible) {
+      slideY.setValue(SCREEN_HEIGHT);
+      Animated.timing(slideY, {
+        toValue: 0,
+        duration: 280,
+        easing: Easing.out(Easing.bezier(0.25, 0.46, 0.45, 0.94)),
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible]);
+
+  const handleClose = useCallback(() => {
+    Animated.timing(slideY, {
+      toValue: SCREEN_HEIGHT,
+      duration: 240,
+      easing: Easing.in(Easing.bezier(0.25, 0.46, 0.45, 0.94)),
+      useNativeDriver: true,
+    }).start(() => onClose());
+  }, [onClose, slideY, SCREEN_HEIGHT]);
+
   const handleSaveAndBack = useCallback(() => {
     if (activeItems.length === 0) {
       warn('Add at least one item to save');
       return;
     }
-    onSaveAndBack(customerName.trim() || 'Walk-in Customer', customerPhone.trim(), activeItems);
-  }, [activeItems, customerName, customerPhone, onSaveAndBack, warn]);
+    Animated.timing(slideY, {
+      toValue: SCREEN_HEIGHT,
+      duration: 220,
+      easing: Easing.in(Easing.bezier(0.25, 0.46, 0.45, 0.94)),
+      useNativeDriver: true,
+    }).start(() => onSaveAndBack(customerName.trim() || 'Walk-in Customer', customerPhone.trim(), activeItems));
+  }, [activeItems, customerName, customerPhone, onSaveAndBack, warn, slideY, SCREEN_HEIGHT]);
 
   const handleComplete = useCallback(() => {
     if (activeItems.length === 0) {
-      warn('Add at least one item');
+      warn('Please add products to complete the bill');
       return;
     }
-    onComplete(customerName.trim() || 'Walk-in Customer', customerPhone.trim(), activeItems);
-  }, [activeItems, customerName, customerPhone, onComplete, warn]);
+    Animated.timing(slideY, {
+      toValue: SCREEN_HEIGHT,
+      duration: 220,
+      easing: Easing.in(Easing.bezier(0.25, 0.46, 0.45, 0.94)),
+      useNativeDriver: true,
+    }).start(() => onComplete(customerName.trim() || 'Walk-in Customer', customerPhone.trim(), activeItems));
+  }, [activeItems, customerName, customerPhone, onComplete, warn, slideY, SCREEN_HEIGHT]);
 
   if (!visible) return null;
 
@@ -221,151 +257,204 @@ const LiveBillingModal = memo(({
     <>
       <Toast visible={showToast} message={toastMsg} onHide={() => setShowToast(false)} />
       <Modal 
-        animationType="slide" 
+        animationType="none" 
         transparent={false} 
         visible={visible} 
-        onRequestClose={onClose}
+        onRequestClose={handleClose}
         statusBarTranslucent
       >
-        <KeyboardAvoidingView 
-          style={{ flex: 1, backgroundColor: '#fff' }} 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={[styles.liveBillingHeader, { paddingTop: insets.top + 10 }]}>
-            <TouchableOpacity onPress={onClose} style={styles.lbBackBtn}>
-              <Ionicons name="arrow-back" size={22} color="#333" />
-            </TouchableOpacity>
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={styles.liveBillingTitle}>New Bill</Text>
-              <Text style={styles.liveBillingSub}>Add items and create bill</Text>
-            </View>
-            <TouchableOpacity onPress={onClose} style={styles.lbCloseBtn}>
-              <Ionicons name="close" size={20} color={theme.colors.primary} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            style={styles.liveBillingContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
+        <Animated.View style={{ flex: 1, backgroundColor: '#fff', transform: [{ translateY: slideY }] }}>
+          <KeyboardAvoidingView 
+            style={{ flex: 1 }} 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
-            <View style={styles.customerSection}>
-              <View style={styles.lbInputBox}>
-                <Ionicons name="person-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
-                <TextInput
-                  style={styles.lbInput}
-                  placeholder="Customer Name"
-                  value={customerName}
-                  onChangeText={setCustomerName}
-                  placeholderTextColor="#9CA3AF"
-                />
-                {customerName.length > 0 && (
-                  <TouchableOpacity onPress={() => setCustomerName('')}>
-                    <Ionicons name="close-circle" size={18} color="#bbb" />
-                  </TouchableOpacity>
-                )}
+            <View style={[styles.liveBillingHeader, { paddingTop: insets.top + 10 }]}>
+              <TouchableOpacity onPress={handleClose} style={styles.lbBackBtn}>
+                <Ionicons name="arrow-back" size={22} color="#333" />
+              </TouchableOpacity>
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={styles.liveBillingTitle}>New Bill</Text>
+                <Text style={styles.liveBillingSub}>Add items and create bill</Text>
               </View>
-              <View style={[styles.lbInputBox, { marginTop: 8 }]}>
-                <Ionicons name="call-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
-                <TextInput
-                  style={styles.lbInput}
-                  placeholder="Phone"
-                  value={customerPhone}
-                  onChangeText={setCustomerPhone}
-                  keyboardType="phone-pad"
-                  placeholderTextColor="#ccc"
-                />
-              </View>
+              <TouchableOpacity onPress={handleClose} style={styles.lbCloseBtn}>
+                <Ionicons name="close" size={20} color={theme.colors.primary} />
+              </TouchableOpacity>
             </View>
 
-            <View style={styles.addItemsSection}>
-              <Text style={styles.addItemsTitle}>Add Items</Text>
-              <View style={styles.searchBox}>
-                <Ionicons name="search" size={18} color="#bbb" style={{ marginRight: 8 }} />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search items..."
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholderTextColor="#ccc"
-                />
-              </View>
-              {productsToUse.length === 0 ? (
-                <View style={{ alignItems: 'center', paddingVertical: 30 }}>
-                  <Ionicons name="cube-outline" size={36} color="#D1D5DB" />
-                  <Text style={{ color: '#9CA3AF', fontSize: 14, fontWeight: '600', marginTop: 10 }}>No products added yet</Text>
-                  <Text style={{ color: '#C4C4C4', fontSize: 12, marginTop: 4, textAlign: 'center' }}>Go to Products tab to add your items</Text>
+            <ScrollView
+              style={styles.liveBillingContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.customerSection}>
+                <View style={styles.lbInputBox}>
+                  <Ionicons name="person-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={styles.lbInput}
+                    placeholder="Customer Name"
+                    value={customerName}
+                    onChangeText={setCustomerName}
+                    placeholderTextColor="#9CA3AF"
+                  />
+                  {customerName.length > 0 && (
+                    <TouchableOpacity onPress={() => setCustomerName('')}>
+                      <Ionicons name="close-circle" size={18} color="#bbb" />
+                    </TouchableOpacity>
+                  )}
                 </View>
-              ) : filtered.map(product => {
-                const cur = items.find(i => i.name === product.name);
-                const qty = cur?.qty || 0;
-                return (
-                  <View key={product.name} style={styles.productRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.productName}>{product.name}</Text>
-                      <Text style={[styles.productPrice, { color: theme.colors.primary }]}>₹ {product.price.toFixed(2)}</Text>
-                    </View>
-                    <View style={styles.qtyControl}>
-                      <TouchableOpacity style={styles.qtyBtn} onPress={() => removeItem(product.name)}>
-                        <Ionicons name="remove" size={16} color={theme.colors.primary} />
-                      </TouchableOpacity>
-                      <Text style={styles.qtyText}>{qty}</Text>
-                      <TouchableOpacity style={styles.qtyBtn} onPress={() => addItem(product)}>
-                        <Ionicons name="add" size={16} color={theme.colors.primary} />
-                      </TouchableOpacity>
-                    </View>
-                    <Text style={[styles.lineTotal, { color: theme.colors.primary }]}>₹ {(qty * product.price).toFixed(2)}</Text>
-                  </View>
-                );
-              })}
-            </View>
-            <View style={{ height: 8 }} />
-          </ScrollView>
+                <View style={[styles.lbInputBox, { marginTop: 8 }]}>
+                  <Ionicons name="call-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={styles.lbInput}
+                    placeholder="Phone"
+                    value={customerPhone}
+                    onChangeText={setCustomerPhone}
+                    keyboardType="phone-pad"
+                    placeholderTextColor="#ccc"
+                  />
+                </View>
+              </View>
 
-          <View style={styles.billSummaryBar}>
-            <View style={styles.summaryLeft}>
-              <Ionicons name="document-text-outline" size={26} color={theme.colors.primary} />
-              <View style={{ marginLeft: 10 }}>
-                <Text style={styles.summaryItemsLabel}>Total Items</Text>
-                <Text style={[styles.summaryItemsValue, { color: theme.colors.primary }]}>{totalQty} Items</Text>
+              <View style={styles.addItemsSection}>
+                <Text style={styles.addItemsTitle}>Add Items</Text>
+                <View style={styles.searchBox}>
+                  <Ionicons name="search" size={18} color="#bbb" style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search items..."
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholderTextColor="#ccc"
+                  />
+                </View>
+                {productsToUse.length === 0 ? (
+                  <View style={{ alignItems: 'center', paddingVertical: 60, paddingHorizontal: 20 }}>
+                    <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                      <Ionicons name="cube-outline" size={48} color="#D1D5DB" />
+                    </View>
+                    <Text style={{ color: '#111827', fontSize: 18, fontWeight: '800', marginBottom: 8, textAlign: 'center' }}>No Products Available</Text>
+                    <Text style={{ color: '#6B7280', fontSize: 14, fontWeight: '600', marginBottom: 16, textAlign: 'center' }}>Add products from the Products tab to start creating bills</Text>
+                    <TouchableOpacity 
+                      onPress={() => {
+                        handleClose();
+                        router.push('/(tabs)/products');
+                      }}
+                      style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 }}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Go to Products</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : filtered.map(product => {
+                  const cur = items.find(i => i.name === product.name);
+                  const qty = cur?.qty || 0;
+                  return (
+                    <View key={product.name} style={styles.productRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.productName}>{product.name}</Text>
+                        <Text style={[styles.productPrice, { color: theme.colors.primary }]}>₹ {product.price.toFixed(2)}</Text>
+                      </View>
+                      <View style={styles.qtyControl}>
+                        <TouchableOpacity style={styles.qtyBtn} onPress={() => removeItem(product.name)}>
+                          <Ionicons name="remove" size={16} color={theme.colors.primary} />
+                        </TouchableOpacity>
+                        <Text style={styles.qtyText}>{qty}</Text>
+                        <TouchableOpacity style={styles.qtyBtn} onPress={() => addItem(product)}>
+                          <Ionicons name="add" size={16} color={theme.colors.primary} />
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={[styles.lineTotal, { color: theme.colors.primary }]}>₹ {(qty * product.price).toFixed(2)}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+              <View style={{ height: 8 }} />
+            </ScrollView>
+
+            <View style={styles.billSummaryBar}>
+              <View style={styles.summaryLeft}>
+                <Ionicons name="document-text-outline" size={26} color={theme.colors.primary} />
+                <View style={{ marginLeft: 10 }}>
+                  <Text style={styles.summaryItemsLabel}>Total Items</Text>
+                  <Text style={[styles.summaryItemsValue, { color: theme.colors.primary }]}>{totalQty} Items</Text>
+                </View>
+              </View>
+              <View style={styles.summaryRight}>
+                <Text style={styles.summaryTotalLabel}>Grand Total</Text>
+                <Text style={styles.summaryTotalValue}>₹ {billTotal.toFixed(2)}</Text>
               </View>
             </View>
-            <View style={styles.summaryRight}>
-              <Text style={styles.summaryTotalLabel}>Grand Total</Text>
-              <Text style={styles.summaryTotalValue}>₹ {billTotal.toFixed(2)}</Text>
-            </View>
-          </View>
 
-          <View style={[styles.lbBottomButtons, { paddingBottom: insets.bottom || 14 }]}>
-            <TouchableOpacity style={styles.saveGoBackBtn} onPress={handleSaveAndBack}>
-              <Ionicons name="save-outline" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
-              <Text style={[styles.saveGoBackText, { color: theme.colors.primary }]}>Save & Go Back</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.completeBillBtn, { backgroundColor: theme.colors.primary }]} onPress={handleComplete}>
-              <Ionicons name="checkmark" size={18} color="#fff" style={{ marginRight: 6 }} />
-              <Text style={styles.completeBillText}>Complete Bill</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
+            <View style={[styles.lbBottomButtons, { paddingBottom: insets.bottom || 14 }]}>
+              <TouchableOpacity style={styles.saveGoBackBtn} onPress={handleSaveAndBack}>
+                <Ionicons name="save-outline" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                <Text style={[styles.saveGoBackText, { color: theme.colors.primary }]}>Save & Go Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.completeBillBtn, { backgroundColor: theme.colors.primary }]} onPress={handleComplete}>
+                <Ionicons name="checkmark" size={18} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.completeBillText}>Complete Bill</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </Animated.View>
       </Modal>
     </>
   );
 });
 
-// Quick Bill Modal
-const QuickEntryModal = memo(({
-  visible, onClose, onSave, theme,
+// Reusable right-to-left slide wrapper (WhatsApp-style push navigation)
+const QuickEntrySlideWrapper = memo(({
+  visible, onClose, theme, insets, children,
 }: {
   visible: boolean;
   onClose: () => void;
-  onSave: (name: string, phone: string, amount: number, note: string) => void;
   theme: AppTheme;
+  insets: any;
+  children: React.ReactNode;
+}) => {
+  const { width: SCREEN_WIDTH } = Dimensions.get('window');
+  const slideX = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+
+  useEffect(() => {
+    if (visible) {
+      slideX.setValue(SCREEN_WIDTH);
+      Animated.timing(slideX, {
+        toValue: 0,
+        duration: 280,
+        easing: Easing.out(Easing.bezier(0.25, 0.46, 0.45, 0.94)),
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <Modal animationType="none" transparent={false} visible={visible} onRequestClose={onClose} statusBarTranslucent>
+      <Animated.View style={{ flex: 1, backgroundColor: '#fff', transform: [{ translateX: slideX }] }}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          {children}
+        </KeyboardAvoidingView>
+      </Animated.View>
+    </Modal>
+  );
+});
+
+// Quick Bill Modal
+const QuickEntryModal = memo(({
+  visible, onClose, onSave, theme, presetMode,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onSave: (name: string, phone: string, amount: number, note: string, paymentMode: 'cash' | 'upi') => void;
+  theme: AppTheme;
+  presetMode?: 'cash' | 'upi' | null;
 }) => {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'upi'>('cash');
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
@@ -375,8 +464,9 @@ const QuickEntryModal = memo(({
       setPhone('');
       setAmount('');
       setNote('');
+      setPaymentMode(presetMode || 'cash');
     }
-  }, [visible]);
+  }, [visible, presetMode]);
 
   const warn = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -397,165 +487,282 @@ const QuickEntryModal = memo(({
       warn('Enter a valid amount');
       return;
     }
-    onSave(name.trim(), phone.trim(), amt, note.trim());
+    onSave(name.trim(), phone.trim(), amt, note.trim(), paymentMode);
   }, [name, phone, amount, note, onSave, warn]);
 
   if (!visible) return null;
 
   return (
-    <>
+    <QuickEntrySlideWrapper visible={visible} onClose={onClose} theme={theme} insets={insets}>
       <Toast visible={showToast} message={toastMsg} onHide={() => setShowToast(false)} />
-      <Modal 
-        animationType="slide" 
-        transparent={false} 
-        visible={visible} 
-        onRequestClose={onClose}
-        statusBarTranslucent
+
+      <View style={[styles.liveBillingHeader, { paddingTop: insets.top + 10 }]}>
+        <TouchableOpacity onPress={onClose} style={styles.lbBackBtn}>
+          <Ionicons name="arrow-back" size={22} color="#333" />
+        </TouchableOpacity>
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <Text style={styles.liveBillingTitle}>Quick Bill</Text>
+          <Text style={styles.liveBillingSub}>Add name and amount quickly</Text>
+        </View>
+        <TouchableOpacity onPress={onClose} style={[styles.lbCloseBtn, { backgroundColor: `${theme.colors.primary}20` }]}>
+          <Ionicons name="close" size={20} color={theme.colors.primary} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView 
+        style={styles.liveBillingContent} 
+        showsVerticalScrollIndicator={false} 
+        keyboardShouldPersistTaps="handled"
       >
-        <KeyboardAvoidingView 
-          style={{ flex: 1, backgroundColor: '#fff' }} 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={[styles.liveBillingHeader, { paddingTop: insets.top + 10 }]}>
-            <TouchableOpacity onPress={onClose} style={styles.lbBackBtn}>
-              <Ionicons name="arrow-back" size={22} color="#333" />
-            </TouchableOpacity>
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={styles.liveBillingTitle}>Quick Bill</Text>
-              <Text style={styles.liveBillingSub}>Add name and amount quickly</Text>
-            </View>
-            <TouchableOpacity onPress={onClose} style={[styles.lbCloseBtn, { backgroundColor: `${theme.colors.primary}20` }]}>
-              <Ionicons name="close" size={20} color={theme.colors.primary} />
-            </TouchableOpacity>
+        <View style={styles.qeFastBadge}>
+          <View style={[styles.qeIconBox, { backgroundColor: `${theme.colors.primary}20` }]}>
+            <Ionicons name={paymentMode === 'upi' ? 'phone-portrait-outline' : 'flash'} size={22} color={paymentMode === 'upi' ? '#8B5CF6' : theme.colors.primary} />
           </View>
+          <View style={{ marginLeft: 12 }}>
+            <Text style={[styles.qeFastTitle, { color: paymentMode === 'upi' ? '#8B5CF6' : theme.colors.primary }]}>
+              {paymentMode === 'upi' ? 'UPI Collection' : paymentMode === 'cash' && presetMode === 'cash' ? 'Cash Collection' : 'Fast & Simple'}
+            </Text>
+            <Text style={styles.qeFastSub}>Just enter details and save</Text>
+          </View>
+        </View>
 
-          <ScrollView 
-            style={styles.liveBillingContent} 
-            showsVerticalScrollIndicator={false} 
-            keyboardShouldPersistTaps="handled"
+        <Text style={styles.qeLabel}>Customer Name</Text>
+        <View style={styles.lbInputBox}>
+          <Ionicons name="person-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+          <TextInput 
+            style={styles.lbInput} 
+            placeholder="" 
+            value={name} 
+            onChangeText={setName} 
+            placeholderTextColor="#ccc" 
+          />
+        </View>
+
+        <Text style={[styles.qeLabel, { marginTop: 16 }]}>Phone (Optional)</Text>
+        <View style={styles.lbInputBox}>
+          <Ionicons name="call-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+          <TextInput 
+            style={styles.lbInput} 
+            placeholder="" 
+            value={phone} 
+            onChangeText={setPhone} 
+            keyboardType="phone-pad" 
+            placeholderTextColor="#ccc" 
+          />
+        </View>
+
+        <Text style={[styles.qeLabel, { marginTop: 16 }]}>Amount (₹)</Text>
+        <View style={styles.lbInputBox}>
+          <Ionicons name="cash-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+          <TextInput
+            style={[styles.lbInput, { fontSize: 18, color: theme.colors.primary, fontWeight: '700' }]}
+            placeholder="0.00"
+            value={amount}
+            onChangeText={setAmount}
+            keyboardType="decimal-pad"
+            placeholderTextColor="#ccc"
+          />
+        </View>
+
+        <Text style={[styles.qeLabel, { marginTop: 16 }]}>Payment Note (Optional)</Text>
+        <View style={styles.lbInputBox}>
+          <Ionicons name="document-text-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+          <TextInput 
+            style={styles.lbInput} 
+            placeholder="" 
+            value={note} 
+            onChangeText={setNote} 
+            placeholderTextColor="#ccc" 
+          />
+        </View>
+
+        <Text style={[styles.qeLabel, { marginTop: 16 }]}>Payment Mode</Text>
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 4 }}>
+          <TouchableOpacity
+            onPress={() => setPaymentMode('cash')}
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 12, borderWidth: 2, borderColor: paymentMode === 'cash' ? '#10B981' : '#E5E7EB', backgroundColor: paymentMode === 'cash' ? '#ECFDF5' : '#F9FAFB' }}
           >
-            <View style={styles.qeFastBadge}>
-              <View style={[styles.qeIconBox, { backgroundColor: `${theme.colors.primary}20` }]}>
-                <Ionicons name="flash" size={22} color={theme.colors.primary} />
-              </View>
-              <View style={{ marginLeft: 12 }}>
-                <Text style={[styles.qeFastTitle, { color: theme.colors.primary }]}>Fast & Simple</Text>
-                <Text style={styles.qeFastSub}>Just enter details and save</Text>
-              </View>
-            </View>
+            <Ionicons name="cash-outline" size={20} color={paymentMode === 'cash' ? '#10B981' : '#9CA3AF'} />
+            <Text style={{ fontSize: 14, fontWeight: '800', color: paymentMode === 'cash' ? '#10B981' : '#9CA3AF' }}>Cash</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setPaymentMode('upi')}
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 12, borderWidth: 2, borderColor: paymentMode === 'upi' ? '#8B5CF6' : '#E5E7EB', backgroundColor: paymentMode === 'upi' ? '#F5F3FF' : '#F9FAFB' }}
+          >
+            <Ionicons name="phone-portrait-outline" size={20} color={paymentMode === 'upi' ? '#8B5CF6' : '#9CA3AF'} />
+            <Text style={{ fontSize: 14, fontWeight: '800', color: paymentMode === 'upi' ? '#8B5CF6' : '#9CA3AF' }}>UPI</Text>
+          </TouchableOpacity>
+        </View>
 
-            <Text style={styles.qeLabel}>Customer Name</Text>
-            <View style={styles.lbInputBox}>
-              <Ionicons name="person-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
-              <TextInput 
-                style={styles.lbInput} 
-                placeholder="" 
-                value={name} 
-                onChangeText={setName} 
-                placeholderTextColor="#ccc" 
-              />
-            </View>
+        <View style={{ height: 40 }} />
+      </ScrollView>
 
-            <Text style={[styles.qeLabel, { marginTop: 16 }]}>Phone (Optional)</Text>
-            <View style={styles.lbInputBox}>
-              <Ionicons name="call-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
-              <TextInput 
-                style={styles.lbInput} 
-                placeholder="" 
-                value={phone} 
-                onChangeText={setPhone} 
-                keyboardType="phone-pad" 
-                placeholderTextColor="#ccc" 
-              />
-            </View>
-
-            <Text style={[styles.qeLabel, { marginTop: 16 }]}>Amount (₹)</Text>
-            <View style={styles.lbInputBox}>
-              <Ionicons name="cash-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
-              <TextInput
-                style={[styles.lbInput, { fontSize: 18, color: theme.colors.primary, fontWeight: '700' }]}
-                placeholder="0.00"
-                value={amount}
-                onChangeText={setAmount}
-                keyboardType="decimal-pad"
-                placeholderTextColor="#ccc"
-              />
-            </View>
-
-            <Text style={[styles.qeLabel, { marginTop: 16 }]}>Payment Note (Optional)</Text>
-            <View style={styles.lbInputBox}>
-              <Ionicons name="document-text-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
-              <TextInput 
-                style={styles.lbInput} 
-                placeholder="" 
-                value={note} 
-                onChangeText={setNote} 
-                placeholderTextColor="#ccc" 
-              />
-            </View>
-
-            <View style={{ height: 40 }} />
-          </ScrollView>
-
-          <View style={[styles.qeBottomBar, { paddingBottom: insets.bottom || 14 }]}>
-            <TouchableOpacity style={[styles.qeSaveBtn, { backgroundColor: theme.colors.primary }]} onPress={handleSave}>
-              <Ionicons name="wallet-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.qeSaveBtnText}>Save Payment</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-    </>
+      <View style={[styles.qeBottomBar, { paddingBottom: insets.bottom || 14 }]}>
+        <TouchableOpacity style={[styles.qeSaveBtn, { backgroundColor: theme.colors.primary }]} onPress={handleSave}>
+          <Ionicons name="wallet-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+          <Text style={styles.qeSaveBtnText}>Save Payment</Text>
+        </TouchableOpacity>
+      </View>
+    </QuickEntrySlideWrapper>
   );
 });
 
-// Review Bill Modal
+// Review Bill Modal — modern bottom sheet
 const ReviewBillModal = memo(({
   visible, onClose, onConfirm, customerName = '', customerPhone = '', items = [], total = 0, theme,
 }: {
-  visible: boolean; onClose: () => void; onConfirm: () => void;
+  visible: boolean; onClose: () => void; onConfirm: (paymentMode: 'cash' | 'upi') => void;
   customerName?: string; customerPhone?: string; items?: BillItem[]; total?: number;
   theme: AppTheme;
 }) => {
+  const insets = useSafeAreaInsets();
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'upi'>('cash');
+
+  useEffect(() => {
+    if (visible) setPaymentMode('cash');
+  }, [visible]);
+
   if (!visible) return null;
-  
+
+  const initials = (customerName || 'W').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
+  const itemCount = items.reduce((s, i) => s + i.qty, 0);
+
   return (
-    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
-      <View style={styles.reviewBillOverlay}>
-        <View style={styles.reviewBillContainer}>
-          <View style={styles.reviewBillHeader}>
-            <Text style={styles.reviewBillTitle}>Review Bill</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color="#333" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.reviewBillCustomerInfo}>
-            <Text style={styles.reviewBillCustomerName}>{customerName || 'Walk-in Customer'}</Text>
-            {customerPhone ? <Text style={styles.reviewBillCustomerPhone}>{customerPhone}</Text> : null}
-          </View>
-          <ScrollView style={{ maxHeight: SCREEN_HEIGHT * 0.38 }} showsVerticalScrollIndicator={false}>
+    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: '#F9FAFB', borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', maxHeight: SCREEN_HEIGHT * 0.92 }}>
+
+          {/* Gradient header */}
+          <LinearGradient
+            colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={{ paddingTop: 20, paddingBottom: 24, paddingHorizontal: 20 }}
+          >
+            {/* Drag handle */}
+            <View style={{ width: 36, height: 4, backgroundColor: 'rgba(255,255,255,0.35)', borderRadius: 4, alignSelf: 'center', marginBottom: 18 }} />
+
+            {/* Top row */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <View style={{ backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 }}>
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>REVIEW BILL</Text>
+              </View>
+              <TouchableOpacity
+                onPress={onClose}
+                style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Ionicons name="close" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Customer info */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <View style={{ width: 50, height: 50, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontSize: 18, fontWeight: '900', color: '#fff' }}>{initials}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 18, fontWeight: '900', color: '#fff' }}>{customerName || 'Walk-in Customer'}</Text>
+                {customerPhone ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                    <Ionicons name="call-outline" size={12} color="rgba(255,255,255,0.75)" />
+                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>{customerPhone}</Text>
+                  </View>
+                ) : null}
+              </View>
+              {/* Item count badge */}
+              <View style={{ backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center' }}>
+                <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>{itemCount}</Text>
+                <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: '700' }}>items</Text>
+              </View>
+            </View>
+
+            {/* Total */}
+            <View style={{ marginTop: 16, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View>
+                <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }}>Bill Total</Text>
+                <Text style={{ fontSize: 30, fontWeight: '900', color: '#fff', letterSpacing: -1, marginTop: 2 }}>₹{total.toLocaleString('en-IN')}</Text>
+              </View>
+              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="receipt-outline" size={22} color="#fff" />
+              </View>
+            </View>
+          </LinearGradient>
+
+          {/* Items list */}
+          <ScrollView
+            style={{ maxHeight: SCREEN_HEIGHT * 0.26, backgroundColor: '#fff', marginHorizontal: 16, marginTop: -12, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB' }}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4 }}>
+              <Text style={{ fontSize: 11, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 8 }}>Items</Text>
+            </View>
             {items.map((item, idx) => (
-              <View key={idx} style={styles.reviewBillItem}>
-                <View>
-                  <Text style={styles.reviewBillItemName}>{item.name}</Text>
-                  <Text style={styles.reviewBillItemQty}>Qty: {item.qty}</Text>
+              <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: idx === 0 ? 0 : 1, borderTopColor: '#F3F4F6' }}>
+                <View style={{ width: 30, height: 30, borderRadius: 9, backgroundColor: `${theme.colors.primary}15`, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: theme.colors.primary }}>{String(idx + 1).padStart(2, '0')}</Text>
                 </View>
-                <Text style={[styles.reviewBillItemAmount, { color: theme.colors.primary }]}>₹{item.price * item.qty}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>{item.name}</Text>
+                  <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600', marginTop: 1 }}>Qty: {item.qty} × ₹{item.price.toLocaleString('en-IN')}</Text>
+                </View>
+                <Text style={{ fontSize: 14, fontWeight: '900', color: theme.colors.primary }}>₹{(item.price * item.qty).toLocaleString('en-IN')}</Text>
               </View>
             ))}
+            <View style={{ marginHorizontal: 14, marginTop: 6, marginBottom: 0, borderTopWidth: 1.5, borderTopColor: '#E5E7EB', borderStyle: 'dashed' }} />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10 }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: '#6B7280' }}>Total</Text>
+              <Text style={{ fontSize: 16, fontWeight: '900', color: theme.colors.primary }}>₹{total.toLocaleString('en-IN')}</Text>
+            </View>
           </ScrollView>
-          <View style={styles.reviewBillTotal}>
-            <Text style={styles.reviewBillTotalLabel}>Total</Text>
-            <Text style={[styles.reviewBillTotalAmount, { color: theme.colors.primary }]}>₹{total}</Text>
+
+          {/* Payment Mode */}
+          <View style={{ paddingHorizontal: 16, paddingTop: 14 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 10 }}>Payment Mode</Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setPaymentMode('cash')}
+                style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 14, borderWidth: 2, borderColor: paymentMode === 'cash' ? '#10B981' : '#E5E7EB', backgroundColor: paymentMode === 'cash' ? '#ECFDF5' : '#fff' }}
+              >
+                <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: paymentMode === 'cash' ? '#10B98120' : '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="cash-outline" size={18} color={paymentMode === 'cash' ? '#10B981' : '#9CA3AF'} />
+                </View>
+                <View>
+                  <Text style={{ fontSize: 14, fontWeight: '800', color: paymentMode === 'cash' ? '#10B981' : '#6B7280' }}>Cash</Text>
+                  <Text style={{ fontSize: 10, fontWeight: '600', color: paymentMode === 'cash' ? '#6EE7B7' : '#9CA3AF' }}>Physical money</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setPaymentMode('upi')}
+                style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 14, borderWidth: 2, borderColor: paymentMode === 'upi' ? '#8B5CF6' : '#E5E7EB', backgroundColor: paymentMode === 'upi' ? '#F5F3FF' : '#fff' }}
+              >
+                <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: paymentMode === 'upi' ? '#8B5CF620' : '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="phone-portrait-outline" size={18} color={paymentMode === 'upi' ? '#8B5CF6' : '#9CA3AF'} />
+                </View>
+                <View>
+                  <Text style={{ fontSize: 14, fontWeight: '800', color: paymentMode === 'upi' ? '#8B5CF6' : '#6B7280' }}>UPI</Text>
+                  <Text style={{ fontSize: 10, fontWeight: '600', color: paymentMode === 'upi' ? '#C4B5FD' : '#9CA3AF' }}>GPay / PhonePe</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.reviewBillButtons}>
-            <TouchableOpacity style={[styles.reviewBillBackBtn, { borderColor: theme.colors.primary }]} onPress={onClose}>
-              <Text style={[styles.reviewBillBackBtnText, { color: theme.colors.primary }]}>Edit Bill</Text>
+
+          {/* Action buttons */}
+          <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingTop: 14, paddingBottom: insets.bottom + 16, gap: 10 }}>
+            <TouchableOpacity
+              style={{ width: 52, height: 52, borderRadius: 14, borderWidth: 1.5, borderColor: theme.colors.primary + '50', backgroundColor: theme.colors.primary + '10', alignItems: 'center', justifyContent: 'center' }}
+              onPress={onClose}
+            >
+              <Ionicons name="pencil-outline" size={20} color={theme.colors.primary} />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.reviewBillDoneBtn, { backgroundColor: theme.colors.primary }]} onPress={onConfirm}>
-              <Text style={styles.reviewBillDoneBtnText}>Confirm & Save</Text>
+            <TouchableOpacity
+              style={{ flex: 1, height: 52, borderRadius: 14, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, elevation: 4, shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}
+              onPress={() => onConfirm(paymentMode)}
+            >
+              <Ionicons name="checkmark-circle" size={22} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '900' }}>Confirm & Save</Text>
             </TouchableOpacity>
           </View>
+
         </View>
       </View>
     </Modal>
@@ -627,7 +834,7 @@ const SwipeableOrderButton = memo(({
   );
 });
 
-// Bill Detail Modal
+// Bill Detail Modal — modern receipt style
 const BillDetailModal = memo(({
   visible,
   bill,
@@ -644,61 +851,130 @@ const BillDetailModal = memo(({
   theme: AppTheme;
 }) => {
   if (!visible || !bill) return null;
+  const initials = (bill.customerName || 'W').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
+  const itemCount = bill.items.reduce((s, i) => s + i.qty, 0);
+  const payMode = bill.paymentMode;
+
   return (
-    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
-      <View style={styles.reviewBillOverlay}>
-        <View style={styles.reviewBillContainer}>
-          <View style={styles.reviewBillHeader}>
-            <Text style={styles.reviewBillTitle}>Bill-{billNumber}</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color="#333" />
-            </TouchableOpacity>
-          </View>
+    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: '#F9FAFB', borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', maxHeight: SCREEN_HEIGHT * 0.88 }}>
 
-          <View style={styles.reviewBillCustomerInfo}>
-            <Text style={styles.reviewBillCustomerName}>{bill.customerName || 'Walk-in Customer'}</Text>
-            {bill.phone ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                <Ionicons name="call-outline" size={13} color="#666" style={{ marginRight: 4 }} />
-                <Text style={styles.reviewBillCustomerPhone}>{bill.phone}</Text>
+          {/* Gradient header */}
+          <LinearGradient
+            colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={{ paddingTop: 20, paddingBottom: 24, paddingHorizontal: 20 }}
+          >
+            {/* Drag handle */}
+            <View style={{ width: 36, height: 4, backgroundColor: 'rgba(255,255,255,0.35)', borderRadius: 4, alignSelf: 'center', marginBottom: 18 }} />
+
+            {/* Top row: bill number + close */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <View style={{ backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 }}>
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>BILL #{billNumber}</Text>
               </View>
-            ) : null}
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-              <Ionicons name="time-outline" size={13} color="#666" style={{ marginRight: 4 }} />
-              <Text style={[styles.reviewBillCustomerPhone, { color: '#9CA3AF' }]}>{bill.time} · {bill.date}</Text>
+              <TouchableOpacity
+                onPress={onClose}
+                style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Ionicons name="close" size={20} color="#fff" />
+              </TouchableOpacity>
             </View>
-          </View>
 
-          <ScrollView style={{ maxHeight: SCREEN_HEIGHT * 0.35 }} showsVerticalScrollIndicator={false}>
-            {bill.items.map((item, idx) => (
-              <View key={idx} style={styles.reviewBillItem}>
-                <View>
-                  <Text style={styles.reviewBillItemName}>{item.name}</Text>
-                  <Text style={styles.reviewBillItemQty}>Qty: {item.qty} × ₹{item.price}</Text>
+            {/* Customer info */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontSize: 20, fontWeight: '900', color: '#fff' }}>{initials}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 19, fontWeight: '900', color: '#fff' }}>{bill.customerName || 'Walk-in Customer'}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                  {bill.phone ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Ionicons name="call-outline" size={12} color="rgba(255,255,255,0.75)" />
+                      <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>{bill.phone}</Text>
+                    </View>
+                  ) : null}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.75)" />
+                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>{bill.time} · {bill.date}</Text>
+                  </View>
                 </View>
-                <Text style={[styles.reviewBillItemAmount, { color: theme.colors.primary }]}>₹{item.price * item.qty}</Text>
+              </View>
+            </View>
+
+            {/* Total amount */}
+            <View style={{ marginTop: 20, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View>
+                <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }}>Total Paid</Text>
+                <Text style={{ fontSize: 30, fontWeight: '900', color: '#fff', letterSpacing: -1, marginTop: 2 }}>₹{bill.total.toLocaleString('en-IN')}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5, gap: 5 }}>
+                  <Ionicons name="cube-outline" size={13} color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{itemCount} item{itemCount !== 1 ? 's' : ''}</Text>
+                </View>
+                {payMode ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5, gap: 5, backgroundColor: payMode === 'cash' ? 'rgba(16,185,129,0.35)' : 'rgba(139,92,246,0.35)' }}>
+                    <Ionicons name={payMode === 'cash' ? 'cash-outline' : 'phone-portrait-outline'} size={13} color="#fff" />
+                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', textTransform: 'uppercase' }}>{payMode}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          </LinearGradient>
+
+          {/* Items list */}
+          <ScrollView
+            style={{ maxHeight: SCREEN_HEIGHT * 0.32, backgroundColor: '#fff', marginHorizontal: 16, marginTop: -12, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB' }}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={{ paddingHorizontal: 14, paddingTop: 14, paddingBottom: 6 }}>
+              <Text style={{ fontSize: 11, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 10 }}>Items Breakdown</Text>
+            </View>
+            {bill.items.map((item, idx) => (
+              <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 11, borderTopWidth: idx === 0 ? 0 : 1, borderTopColor: '#F3F4F6' }}>
+                <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: `${theme.colors.primary}15`, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: theme.colors.primary }}>{String(idx + 1).padStart(2, '0')}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>{item.name}</Text>
+                  <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600', marginTop: 2 }}>
+                    {item.qty} × ₹{item.price.toLocaleString('en-IN')}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 15, fontWeight: '900', color: theme.colors.primary }}>₹{(item.price * item.qty).toLocaleString('en-IN')}</Text>
               </View>
             ))}
+
+            {/* Dashed divider + total */}
+            <View style={{ marginHorizontal: 14, marginTop: 8, marginBottom: 4, borderTopWidth: 1.5, borderTopColor: '#E5E7EB', borderStyle: 'dashed' }} />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12 }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: '#6B7280' }}>Grand Total</Text>
+              <Text style={{ fontSize: 18, fontWeight: '900', color: theme.colors.primary }}>₹{bill.total.toLocaleString('en-IN')}</Text>
+            </View>
           </ScrollView>
 
-          <View style={styles.reviewBillTotal}>
-            <Text style={styles.reviewBillTotalLabel}>Total</Text>
-            <Text style={[styles.reviewBillTotalAmount, { color: theme.colors.primary }]}>₹{bill.total}</Text>
-          </View>
-
-          <View style={styles.reviewBillButtons}>
+          {/* Action buttons */}
+          <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 24, gap: 10 }}>
             {onDelete && (
               <TouchableOpacity
-                style={[styles.reviewBillBackBtn, { borderColor: '#DC2626', flex: 0, paddingHorizontal: 16 }]}
                 onPress={() => onDelete(bill)}
+                style={{ width: 48, height: 48, borderRadius: 14, borderWidth: 1.5, borderColor: '#FEE2E2', backgroundColor: '#FFF5F5', alignItems: 'center', justifyContent: 'center' }}
               >
-                <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                <Ionicons name="trash-outline" size={18} color="#DC2626" />
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={[styles.reviewBillDoneBtn, { backgroundColor: theme.colors.primary }]} onPress={onClose}>
-              <Text style={styles.reviewBillDoneBtnText}>Close</Text>
+            <TouchableOpacity
+              style={{ flex: 1, height: 48, borderRadius: 14, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, elevation: 3 }}
+              onPress={onClose}
+            >
+              <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Done</Text>
             </TouchableOpacity>
           </View>
+
         </View>
       </View>
     </Modal>
@@ -1623,6 +1899,7 @@ export default function HomeScreen() {
   const [liveBillingVisible, setLiveBillingVisible] = useState(false);
   const [editingSession, setEditingSession] = useState<Session | null>(null);
   const [quickEntryVisible, setQuickEntryVisible] = useState(false);
+  const [quickEntryPresetMode, setQuickEntryPresetMode] = useState<'cash' | 'upi' | null>(null);
   const [billReviewVisible, setBillReviewVisible] = useState(false);
   const [viewAllBillsVisible, setViewAllBillsVisible] = useState(false);
   const [reviewData, setReviewData] = useState<{
@@ -1965,7 +2242,7 @@ const loadData = useCallback(async () => {
     setBillReviewVisible(true);
   }, [editingSession?.id]);
 
-  const handleConfirmBill = useCallback(async () => {
+  const handleConfirmBill = useCallback(async (paymentMode: 'cash' | 'upi') => {
   const now = new Date();
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const newBill: SaleLog = {
@@ -1976,6 +2253,7 @@ const loadData = useCallback(async () => {
     items: reviewData.items,
     customerName: reviewData.customerName,
     phone: reviewData.customerPhone || '',
+    paymentMode,
   };
   
   try {
@@ -2002,7 +2280,7 @@ const loadData = useCallback(async () => {
   }
 }, [reviewData, salesLog, showSuccess, showError]);
 
-  const handleQuickEntrySave = useCallback(async (name: string, phone: string, amount: number, note: string) => {
+  const handleQuickEntrySave = useCallback(async (name: string, phone: string, amount: number, note: string, paymentMode: 'cash' | 'upi') => {
     const now = new Date();
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const newBill: SaleLog = {
@@ -2013,6 +2291,7 @@ const loadData = useCallback(async () => {
       items: [{ name: note || 'Quick Bill', price: amount, qty: 1 }],
       customerName: name,
       phone,
+      paymentMode,
     };
     const updated = [newBill, ...salesLog];
     setSalesLog(updated);
@@ -2117,7 +2396,7 @@ const loadData = useCallback(async () => {
 
       <LiveBillingModal
         visible={liveBillingVisible}
-        onClose={() => { setLiveBillingVisible(false); setEditingSession(null); }}
+        onClose={() => { setLiveBillingVisible(false); }}
         onSaveAndBack={handleSaveAndBack}
         onComplete={handleComplete}
         session={editingSession}
@@ -2127,9 +2406,10 @@ const loadData = useCallback(async () => {
 
       <QuickEntryModal
         visible={quickEntryVisible}
-        onClose={() => setQuickEntryVisible(false)}
+        onClose={() => { setQuickEntryVisible(false); setQuickEntryPresetMode(null); }}
         onSave={handleQuickEntrySave}
         theme={theme}
+        presetMode={quickEntryPresetMode}
       />
 
       <ReviewBillModal
@@ -2223,6 +2503,7 @@ const loadData = useCallback(async () => {
             </View>
           </TouchableOpacity>
         </View>
+
       </View>
 
       {/* Today's Bills Header */}
@@ -2267,7 +2548,15 @@ const loadData = useCallback(async () => {
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={[styles.billCustomer, { color: theme.colors.textPrimary }]}>{bill.customerName}</Text>
-                  <Text style={styles.billTime}>{bill.time} · {bill.date}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    <Text style={styles.billTime}>{bill.time} · {bill.date}</Text>
+                    {bill.paymentMode && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: bill.paymentMode === 'cash' ? '#ECFDF5' : '#F5F3FF' }}>
+                        <Ionicons name={bill.paymentMode === 'cash' ? 'cash-outline' : 'phone-portrait-outline'} size={10} color={bill.paymentMode === 'cash' ? '#10B981' : '#8B5CF6'} />
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: bill.paymentMode === 'cash' ? '#10B981' : '#8B5CF6', textTransform: 'uppercase' }}>{bill.paymentMode}</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
                 <View style={styles.billRight}>
                   <Text style={[styles.billAmount, { color: theme.colors.primary }]}>₹{bill.total.toLocaleString('en-IN')}</Text>

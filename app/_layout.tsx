@@ -45,16 +45,14 @@ function useProtectedRoute(user: any, isReady: boolean) {
       return;
     }
 
-    // If profile is incomplete, ALWAYS go to complete-profile (regardless of signup vs login)
-    if (!user.hasCompleteProfile) {
+    if (isNewSignup && !user.hasCompleteProfile) {
       if (!onCompleteProfile) {
-        console.log('➡️ Incomplete profile → /complete-profile');
+        console.log('➡️ New signup, incomplete profile → /complete-profile');
         router.replace('/complete-profile');
       }
     } else {
-      // Profile is complete, go to home (but not if already there)
       if (onLoginOrIndex || onCompleteProfile) {
-        console.log('➡️ Profile complete → /(tabs)/home');
+        console.log('➡️ → /(tabs)/home');
         router.replace('/(tabs)/home');
       }
     }
@@ -178,10 +176,6 @@ export default function RootLayout() {
         <Stack.Screen name="login" />
         <Stack.Screen name="complete-profile" />
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="modal"
-          options={{ presentation: 'modal', headerShown: true, title: 'Modal' }}
-        />
       </Stack>
       <StatusBar style="light" />
     </ThemeProvider>

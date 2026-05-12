@@ -39,6 +39,7 @@ export interface SaleLog {
   items: BillItem[];
   customerName: string;
   phone: string;
+  paymentMode?: 'cash' | 'upi';
 }
 
 export interface Bill {
@@ -209,6 +210,7 @@ class DatabaseService {
           items: sale.items || [],
           customerName: sale.customer_name,
           phone: sale.phone,
+          paymentMode: sale.payment_mode || 'cash',
         })) || []
       );
     } catch (error) {
@@ -229,6 +231,7 @@ class DatabaseService {
         items: saleRecord.items,
         customer_name: saleRecord.customerName,
         phone: saleRecord.phone,
+        payment_mode: saleRecord.paymentMode || 'cash',
       });
 
       if (error) throw error;
