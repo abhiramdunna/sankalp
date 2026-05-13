@@ -62,26 +62,35 @@ export default function CompleteProfile() {
         city: city.trim(),
       };
 
-      console.log('💾 Saving profile:', payload);
-
+      console.log('💾 Saving profile:', JSON.stringify(payload));
+      
       const { data, error } = await supabase
         .from('profiles')
         .upsert(payload)
-        .select()
-        .single();
+        .select();
 
       if (error) {
-        console.error('❌ Error:', error);
-        Alert.alert('Error', error.message);
+        console.error('❌ Profile save error details:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        });
+        Alert.alert('Error', error.message || 'Failed to save profile');
         setIsLoading(false);
         return;
       }
 
       console.log('✅ Profile saved:', data);
 
+      // Update store BEFORE navigation
       updateProfileStatus(true);
       setIsNewSignup(false);
 
+      // Small delay to ensure store updates propagate
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      console.log('🚀 Navigating to home...');
       router.replace('/(tabs)/home');
     } catch (err: any) {
       console.error('❌ Exception:', err);

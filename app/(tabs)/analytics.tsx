@@ -801,7 +801,7 @@ export default function AnalyticsScreen() {
       .map(([name, d]) => ({ name, ...d }))
       .sort((a, b) => b.revenue - a.revenue);
 
-    const topProduct = topProducts[0] ?? { name: 'Quick Entry', qty: 0, revenue: 0 };
+    const topProduct = topProducts[0] ?? { name: 'No products are available', qty: 0, revenue: 0 };
 
     return {
       totalRevenue,

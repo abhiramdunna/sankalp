@@ -13,6 +13,7 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <Tabs
         screenOptions={({ route }) => ({
+          animationEnabled: false,
           headerStyle: {
             backgroundColor: theme.colors.primary,
           },

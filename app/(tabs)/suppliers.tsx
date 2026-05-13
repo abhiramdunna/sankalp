@@ -90,9 +90,28 @@ const Toast = memo(({
   const bgColor = type === 'error' ? '#FEF2F2' : type === 'success' ? '#F0FDF4' : '#EFF6FF';
 
   return (
-    <View style={[styles.toastContainer, { backgroundColor: bgColor, borderLeftColor: accentColor }]}>
+    <View style={{
+      position: 'absolute',
+      bottom: 20,
+      left: 16,
+      right: 16,
+      borderRadius: 12,
+      paddingVertical: 13,
+      paddingHorizontal: 16,
+      zIndex: 9999,
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderLeftWidth: 4,
+      backgroundColor: bgColor,
+      borderLeftColor: accentColor,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.10,
+      shadowRadius: 8,
+      elevation: 6,
+    }}>
       <Ionicons name={iconName as any} size={20} color={accentColor} style={{ marginRight: 10, flexShrink: 0 }} />
-      <Text style={[styles.toastText, { color: '#0F172A' }]} numberOfLines={2}>{message}</Text>
+      <Text style={{ fontSize: 14, fontWeight: '600', flex: 1, flexWrap: 'wrap', color: '#0F172A' }} numberOfLines={2}>{message}</Text>
     </View>
   );
 });

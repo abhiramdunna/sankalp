@@ -7,6 +7,7 @@ import { db as DatabaseService } from '@/lib/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { CommonActions, useNavigation } from '@react-navigation/native';
 import React, { useCallback, useEffect, useState, memo, useRef, useMemo } from 'react';
 import {
   Alert,
@@ -25,6 +26,7 @@ import {
   Keyboard,
   View,
   Dimensions,
+  InteractionManager,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -149,12 +151,14 @@ const LiveBillingModal = memo(({
 }) => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const navigation = useNavigation<any>();
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [items, setItems] = useState<BillItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+  const modalOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (visible) {
@@ -206,50 +210,43 @@ const LiveBillingModal = memo(({
 
   useEffect(() => {
     if (visible) {
-      slideY.setValue(SCREEN_HEIGHT);
-      Animated.timing(slideY, {
-        toValue: 0,
-        duration: 280,
-        easing: Easing.out(Easing.bezier(0.25, 0.46, 0.45, 0.94)),
-        useNativeDriver: true,
-      }).start();
+      slideY.setValue(0);
     }
   }, [visible]);
 
   const handleClose = useCallback(() => {
-    Animated.timing(slideY, {
-      toValue: SCREEN_HEIGHT,
-      duration: 240,
-      easing: Easing.in(Easing.bezier(0.25, 0.46, 0.45, 0.94)),
-      useNativeDriver: true,
-    }).start(() => onClose());
-  }, [onClose, slideY, SCREEN_HEIGHT]);
+    onClose();
+  }, [onClose]);
 
   const handleSaveAndBack = useCallback(() => {
     if (activeItems.length === 0) {
       warn('Add at least one item to save');
       return;
     }
-    Animated.timing(slideY, {
-      toValue: SCREEN_HEIGHT,
-      duration: 220,
-      easing: Easing.in(Easing.bezier(0.25, 0.46, 0.45, 0.94)),
-      useNativeDriver: true,
-    }).start(() => onSaveAndBack(customerName.trim() || 'Walk-in Customer', customerPhone.trim(), activeItems));
-  }, [activeItems, customerName, customerPhone, onSaveAndBack, warn, slideY, SCREEN_HEIGHT]);
+    onSaveAndBack(customerName.trim() || 'Walk-in Customer', customerPhone.trim(), activeItems);
+  }, [activeItems, customerName, customerPhone, onSaveAndBack, warn]);
 
   const handleComplete = useCallback(() => {
     if (activeItems.length === 0) {
       warn('Please add products to complete the bill');
       return;
     }
-    Animated.timing(slideY, {
-      toValue: SCREEN_HEIGHT,
-      duration: 220,
-      easing: Easing.in(Easing.bezier(0.25, 0.46, 0.45, 0.94)),
+    onComplete(customerName.trim() || 'Walk-in Customer', customerPhone.trim(), activeItems);
+  }, [activeItems, customerName, customerPhone, onComplete, warn]);
+
+  const handleGoToProducts = useCallback(() => {
+    // 1. Fade out the modal
+    Animated.timing(modalOpacity, {
+      toValue: 0,
+      duration: 200,
       useNativeDriver: true,
-    }).start(() => onComplete(customerName.trim() || 'Walk-in Customer', customerPhone.trim(), activeItems));
-  }, [activeItems, customerName, customerPhone, onComplete, warn, slideY, SCREEN_HEIGHT]);
+    }).start(() => {
+      // 2. Only AFTER fade completes, switch tab and close
+      navigation.dispatch(CommonActions.navigate({ name: 'products' }));
+      onClose();
+      modalOpacity.setValue(1); // reset for next time
+    });
+  }, [navigation, onClose, modalOpacity]);
 
   if (!visible) return null;
 
@@ -263,7 +260,7 @@ const LiveBillingModal = memo(({
         onRequestClose={handleClose}
         statusBarTranslucent
       >
-        <Animated.View style={{ flex: 1, backgroundColor: '#fff', transform: [{ translateY: slideY }] }}>
+        <Animated.View style={{ flex: 1, backgroundColor: '#fff', transform: [{ translateY: slideY }], opacity: modalOpacity }}>
           <KeyboardAvoidingView 
             style={{ flex: 1 }} 
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -334,15 +331,6 @@ const LiveBillingModal = memo(({
                     </View>
                     <Text style={{ color: '#111827', fontSize: 18, fontWeight: '800', marginBottom: 8, textAlign: 'center' }}>No Products Available</Text>
                     <Text style={{ color: '#6B7280', fontSize: 14, fontWeight: '600', marginBottom: 16, textAlign: 'center' }}>Add products from the Products tab to start creating bills</Text>
-                    <TouchableOpacity 
-                      onPress={() => {
-                        handleClose();
-                        router.push('/(tabs)/products');
-                      }}
-                      style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 }}
-                    >
-                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Go to Products</Text>
-                    </TouchableOpacity>
                   </View>
                 ) : filtered.map(product => {
                   const cur = items.find(i => i.name === product.name);
@@ -416,23 +404,26 @@ const QuickEntrySlideWrapper = memo(({
 
   useEffect(() => {
     if (visible) {
-      slideX.setValue(SCREEN_WIDTH);
-      Animated.timing(slideX, {
-        toValue: 0,
-        duration: 280,
-        easing: Easing.out(Easing.bezier(0.25, 0.46, 0.45, 0.94)),
-        useNativeDriver: true,
-      }).start();
+      slideX.setValue(0);
     }
   }, [visible]);
 
+  const handleAnimatedClose = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
   if (!visible) return null;
 
+  // Pass animated close handler down to children via context-like prop injection
+  const childWithClose = React.isValidElement(children)
+    ? React.cloneElement(children as React.ReactElement<any>, { __onAnimatedClose: handleAnimatedClose })
+    : children;
+
   return (
-    <Modal animationType="none" transparent={false} visible={visible} onRequestClose={onClose} statusBarTranslucent>
+    <Modal animationType="none" transparent={false} visible={visible} onRequestClose={handleAnimatedClose} statusBarTranslucent>
       <Animated.View style={{ flex: 1, backgroundColor: '#fff', transform: [{ translateX: slideX }] }}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          {children}
+          {childWithClose}
         </KeyboardAvoidingView>
       </Animated.View>
     </Modal>
@@ -441,13 +432,14 @@ const QuickEntrySlideWrapper = memo(({
 
 // Quick Bill Modal
 const QuickEntryModal = memo(({
-  visible, onClose, onSave, theme, presetMode,
+  visible, onClose, onSave, theme, presetMode, __onAnimatedClose,
 }: {
   visible: boolean;
   onClose: () => void;
   onSave: (name: string, phone: string, amount: number, note: string, paymentMode: 'cash' | 'upi') => void;
   theme: AppTheme;
   presetMode?: 'cash' | 'upi' | null;
+  __onAnimatedClose?: () => void;
 }) => {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
@@ -457,6 +449,9 @@ const QuickEntryModal = memo(({
   const [paymentMode, setPaymentMode] = useState<'cash' | 'upi'>('cash');
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+
+  // Use animated close if injected by wrapper, fallback to plain onClose
+  const doClose = __onAnimatedClose ?? onClose;
 
   useEffect(() => {
     if (visible) {
@@ -497,14 +492,14 @@ const QuickEntryModal = memo(({
       <Toast visible={showToast} message={toastMsg} onHide={() => setShowToast(false)} />
 
       <View style={[styles.liveBillingHeader, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={onClose} style={styles.lbBackBtn}>
+        <TouchableOpacity onPress={doClose} style={styles.lbBackBtn}>
           <Ionicons name="arrow-back" size={22} color="#333" />
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 10 }}>
           <Text style={styles.liveBillingTitle}>Quick Bill</Text>
           <Text style={styles.liveBillingSub}>Add name and amount quickly</Text>
         </View>
-        <TouchableOpacity onPress={onClose} style={[styles.lbCloseBtn, { backgroundColor: `${theme.colors.primary}20` }]}>
+        <TouchableOpacity onPress={doClose} style={[styles.lbCloseBtn, { backgroundColor: `${theme.colors.primary}20` }]}>
           <Ionicons name="close" size={20} color={theme.colors.primary} />
         </TouchableOpacity>
       </View>
@@ -655,9 +650,17 @@ const ReviewBillModal = memo(({
             </View>
 
             {/* Customer info */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-              <View style={{ width: 50, height: 50, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ fontSize: 18, fontWeight: '900', color: '#fff' }}>{initials}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
+              <View style={{ alignItems: 'center', gap: 8 }}>
+                <View style={{ width: 50, height: 50, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ fontSize: 18, fontWeight: '900', color: '#fff' }}>{initials}</Text>
+                </View>
+                {paymentMode ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, gap: 4, backgroundColor: paymentMode === 'cash' ? 'rgba(16,185,129,0.35)' : 'rgba(139,92,246,0.35)' }}>
+                    <Ionicons name={paymentMode === 'cash' ? 'cash-outline' : 'phone-portrait-outline'} size={11} color="#fff" />
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800', textTransform: 'uppercase' }}>{paymentMode}</Text>
+                  </View>
+                ) : null}
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 18, fontWeight: '900', color: '#fff' }}>{customerName || 'Walk-in Customer'}</Text>
@@ -883,24 +886,32 @@ const BillDetailModal = memo(({
             </View>
 
             {/* Customer info */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-              <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ fontSize: 20, fontWeight: '900', color: '#fff' }}>{initials}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
+              <View style={{ width: 52, alignItems: 'center', gap: 8 }}>
+                <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ fontSize: 20, fontWeight: '900', color: '#fff' }}>{initials}</Text>
+                </View>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 19, fontWeight: '900', color: '#fff' }}>{bill.customerName || 'Walk-in Customer'}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
-                  {bill.phone ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Ionicons name="call-outline" size={12} color="rgba(255,255,255,0.75)" />
-                      <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>{bill.phone}</Text>
-                    </View>
-                  ) : null}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.75)" />
-                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>{bill.time} · {bill.date}</Text>
+                {bill.phone ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                    <Ionicons name="call-outline" size={12} color="rgba(255,255,255,0.75)" />
+                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>{bill.phone}</Text>
                   </View>
+                ) : null}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                  <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.75)" />
+                  <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>{bill.time} · {bill.date}</Text>
                 </View>
+              </View>
+              <View style={{ alignItems: 'center', gap: 4 }}>
+                {payMode ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3, gap: 3, backgroundColor: payMode === 'cash' ? 'rgba(16,185,129,0.35)' : 'rgba(139,92,246,0.35)', maxWidth: 60 }}>
+                    <Ionicons name={payMode === 'cash' ? 'cash-outline' : 'phone-portrait-outline'} size={10} color="#fff" />
+                    <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800', textTransform: 'uppercase' }}>{payMode}</Text>
+                  </View>
+                ) : null}
               </View>
             </View>
 
@@ -915,12 +926,6 @@ const BillDetailModal = memo(({
                   <Ionicons name="cube-outline" size={13} color="#fff" />
                   <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{itemCount} item{itemCount !== 1 ? 's' : ''}</Text>
                 </View>
-                {payMode ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5, gap: 5, backgroundColor: payMode === 'cash' ? 'rgba(16,185,129,0.35)' : 'rgba(139,92,246,0.35)' }}>
-                    <Ionicons name={payMode === 'cash' ? 'cash-outline' : 'phone-portrait-outline'} size={13} color="#fff" />
-                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', textTransform: 'uppercase' }}>{payMode}</Text>
-                  </View>
-                ) : null}
               </View>
             </View>
           </LinearGradient>
@@ -1732,10 +1737,6 @@ const ViewAllBillsModal = memo(({
             <Ionicons name="arrow-back" size={22} color="#333" />
           </TouchableOpacity>
           <Text style={{ fontSize: 18, fontWeight: '800', color: '#111', flex: 1 }}>All Bills</Text>
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600' }}>{billsDateFilter === 'All' ? 'All time' : billsDateFilter}</Text>
-            <Text style={{ fontSize: 15, fontWeight: '800', color: theme.colors.primary }}>₹{filteredTotal.toLocaleString('en-IN')}</Text>
-          </View>
         </View>
 
         <View style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingHorizontal: 16, paddingVertical: 10 }}>
@@ -1849,12 +1850,20 @@ const ViewAllBillsModal = memo(({
               style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#E5E7EB' }}
               onPress={() => openBillDetail(bill, filteredBills.length - index)}
             >
-              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '800', color: theme.colors.primary }}>
-                  {(bill.customerName || 'W').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
-                </Text>
+              <View style={{ alignItems: 'center', gap: 6 }}>
+                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ fontSize: 14, fontWeight: '800', color: theme.colors.primary }}>
+                    {(bill.customerName || 'W').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
+                  </Text>
+                </View>
+                {bill.paymentMode ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2, gap: 2, backgroundColor: bill.paymentMode === 'cash' ? 'rgba(16,185,129,0.35)' : 'rgba(139,92,246,0.35)', maxWidth: 52 }}>
+                    <Ionicons name={bill.paymentMode === 'cash' ? 'cash-outline' : 'phone-portrait-outline'} size={9} color="#fff" />
+                    <Text style={{ color: '#fff', fontSize: 8, fontWeight: '800', textTransform: 'uppercase' }}>{bill.paymentMode}</Text>
+                  </View>
+                ) : null}
               </View>
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>{bill.customerName || 'Walk-in Customer'}</Text>
                 <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '500', marginTop: 2 }}>{bill.time} · {bill.date}</Text>
               </View>
@@ -2541,22 +2550,22 @@ const loadData = useCallback(async () => {
                 style={[styles.billCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
                 onPress={() => openBillDetail(bill, salesLog.length - index)}
               >
-                <View style={[styles.billAvatarBox, { backgroundColor: `${theme.colors.primary}20` }]}>
-                  <Text style={[styles.billAvatarText, { color: theme.colors.primary }]}>
-                    {bill.customerName.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)}
-                  </Text>
+                <View style={{ alignItems: 'center', gap: 6 }}>
+                  <View style={[styles.billAvatarBox, { backgroundColor: `${theme.colors.primary}20` }]}>
+                    <Text style={[styles.billAvatarText, { color: theme.colors.primary }]}>
+                      {bill.customerName.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)}
+                    </Text>
+                  </View>
+                  {bill.paymentMode && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 6, backgroundColor: bill.paymentMode === 'cash' ? 'rgba(16,185,129,0.35)' : 'rgba(139,92,246,0.35)', maxWidth: 52 }}>
+                      <Ionicons name={bill.paymentMode === 'cash' ? 'cash-outline' : 'phone-portrait-outline'} size={9} color="#fff" />
+                      <Text style={{ fontSize: 8, fontWeight: '800', color: '#fff', textTransform: 'uppercase' }}>{bill.paymentMode}</Text>
+                    </View>
+                  )}
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={[styles.billCustomer, { color: theme.colors.textPrimary }]}>{bill.customerName}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                    <Text style={styles.billTime}>{bill.time} · {bill.date}</Text>
-                    {bill.paymentMode && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: bill.paymentMode === 'cash' ? '#ECFDF5' : '#F5F3FF' }}>
-                        <Ionicons name={bill.paymentMode === 'cash' ? 'cash-outline' : 'phone-portrait-outline'} size={10} color={bill.paymentMode === 'cash' ? '#10B981' : '#8B5CF6'} />
-                        <Text style={{ fontSize: 10, fontWeight: '800', color: bill.paymentMode === 'cash' ? '#10B981' : '#8B5CF6', textTransform: 'uppercase' }}>{bill.paymentMode}</Text>
-                      </View>
-                    )}
-                  </View>
+                  <Text style={[styles.billTime, { marginTop: 4 }]}>{bill.time} · {bill.date}</Text>
                 </View>
                 <View style={styles.billRight}>
                   <Text style={[styles.billAmount, { color: theme.colors.primary }]}>₹{bill.total.toLocaleString('en-IN')}</Text>

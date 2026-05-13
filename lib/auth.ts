@@ -80,17 +80,7 @@ async function getProfileCompleteness(
     .eq('id', userId)
     .maybeSingle();
 
-  // Log any errors for debugging (including RLS errors)
-  if (error) {
-    console.warn('⚠️ Profile query error:', error.message);
-  }
-
-  // No data = profile doesn't exist (whether due to error or not found)
-  if (!data) {
-    console.log('📋 No profile found for user:', userId);
-    return { exists: false, isComplete: false };
-  }
-
+  if (error || !data) return { exists: false, isComplete: false };
   return {
     exists: true,
     isComplete: !!(data.business_name && data.city),
@@ -115,62 +105,55 @@ async function getProfileCompleteness(
 export async function signInWithGoogle(mode: AuthMode): Promise<AuthResult> {
   const { idToken, userInfo } = await getGoogleCredential();
   console.log('📱 Got Google credential for:', userInfo.email);
-  console.log('🔄 Auth mode:', mode);
 
   // Suppress the SIGNED_IN event that signInWithIdToken is about to fire
   setSuppressAuthEvent(true);
-  console.log('🔒 Suppressing auth events');
 
   try {
     const { userId, user, session } = await authenticateWithSupabase(idToken);
     console.log('✅ Supabase auth done | uid:', userId);
 
     const { exists: profileExists, isComplete } = await getProfileCompleteness(userId);
-    console.log('📋 Profile query result | exists:', profileExists, '| complete:', isComplete);
+    console.log('📋 Profile exists:', profileExists, '| complete:', isComplete);
 
     // ── LOGIN ──────────────────────────────────────────────────────────────
     if (mode === 'login') {
-      console.log('🔐 LOGIN MODE activated');
-      // For login, we check if profile is COMPLETE, not just if it exists
-      // A new account may have a profile row auto-created with nulls
-      if (!isComplete) {
-        console.log('❌ INCOMPLETE PROFILE → treating as new account, no login allowed');
+      if (!profileExists) {
         await supabase.auth.signOut();
         throw new Error('NO_ACCOUNT_FOUND');
       }
-      // Valid login — profile exists and is complete
-      console.log('✅ LOGIN MODE | Profile complete, unsuppressing auth event');
+      // Valid login — unsuppress so _layout.tsx can now handle the session
       setSuppressAuthEvent(false);
-      return { user, session, isNewUser: false, hasCompleteProfile: true };
+      return { user, session, isNewUser: false, hasCompleteProfile: isComplete };
     }
 
     // ── SIGNUP ─────────────────────────────────────────────────────────────
-    console.log('🆕 SIGNUP MODE activated');
     if (profileExists && isComplete) {
-      console.log('⚠️  Profile exists and complete → throwing ACCOUNT_EXISTS error');
       await supabase.auth.signOut();
       throw new Error('ACCOUNT_EXISTS');
     }
 
-    console.log('📝 Creating/updating profile row...');
     // New or resumed incomplete signup — create/update profile row
-    const { error: upsertError } = await supabase.from('profiles').upsert({
-      id: userId,
-      email: user.email || userInfo.email,
-    });
+    console.log('🔄 Upserting profile for user:', userId);
+    const { data: upsertData, error: upsertError } = await supabase
+      .from('profiles')
+      .upsert({
+        id: userId,
+        email: user.email || userInfo.email,
+      })
+      .select();
 
     if (upsertError) {
-      console.error('❌ Upsert error:', upsertError);
-      throw new Error('Failed to create profile: ' + upsertError.message);
+      console.error('❌ Profile upsert failed:', upsertError);
+      throw new Error(`Profile save error: ${upsertError.message}`);
     }
+    console.log('✅ Profile upserted successfully:', upsertData);
 
-    console.log('✅ Profile upserted successfully, unsuppressing auth event');
     // Unsuppress so _layout.tsx reacts to the session and routes to complete-profile
     setSuppressAuthEvent(false);
     return { user, session, isNewUser: !profileExists, hasCompleteProfile: false };
 
   } catch (err) {
-    console.error('💥 Error in signInWithGoogle:', err);
     // Always unsuppress on any error path so the listener isn't stuck
     setSuppressAuthEvent(false);
     throw err;
