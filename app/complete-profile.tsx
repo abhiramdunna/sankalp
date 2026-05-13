@@ -18,6 +18,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import FeatureShowcase from '@/components/FeatureShowcase';
 
 export default function CompleteProfile() {
   const router = useRouter();
@@ -27,6 +28,7 @@ export default function CompleteProfile() {
   const [city, setCity] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
+  const [showFeatureShowcase, setShowFeatureShowcase] = useState(false);
 
   useEffect(() => {
     if (!user?.id) {
@@ -83,21 +85,41 @@ export default function CompleteProfile() {
 
       console.log('✅ Profile saved:', data);
 
-      // Update store BEFORE navigation
-      updateProfileStatus(true);
-      setIsNewSignup(false);
-
-      // Small delay to ensure store updates propagate
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      console.log('🚀 Navigating to home...');
-      router.replace('/(tabs)/home');
+      // DON'T update profile status yet - do it after showcase completes
+      // Just show the showcase first
+      setShowFeatureShowcase(true);
+      setIsLoading(false);
     } catch (err: any) {
       console.error('❌ Exception:', err);
       Alert.alert('Error', err.message || 'Something went wrong');
       setIsLoading(false);
     }
   };
+
+  if (showFeatureShowcase) {
+    return (
+      <FeatureShowcase
+        onComplete={() => {
+          console.log('🚀 Feature showcase complete → updating profile status and navigating...');
+          // Now update profile status AFTER showcase completes
+          updateProfileStatus(true);
+          setIsNewSignup(false);
+          router.replace('/(tabs)/home');
+        }}
+      />
+    );
+  }
+
+  if (showFeatureShowcase) {
+    return (
+      <FeatureShowcase
+        onComplete={() => {
+          console.log('🚀 Feature showcase complete → navigating to home...');
+          router.replace('/(tabs)/home');
+        }}
+      />
+    );
+  }
 
   if (isChecking) {
     return (

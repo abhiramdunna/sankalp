@@ -2423,7 +2423,27 @@ const loadData = useCallback(async () => {
 
       <ReviewBillModal
         visible={billReviewVisible}
-        onClose={() => { setBillReviewVisible(false); setLiveBillingVisible(true); }}
+        onClose={() => { 
+          // Update editingSession with current reviewData before opening editor
+          if (editingSession) {
+            setEditingSession({ 
+              ...editingSession, 
+              customerName: reviewData.customerName, 
+              phone: reviewData.customerPhone, 
+              items: reviewData.items 
+            });
+          } else {
+            setEditingSession({
+              id: Date.now(),
+              customerName: reviewData.customerName,
+              phone: reviewData.customerPhone,
+              items: reviewData.items,
+              npVal: '0'
+            });
+          }
+          setBillReviewVisible(false); 
+          setLiveBillingVisible(true); 
+        }}
         onConfirm={handleConfirmBill}
         customerName={reviewData.customerName}
         customerPhone={reviewData.customerPhone}

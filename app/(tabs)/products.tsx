@@ -21,6 +21,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+// Predefined Units
+const UNITS = ['kg', 'litre', 'piece', 'plate', 'box', 'pack', 'dozen', 'bundle', 'meter'];
+
 // Types
 interface Product {
   id: number;
@@ -81,6 +84,8 @@ const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [newProductUnit, setNewProductUnit] = useState('');
   const [addProductVisible, setAddProductVisible] = useState(false);
+  const [unitPickerVisible, setUnitPickerVisible] = useState(false);
+  const [editUnitPickerVisible, setEditUnitPickerVisible] = useState(false);
   const [customerToggle, setCustomerToggle] = useState(false);
 
   // Edit product state
@@ -497,19 +502,19 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
                     </View>
                   </View>
                   <View>
-                    <Text style={styles.inputLabel}>Unit <Text style={{ color: '#9CA3AF', fontWeight: '500', textTransform: 'none' }}>(optional — e.g. per kg, per plate)</Text></Text>
-                    <View style={styles.lbInputBox}>
-                      <Ionicons name="cube-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
-                      <TextInput
-                        style={styles.lbInput}
-                        placeholder="e.g. per kg, per litre, idly plate"
-                        value={newProductUnit}
-                        onChangeText={setNewProductUnit}
-                        placeholderTextColor="#999"
-                        autoCorrect={false}
-                        returnKeyType="done"
-                      />
-                    </View>
+                    <Text style={styles.inputLabel}>Unit <Text style={{ color: '#9CA3AF', fontWeight: '500', textTransform: 'none' }}>(optional)</Text></Text>
+                    <TouchableOpacity 
+                      style={[styles.lbInputBox, { justifyContent: 'space-between' }]}
+                      onPress={() => setUnitPickerVisible(true)}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                        <Ionicons name="cube-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+                        <Text style={[{ flex: 1, fontSize: 14, fontWeight: '600', color: newProductUnit ? '#333' : '#999' }]}>
+                          {newProductUnit ? `per ${newProductUnit}` : 'Select unit'}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-down" size={16} color="#bbb" />
+                    </TouchableOpacity>
                   </View>
                   <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.colors.primary }]} onPress={addProduct}>
                     <Text style={styles.saveBtnText}>Save Product ✓</Text>
@@ -578,19 +583,19 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
                     </View>
                   </View>
                   <View>
-                    <Text style={styles.inputLabel}>Unit <Text style={{ color: '#9CA3AF', fontWeight: '500', textTransform: 'none' }}>(optional — e.g. per kg, per plate)</Text></Text>
-                    <View style={styles.lbInputBox}>
-                      <Ionicons name="cube-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
-                      <TextInput
-                        style={styles.lbInput}
-                        placeholder="e.g. per kg, per litre, idly plate"
-                        value={editUnit}
-                        onChangeText={setEditUnit}
-                        placeholderTextColor="#999"
-                        autoCorrect={false}
-                        returnKeyType="done"
-                      />
-                    </View>
+                    <Text style={styles.inputLabel}>Unit <Text style={{ color: '#9CA3AF', fontWeight: '500', textTransform: 'none' }}>(optional)</Text></Text>
+                    <TouchableOpacity 
+                      style={[styles.lbInputBox, { justifyContent: 'space-between' }]}
+                      onPress={() => setEditUnitPickerVisible(true)}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                        <Ionicons name="cube-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+                        <Text style={[{ flex: 1, fontSize: 14, fontWeight: '600', color: editUnit ? '#333' : '#999' }]}>
+                          {editUnit ? `per ${editUnit}` : 'Select unit'}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-down" size={16} color="#bbb" />
+                    </TouchableOpacity>
                   </View>
                   <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.colors.primary }]} onPress={saveEditedProduct}>
                     <Text style={styles.saveBtnText}>Save Changes ✓</Text>
@@ -810,6 +815,98 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
     {renderAddProductModal()}
     {renderEditProductModal()}
 
+    {/* Unit Picker Modal for Add Product */}
+    <Modal
+      animationType="slide"
+      transparent
+      visible={unitPickerVisible}
+      onRequestClose={() => setUnitPickerVisible(false)}
+    >
+      <TouchableWithoutFeedback onPress={() => setUnitPickerVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.pickerModal, { backgroundColor: theme.colors.surface }]}>
+            <View style={styles.pickerModalHeader}>
+              <Text style={styles.pickerModalTitle}>Select Unit</Text>
+              <TouchableOpacity onPress={() => setUnitPickerVisible(false)}>
+                <Text style={styles.pickerClose}>×</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {UNITS.map((unit) => (
+                <TouchableOpacity
+                  key={unit}
+                  style={[
+                    styles.pickerOption,
+                    newProductUnit === unit && { backgroundColor: theme.colors.primaryLight }
+                  ]}
+                  onPress={() => {
+                    setNewProductUnit(unit);
+                    setUnitPickerVisible(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.pickerOptionText,
+                    newProductUnit === unit && { color: theme.colors.primary, fontWeight: '700' }
+                  ]}>
+                    per {unit}
+                  </Text>
+                  {newProductUnit === unit && (
+                    <Ionicons name="checkmark" size={20} color={theme.colors.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+
+    {/* Unit Picker Modal for Edit Product */}
+    <Modal
+      animationType="slide"
+      transparent
+      visible={editUnitPickerVisible}
+      onRequestClose={() => setEditUnitPickerVisible(false)}
+    >
+      <TouchableWithoutFeedback onPress={() => setEditUnitPickerVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.pickerModal, { backgroundColor: theme.colors.surface }]}>
+            <View style={styles.pickerModalHeader}>
+              <Text style={styles.pickerModalTitle}>Select Unit</Text>
+              <TouchableOpacity onPress={() => setEditUnitPickerVisible(false)}>
+                <Text style={styles.pickerClose}>×</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {UNITS.map((unit) => (
+                <TouchableOpacity
+                  key={unit}
+                  style={[
+                    styles.pickerOption,
+                    editUnit === unit && { backgroundColor: theme.colors.primaryLight }
+                  ]}
+                  onPress={() => {
+                    setEditUnit(unit);
+                    setEditUnitPickerVisible(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.pickerOptionText,
+                    editUnit === unit && { color: theme.colors.primary, fontWeight: '700' }
+                  ]}>
+                    per {unit}
+                  </Text>
+                  {editUnit === unit && (
+                    <Ionicons name="checkmark" size={20} color={theme.colors.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+
     <LinearGradient
       colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
       start={{ x: 0, y: 0 }}
@@ -902,7 +999,7 @@ await DatabaseService.addSaleLog(saleRecord, existingSales);
                   {item.name}
                 </Text>
                 <Text style={[styles.productPrice, { color: theme.colors.primary }]}>
-                  ₹{item.price}{item.unit ? <Text style={{ fontSize: 11, fontWeight: '600', color: '#9CA3AF' }}>{`  ${item.unit}`}</Text> : null}
+                  ₹{item.price}{item.unit ? <Text style={{ fontSize: 11, fontWeight: '600', color: '#9CA3AF' }}>{`  per ${item.unit}`}</Text> : null}
                 </Text>
               </View>
 
@@ -1131,4 +1228,11 @@ const makeStyles = (theme: AppTheme) => StyleSheet.create({
   lbInput: { flex: 1, fontSize: 14, fontWeight: '600', color: '#333', height: 50 },
   saveBtn: { backgroundColor: theme.colors.primary, padding: 12, borderRadius: 12, alignItems: 'center' },
   saveBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+
+  // ── Unit Picker Modal ───────────────────────────────────────────────────────
+  pickerModal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%' },
+  pickerModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  pickerModalTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
+  pickerOption: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 0.5, borderBottomColor: '#F1F5F9' },
+  pickerOptionText: { fontSize: 14, fontWeight: '600', color: '#0F172A' },
 });
