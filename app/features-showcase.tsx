@@ -1,203 +1,161 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   StyleSheet,
   Animated,
   Dimensions,
   SafeAreaView,
   FlatList,
+  StatusBar,
+  BackHandler,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '@/lib/store';
-import { AppTheme } from '@/constants/theme';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 interface Feature {
   id: string;
   title: string;
-  description: string;
-  icon: string;
-  gradient: [string, string];
-  details: string[];
+  emoji: string;
+  tagline: string;
+  bullets: string[];
+  accentColor: string;
+  bgLight: string;
+  badge?: string;
 }
 
 const FEATURES: Feature[] = [
   {
-    id: 'suppliers',
-    title: 'Manage Suppliers',
-    description: 'Organize all your suppliers in one place with detailed profiles and contact information.',
-    icon: 'business',
-    gradient: ['#667EEA', '#764BA2'],
-    details: [
-      'Add and organize suppliers',
-      'Track supplier categories',
-      'Quick access to contacts',
-      'Custom notes and details',
-    ],
-  },
-  {
-    id: 'bills',
-    title: 'Track Bills',
-    description: 'Keep track of all bills with amounts, dates, and payment status at a glance.',
-    icon: 'document-text',
-    gradient: ['#F093FB', '#F5576C'],
-    details: [
-      'Record bill amounts',
-      'Set bill dates',
-      'Add items to bills',
-      'Track paid vs pending',
-    ],
+    id: 'billing',
+    title: 'Quick Billing',
+    emoji: '⚡',
+    tagline: 'Bill your customers in under a minute',
+    bullets: ['Pick products from your list', 'Auto-calculates totals', 'Save with customer details'],
+    accentColor: '#7C3AED',
+    bgLight: '#F5F3FF',
+    badge: 'Start here',
   },
   {
     id: 'payments',
-    title: 'Record Payments',
-    description: 'Easily record and track payments with real-time updates to pending amounts.',
-    icon: 'wallet',
-    gradient: ['#4FD0E7', '#326FA8'],
-    details: [
-      'Quick payment entry',
-      'Real-time balance updates',
-      'Payment history',
-      'Transaction records',
-    ],
+    title: 'Payment Recording',
+    emoji: '💳',
+    tagline: 'Track every payment, always up to date',
+    bullets: ['Log supplier payments instantly', 'Balance updates automatically', 'Date & time stamped'],
+    accentColor: '#0891B2',
+    bgLight: '#ECFEFF',
+    badge: 'Most used',
+  },
+  {
+    id: 'suppliers',
+    title: 'Supplier Management',
+    emoji: '🏢',
+    tagline: 'All your suppliers in one place',
+    bullets: ['Add name, phone & category', 'Browse & search easily', 'Edit details anytime'],
+    accentColor: '#4F46E5',
+    bgLight: '#EEF2FF',
+  },
+  {
+    id: 'bills',
+    title: 'Bill Tracking',
+    emoji: '📄',
+    tagline: 'Never lose track of what you owe',
+    bullets: ['Record bills with items & prices', 'See paid vs pending at a glance', 'Linked to each supplier'],
+    accentColor: '#DB2777',
+    bgLight: '#FDF2F8',
   },
   {
     id: 'analytics',
-    title: 'View Analytics',
-    description: 'Get insights into your spending patterns and supplier payment history.',
-    icon: 'bar-chart',
-    gradient: ['#43E97B', '#38F9D7'],
-    details: [
-      'Total spending overview',
-      'Payment trends',
-      'Category breakdowns',
-      'Historical data',
-    ],
+    title: 'Reports & Insights',
+    emoji: '📊',
+    tagline: 'Understand your business at a glance',
+    bullets: ['Total spending overview', 'Monthly payment trends', 'Filter by date or supplier'],
+    accentColor: '#059669',
+    bgLight: '#ECFDF5',
   },
   {
     id: 'history',
     title: 'Transaction History',
-    description: 'Complete audit trail of all bills and payments with date filters.',
-    icon: 'time',
-    gradient: ['#FA709A', '#FEE140'],
-    details: [
-      'Date-based filtering',
-      'Full transaction logs',
-      'Search capabilities',
-      'Export options',
-    ],
+    emoji: '🕐',
+    tagline: 'Every record, always available',
+    bullets: ['Full log of bills & payments', 'Search any transaction', 'Export & share records'],
+    accentColor: '#D97706',
+    bgLight: '#FFFBEB',
   },
 ];
 
-const AnimatedFeatureCard: React.FC<{
-  feature: Feature;
-  scrollX: Animated.Value;
-  index: number;
-}> = ({ feature, scrollX, index }) => {
-  const { theme } = useThemeStore();
-  const translateY = useRef(new Animated.Value(50)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+// ─── Dot Indicator ─────────────────────────────────────────────────────────────
+const DotIndicator: React.FC<{ total: number; current: number; accentColor: string }> = ({
+  total, current, accentColor,
+}) => (
+  <View style={dotStyles.row}>
+    {Array.from({ length: total }).map((_, i) => (
+      <View
+        key={i}
+        style={[
+          dotStyles.dot,
+          {
+            backgroundColor: i === current ? accentColor : '#D1D5DB',
+            width: i === current ? 20 : 6,
+          },
+        ]}
+      />
+    ))}
+  </View>
+);
 
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: 600,
-        delay: index * 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 600,
-        delay: index * 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
+const dotStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
+  dot: { height: 6, borderRadius: 3 },
+});
 
+// ─── Feature Card ──────────────────────────────────────────────────────────────
+const FeatureCard: React.FC<{ feature: Feature; index: number; scrollX: Animated.Value }> = ({
+  feature, index, scrollX,
+}) => {
   const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
+
   const scale = scrollX.interpolate({
     inputRange,
-    outputRange: [0.8, 1, 0.8],
-    extrapolate: 'clamp',
-  });
-  const opacity$ = scrollX.interpolate({
-    inputRange,
-    outputRange: [0.5, 1, 0.5],
+    outputRange: [0.94, 1, 0.94],
     extrapolate: 'clamp',
   });
 
   return (
-    <Animated.View
-      style={{
-        width,
-        paddingHorizontal: 20,
-        transform: [{ scale }, { translateY }],
-        opacity: opacity$,
-      }}
-    >
-      <View
-        style={[
-          styles.featureCard,
-          {
-            backgroundColor: '#fff',
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            borderBottomLeftRadius: 28,
-            borderBottomRightRadius: 28,
-            overflow: 'hidden',
-          },
-        ]}
-      >
-        {/* Gradient Header */}
-        <LinearGradient
-          colors={feature.gradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.cardHeader}
-        >
-          <View
-            style={{
-              width: 70,
-              height: 70,
-              borderRadius: 35,
-              backgroundColor: 'rgba(255, 255, 255, 0.25)',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Ionicons name={feature.icon as any} size={40} color="#fff" />
+    <Animated.View style={{ width, paddingHorizontal: 20, transform: [{ scale }] }}>
+      <View style={cardStyles.card}>
+        {/* Top color strip */}
+        <View style={[cardStyles.strip, { backgroundColor: feature.accentColor }]} />
+
+        <View style={cardStyles.body}>
+          {/* Emoji icon + badge */}
+          <View style={cardStyles.iconRow}>
+            <View style={[cardStyles.emojiBox, { backgroundColor: feature.bgLight }]}>
+              <Text style={cardStyles.emoji}>{feature.emoji}</Text>
+            </View>
+            {feature.badge && (
+              <View style={[cardStyles.badge, { backgroundColor: feature.bgLight }]}>
+                <Text style={[cardStyles.badgeText, { color: feature.accentColor }]}>
+                  {feature.badge}
+                </Text>
+              </View>
+            )}
           </View>
-        </LinearGradient>
 
-        {/* Content */}
-        <View style={styles.cardContent}>
-          <Text style={[styles.featureTitle, { color: '#1F2937' }]}>{feature.title}</Text>
-          <Text style={[styles.featureDescription, { color: '#6B7280', marginVertical: 12 }]}>
-            {feature.description}
-          </Text>
+          {/* Title & tagline */}
+          <Text style={cardStyles.title}>{feature.title}</Text>
+          <Text style={cardStyles.tagline}>{feature.tagline}</Text>
 
-          {/* Details List */}
-          <View style={{ marginTop: 16 }}>
-            {feature.details.map((detail, idx) => (
-              <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-                <View
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: 3,
-                    backgroundColor: theme.colors.primary,
-                    marginRight: 10,
-                  }}
-                />
-                <Text style={{ fontSize: 13, color: '#4B5563', fontWeight: '500' }}>{detail}</Text>
+          {/* Bullet points */}
+          <View style={cardStyles.bullets}>
+            {feature.bullets.map((b, i) => (
+              <View key={i} style={cardStyles.bulletRow}>
+                <View style={[cardStyles.dot, { backgroundColor: feature.accentColor }]} />
+                <Text style={cardStyles.bulletText}>{b}</Text>
               </View>
             ))}
           </View>
@@ -207,44 +165,116 @@ const AnimatedFeatureCard: React.FC<{
   );
 };
 
-const FeatureShowcase = () => {
+const cardStyles = StyleSheet.create({
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 20,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  strip: { height: 4, width: '100%' },
+  body: { padding: 24 },
+  iconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  emojiBox: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emoji: { fontSize: 26 },
+  badge: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  badgeText: { fontSize: 12, fontWeight: '700' },
+  title: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.4,
+    marginBottom: 6,
+  },
+  tagline: {
+    fontSize: 15,
+    color: '#64748B',
+    fontWeight: '500',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  bullets: { gap: 12 },
+  bulletRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  bulletText: { fontSize: 14, color: '#334155', fontWeight: '500', flex: 1 },
+});
+
+// ─── Main Screen ───────────────────────────────────────────────────────────────
+const FeatureShowcase = ({ onComplete }: { onComplete?: () => void }) => {
   const insets = useSafeAreaInsets();
-  const { theme } = useThemeStore();
   const router = useRouter();
   const scrollX = useRef(new Animated.Value(0)).current;
+  const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  React.useEffect(() => {
+    const onBackPress = () => true;
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backHandler.remove();
+  }, []);
 
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
     {
       useNativeDriver: false,
       listener: (event: any) => {
-        const contentOffsetX = event.nativeEvent.contentOffset.x;
-        const currentIndex = Math.round(contentOffsetX / width);
-        setCurrentIndex(currentIndex);
+        const x = event.nativeEvent.contentOffset.x;
+        setCurrentIndex(Math.round(x / width));
       },
     }
   );
 
-  const handleGetStarted = () => {
-    router.replace('/(tabs)/suppliers');
+  const scrollTo = (index: number) => {
+    flatListRef.current?.scrollToIndex({ index, animated: true });
+    setCurrentIndex(index);
   };
 
+  const goNext = () => scrollTo(currentIndex + 1);
+  const finish = () => {
+    if (onComplete) onComplete();
+    else router.replace('/(tabs)/suppliers');
+  };
+
+  const currentFeature = FEATURES[currentIndex];
+  const isLast = currentIndex === FEATURES.length - 1;
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
+    <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+
       {/* Header */}
-      <View style={[styles.header, { paddingTop: 20 }]}>
-        <Text style={[styles.headerTitle, { color: '#0F172A' }]}>Welcome to Sankalp</Text>
-        <Text style={[styles.headerSubtitle, { color: '#64748B' }]}>
-          Manage your suppliers & payments effortlessly
-        </Text>
+      <View style={styles.header}>
+        <Text style={styles.headline}>What you can do</Text>
+        <Text style={styles.sub}>Swipe to explore — takes 30 seconds</Text>
       </View>
 
-      {/* Feature Carousel */}
+      {/* Carousel */}
       <Animated.FlatList
+        ref={flatListRef}
         data={FEATURES}
         renderItem={({ item, index }) => (
-          <AnimatedFeatureCard feature={item} scrollX={scrollX} index={index} />
+          <FeatureCard feature={item} index={index} scrollX={scrollX} />
         )}
         keyExtractor={(item) => item.id}
         horizontal
@@ -254,47 +284,42 @@ const FeatureShowcase = () => {
         onScroll={handleScroll}
         snapToInterval={width}
         decelerationRate="fast"
-        style={{ flex: 1, marginVertical: 20 }}
+        style={{ flex: 1 }}
+        getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
       />
 
-      {/* Dots Indicator */}
-      <View style={[styles.dotsContainer, { marginBottom: 20 }]}>
-        {FEATURES.map((_, index) => (
-          <Animated.View
-            key={index}
-            style={[
-              styles.dot,
-              {
-                backgroundColor: currentIndex === index ? theme.colors.primary : '#D1D5DB',
-                width: currentIndex === index ? 28 : 8,
-              },
-            ]}
-          />
-        ))}
-      </View>
+      {/* Footer */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+        <DotIndicator
+          total={FEATURES.length}
+          current={currentIndex}
+          accentColor={currentFeature.accentColor}
+        />
 
-      {/* Counter */}
-      <Text style={[styles.counter, { color: '#64748B' }]}>
-        {currentIndex + 1} of {FEATURES.length}
-      </Text>
-
-      {/* Action Buttons */}
-      <View
-        style={[
-          styles.buttonContainer,
-          { paddingBottom: insets.bottom + 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E5E7EB' },
-        ]}
-      >
-        <TouchableOpacity
-          onPress={handleGetStarted}
-          style={[
-            styles.getStartedBtn,
-            { backgroundColor: theme.colors.primary },
-          ]}
-        >
-          <Text style={[styles.getStartedBtnText, { color: '#fff' }]}>Get Started</Text>
-          <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 8 }} />
-        </TouchableOpacity>
+        <View style={styles.btnRow}>
+          {!isLast && (
+            <TouchableOpacity style={styles.skipBtn} onPress={finish} activeOpacity={0.7}>
+              <Text style={styles.skipText}>Skip</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.nextBtn, { backgroundColor: currentFeature.accentColor }]}
+            onPress={isLast ? finish : goNext}
+            activeOpacity={0.85}
+          >
+            {isLast ? (
+              <>
+                <Ionicons name="rocket-outline" size={17} color="#fff" />
+                <Text style={styles.nextText}>Get Started</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.nextText}>Next</Text>
+                <Ionicons name="arrow-forward" size={16} color="#fff" />
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -306,87 +331,67 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   header: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 22,
+    paddingTop: 16,
+    paddingBottom: 18,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    lineHeight: 20,
-  },
-  featureCard: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  cardHeader: {
-    padding: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 180,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-  },
-  cardContent: {
-    padding: 24,
-  },
-  featureTitle: {
+  headline: {
     fontSize: 22,
     fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.4,
     marginBottom: 4,
   },
-  featureDescription: {
-    fontSize: 14,
+  sub: {
+    fontSize: 13,
+    color: '#94A3B8',
     fontWeight: '500',
-    lineHeight: 21,
   },
-  dotsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  dot: {
-    height: 8,
-    borderRadius: 4,
-  },
-  counter: {
-    textAlign: 'center',
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  buttonContainer: {
+  footer: {
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 14,
+    gap: 14,
   },
-  getStartedBtn: {
+  btnRow: {
     flexDirection: 'row',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
+    gap: 10,
+  },
+  skipBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  skipText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  nextBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.12,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 4,
   },
-  getStartedBtnText: {
-    fontSize: 16,
+  nextText: {
+    fontSize: 15,
     fontWeight: '800',
+    color: '#fff',
   },
 });
 

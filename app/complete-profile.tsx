@@ -1,13 +1,14 @@
-// complete-profile.tsx
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  BackHandler,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -18,17 +19,18 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import FeatureShowcase from '@/components/FeatureShowcase';
+import FeatureShowcase from '@/app/features-showcase';
 
 export default function CompleteProfile() {
   const router = useRouter();
-  const { user, clearAuth, updateProfileStatus, setIsNewSignup } = useAuthStore();
+  const { user, clearAuth, updateProfileStatus, setIsNewSignup, isNewSignup } = useAuthStore();
 
   const [businessName, setBusinessName] = useState('');
   const [city, setCity] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
   const [showFeatureShowcase, setShowFeatureShowcase] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!user?.id) {
@@ -36,10 +38,20 @@ export default function CompleteProfile() {
       router.replace('/login');
       return;
     }
-
     console.log('✅ User available:', user.id);
     setIsChecking(false);
   }, [user]);
+
+  // Fade animation when showing feature showcase
+  useEffect(() => {
+    if (showFeatureShowcase) {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [showFeatureShowcase, fadeAnim]);
 
   const handleContinue = async () => {
     if (!businessName.trim() || !city.trim()) {
@@ -65,7 +77,7 @@ export default function CompleteProfile() {
       };
 
       console.log('💾 Saving profile:', JSON.stringify(payload));
-      
+
       const { data, error } = await supabase
         .from('profiles')
         .upsert(payload)
@@ -85,9 +97,16 @@ export default function CompleteProfile() {
 
       console.log('✅ Profile saved:', data);
 
-      // DON'T update profile status yet - do it after showcase completes
-      // Just show the showcase first
-      setShowFeatureShowcase(true);
+      // Show feature showcase only for new signups
+      if (isNewSignup) {
+        console.log('🎬 New signup → showing feature showcase');
+        setShowFeatureShowcase(true);
+      } else {
+        // Existing user → go straight to home
+        console.log('✅ Profile complete → navigating to home');
+        updateProfileStatus(true);
+        router.replace('/(tabs)/suppliers');
+      }
       setIsLoading(false);
     } catch (err: any) {
       console.error('❌ Exception:', err);
@@ -96,31 +115,7 @@ export default function CompleteProfile() {
     }
   };
 
-  if (showFeatureShowcase) {
-    return (
-      <FeatureShowcase
-        onComplete={() => {
-          console.log('🚀 Feature showcase complete → updating profile status and navigating...');
-          // Now update profile status AFTER showcase completes
-          updateProfileStatus(true);
-          setIsNewSignup(false);
-          router.replace('/(tabs)/home');
-        }}
-      />
-    );
-  }
-
-  if (showFeatureShowcase) {
-    return (
-      <FeatureShowcase
-        onComplete={() => {
-          console.log('🚀 Feature showcase complete → navigating to home...');
-          router.replace('/(tabs)/home');
-        }}
-      />
-    );
-  }
-
+  // Loading state
   if (isChecking) {
     return (
       <LinearGradient colors={['#4F46E5', '#7C3AED', '#9333EA']} style={styles.container}>
@@ -134,6 +129,23 @@ export default function CompleteProfile() {
     );
   }
 
+  // Feature showcase with smooth fade-in
+  if (showFeatureShowcase) {
+    return (
+      <Animated.View style={[styles.showcaseContainer, { opacity: fadeAnim }]}>
+        <FeatureShowcase
+          onComplete={() => {
+            console.log('✅ Feature showcase complete → updating profile status and navigating to home');
+            updateProfileStatus(true);
+            setIsNewSignup(false);
+            router.replace('/(tabs)/suppliers');
+          }}
+        />
+      </Animated.View>
+    );
+  }
+
+  // Profile form
   return (
     <LinearGradient
       colors={['#4F46E5', '#7C3AED', '#9333EA']}
@@ -224,6 +236,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
   inner: { flex: 1 },
+  showcaseContainer: { flex: 1 },          // ← fade wrapper for feature showcase
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

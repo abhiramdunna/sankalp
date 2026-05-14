@@ -41,7 +41,7 @@ let RAM_SESSIONS: Session[] = [];
 
 // Types
 interface BillItem { name: string; price: number; qty: number; }
-interface Session { id: number; customerName: string; phone: string; items: BillItem[]; }
+interface Session { id: number; customerName: string; phone: string; items: BillItem[]; npVal?: string; }
 interface SaleLog { id: number; total: number; time: string; date: string; items: BillItem[]; customerName: string; phone: string; paymentMode?: 'cash' | 'upi'; }
 
 // Toast Component
@@ -2153,15 +2153,12 @@ const loadData = useCallback(async () => {
               setProfileVisible(false);
               RAM_SESSIONS = [];
               await AsyncStorage.multiRemove(['trialStart', 'isSubscribed', 'supabase_session', 'salesLog']);
-              setUser(null);
-              setSession(null);
-             const { error } = await supabase.auth.signOut();
+              const { error } = await supabase.auth.signOut();
               if (error) console.error('Supabase sign out error:', error);
-              router.replace('/login');
-              } catch (error) {
-                console.error('Logout error:', error);
-                router.replace('/login');
-              }
+              // Don't manually navigate - let the auth state change trigger navigation
+            } catch (error) {
+              console.error('Logout error:', error);
+            }
           },
         },
       ]
