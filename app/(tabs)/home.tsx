@@ -3,9 +3,12 @@
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { SankalpAIModal } from '@/components/SankalpAIModal';
 import { db as DatabaseService } from '@/lib/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
+
 import { useRouter, useFocusEffect } from 'expo-router';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import React, { useCallback, useEffect, useState, memo, useRef, useMemo } from 'react';
@@ -159,6 +162,7 @@ const LiveBillingModal = memo(({
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const modalOpacity = useRef(new Animated.Value(1)).current;
+  
 
   useEffect(() => {
     if (visible) {
@@ -628,67 +632,7 @@ const ReviewBillModal = memo(({
         <View style={{ backgroundColor: '#F9FAFB', borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', maxHeight: SCREEN_HEIGHT * 0.92 }}>
 
           {/* Gradient header */}
-          <LinearGradient
-            colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={{ paddingTop: 20, paddingBottom: 24, paddingHorizontal: 20 }}
-          >
-            {/* Drag handle */}
-            <View style={{ width: 36, height: 4, backgroundColor: 'rgba(255,255,255,0.35)', borderRadius: 4, alignSelf: 'center', marginBottom: 18 }} />
-
-            {/* Top row */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-              <View style={{ backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 }}>
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>REVIEW BILL</Text>
-              </View>
-              <TouchableOpacity
-                onPress={onClose}
-                style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <Ionicons name="close" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Customer info */}
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
-              <View style={{ alignItems: 'center', gap: 8 }}>
-                <View style={{ width: 50, height: 50, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ fontSize: 18, fontWeight: '900', color: '#fff' }}>{initials}</Text>
-                </View>
-                {paymentMode ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, gap: 4, backgroundColor: paymentMode === 'cash' ? 'rgba(16,185,129,0.35)' : 'rgba(139,92,246,0.35)' }}>
-                    <Ionicons name={paymentMode === 'cash' ? 'cash-outline' : 'phone-portrait-outline'} size={11} color="#fff" />
-                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800', textTransform: 'uppercase' }}>{paymentMode}</Text>
-                  </View>
-                ) : null}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 18, fontWeight: '900', color: '#fff' }}>{customerName || 'Walk-in Customer'}</Text>
-                {customerPhone ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                    <Ionicons name="call-outline" size={12} color="rgba(255,255,255,0.75)" />
-                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>{customerPhone}</Text>
-                  </View>
-                ) : null}
-              </View>
-              {/* Item count badge */}
-              <View style={{ backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center' }}>
-                <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>{itemCount}</Text>
-                <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: '700' }}>items</Text>
-              </View>
-            </View>
-
-            {/* Total */}
-            <View style={{ marginTop: 16, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View>
-                <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }}>Bill Total</Text>
-                <Text style={{ fontSize: 30, fontWeight: '900', color: '#fff', letterSpacing: -1, marginTop: 2 }}>₹{total.toLocaleString('en-IN')}</Text>
-              </View>
-              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="receipt-outline" size={22} color="#fff" />
-              </View>
-            </View>
-          </LinearGradient>
+         
 
           {/* Items list */}
           <ScrollView
@@ -1225,6 +1169,8 @@ const PendingPaymentsModal = memo(({
 
   const totalPending = payments.reduce((s, p) => s + p.amount, 0);
   const totalPaid = paidPayments.reduce((s, p) => s + p.amount, 0);
+  
+  
 
   if (!visible) return null;
   return (
@@ -1923,6 +1869,7 @@ export default function HomeScreen() {
   const [pendingPaymentsVisible, setPendingPaymentsVisible] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingTotal, setPendingTotal] = useState(0);
+  const [aiModalVisible, setAiModalVisible] = useState(false); 
 
   const openBillDetail = useCallback((bill: SaleLog, number: number) => {
     setSelectedBill(bill);
@@ -2329,6 +2276,8 @@ const loadData = useCallback(async () => {
   }, [salesLog, billsDateFilter, billsSearchQuery]);
 
   const filteredTotal = useMemo(() => filteredBills.reduce((s, b) => s + b.total, 0), [filteredBills]);
+  const [subscriptionModalVisible, setSubscriptionModalVisible] = useState(false);
+
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -2351,10 +2300,10 @@ const loadData = useCallback(async () => {
           setTimeout(() => openEditProfile(), 300);
         }}
         onLogout={handleLogout}
-        onUpgrade={() => Alert.alert('Upgrade to Pro', 'Sankalp Pro at just ₹29/month.\n\nUnlock unlimited bills, analytics, and priority support.', [
-          { text: 'Maybe Later', style: 'cancel' },
-          { text: 'Subscribe Now', onPress: () => showSuccess('Redirecting to payment...') },
-        ])}
+        onUpgrade={() => {
+          setProfileVisible(false);
+          setTimeout(() => setSubscriptionModalVisible(true), 300);
+        }}
         onPendingPayments={() => {
           setProfileVisible(false);
           setTimeout(() => setPendingPaymentsVisible(true), 300);
@@ -2399,6 +2348,26 @@ const loadData = useCallback(async () => {
         }}
         theme={theme}
       />
+      
+        <SubscriptionModal
+            visible={subscriptionModalVisible}
+            onClose={() => setSubscriptionModalVisible(false)}
+            onSuccess={() => {
+              // Handle successful subscription
+              setIsSubscribed(true);
+              setSubscriptionModalVisible(false);
+              showSuccess('Thank you for subscribing to Sankalp Pro! 🎉');
+            }}
+            userId={user?.id || ''}
+            isTrialActive={isTrialActive()}
+            trialDaysLeft={getTrialDaysLeft()}
+          />
+
+          {/* Sankalp AI Modal */}
+          <SankalpAIModal 
+            visible={aiModalVisible} 
+            onClose={() => setAiModalVisible(false)} 
+          />
 
       <LiveBillingModal
         visible={liveBillingVisible}
@@ -2465,41 +2434,61 @@ const loadData = useCallback(async () => {
       />
 
       {/* Header - Redesigned with compact collection card */}
-      <LinearGradient
-        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.header, { paddingTop: insets.top + 10, paddingBottom: 12 }]}
+      {/* Header - Redesigned with AI button */}
+<LinearGradient
+  colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+  start={{ x: 0, y: 0 }}
+  end={{ x: 1, y: 1 }}
+  style={[styles.header, { paddingTop: insets.top + 10, paddingBottom: 12 }]}
+>
+  <View style={styles.headerTop}>
+    <View>
+      <Text style={styles.shopName}>{bizName || 'Sankalp'}</Text>
+      <Text style={styles.shopDateTime}>{currentDateTime}</Text>
+    </View>
+    <View style={styles.headerRightButtons}>
+      {/* Sankalp AI Button */}
+      <TouchableOpacity 
+        style={styles.aiHeaderBtn} 
+        onPress={() => setAiModalVisible(true)}
       >
-        <View style={styles.headerTop}>
-          <View>
-            <Text style={styles.shopName}>{bizName || 'Sankalp'}</Text>
-            <Text style={styles.shopDateTime}>{currentDateTime}</Text>
-          </View>
-          <TouchableOpacity 
-            style={styles.profileBtn} 
-            onPress={() => setProfileVisible(true)}
-          >
-            <Text style={styles.headerProfileLetter}>
-              {user?.email?.charAt(0).toUpperCase() || 'S'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <LinearGradient
+          colors={['#8B5CF6', '#6366F1']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.aiGradient}
+        >
+          <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
+          <Text style={styles.aiBtnText}>AI</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+      
+      {/* Profile Button */}
+      <TouchableOpacity 
+        style={styles.profileBtn} 
+        onPress={() => setProfileVisible(true)}
+      >
+        <Text style={styles.headerProfileLetter}>
+          {user?.email?.charAt(0).toUpperCase() || 'S'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  </View>
 
-        {/* Compact Collection Card - bills count next to amount */}
-        <View style={[styles.collectionCard, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
-          <View style={styles.collectionRow}>
-            <View>
-              <Text style={styles.collectionLabel}>TODAY'S COLLECTION</Text>
-              <Text style={styles.collectionValue}>₹{todayTotal.toLocaleString('en-IN')}</Text>
-            </View>
-            <View style={styles.billsCountBadge}>
-              <Ionicons name="receipt-outline" size={14} color="#fff" />
-              <Text style={styles.billsCountText}>{salesLog.length} bill{salesLog.length !== 1 ? 's' : ''}</Text>
-            </View>
-          </View>
-        </View>
-      </LinearGradient>
+  {/* Compact Collection Card */}
+  <View style={[styles.collectionCard, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
+    <View style={styles.collectionRow}>
+      <View>
+        <Text style={styles.collectionLabel}>TODAY'S COLLECTION</Text>
+        <Text style={styles.collectionValue}>₹{todayTotal.toLocaleString('en-IN')}</Text>
+      </View>
+      <View style={styles.billsCountBadge}>
+        <Ionicons name="receipt-outline" size={14} color="#fff" />
+        <Text style={styles.billsCountText}>{salesLog.length} bill{salesLog.length !== 1 ? 's' : ''}</Text>
+      </View>
+    </View>
+  </View>
+</LinearGradient>
 
       {/* Quick Actions */}
       <View style={styles.quickActionsContainer}>
@@ -2531,6 +2520,7 @@ const loadData = useCallback(async () => {
         </View>
 
       </View>
+      
 
       {/* Today's Bills Header */}
       <View style={styles.billsHeaderContainer}>
@@ -2601,6 +2591,34 @@ const loadData = useCallback(async () => {
 // Styles
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  // Add these inside the styles object
+headerRightButtons: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 10,
+},
+aiHeaderBtn: {
+  borderRadius: 24,
+  overflow: 'hidden',
+  elevation: 2,
+  shadowColor: '#8B5CF6',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.25,
+  shadowRadius: 4,
+},
+aiGradient: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  gap: 4,
+},
+aiBtnText: {
+  color: '#fff',
+  fontSize: 12,
+  fontWeight: '700',
+  letterSpacing: 0.5,
+},
   header: { paddingHorizontal: 16, paddingBottom: 12 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
   shopName: { color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },

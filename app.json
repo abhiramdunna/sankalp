@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "sankalp-app",
+    "name": "Sankalp",
     "slug": "sankalp-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -39,7 +39,9 @@
           }
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-build-properties"
+      
     ],
     "experiments": {
       "typedRoutes": true,
