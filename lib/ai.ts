@@ -36,19 +36,18 @@ class AIService {
           DatabaseService.loadSalesLog(),
           DatabaseService.loadSuppliers(),
           supabase
-            .from('profiles')
-            .select('business_name, city')
-            .eq('id', userId)
-            .single(),
+  .from('profiles')
+  .select('business_name, city, business_category')
+  .eq('id', userId)
+  .single(),
           supabase
             .from('pending_payments')
             .select('*')
             .eq('user_id', userId),
         ]);
 
-      let context = `BUSINESS DATA FOR ${
-        profile.data?.business_name || 'Business'
-      }\n\n`;
+      let context = `BUSINESS DATA FOR ${profile.data?.business_name || 'Business'}\n`;
+context += `Business Type: ${profile.data?.business_category || 'General'}\n\n`;
 
       // -------------------------
       // PRODUCTS

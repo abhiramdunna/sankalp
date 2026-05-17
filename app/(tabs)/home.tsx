@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SankalpAIModal } from '@/components/SankalpAIModal';
 import { db as DatabaseService } from '@/lib/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 
@@ -930,7 +931,9 @@ const BillDetailModal = memo(({
   );
 });
 
-// Profile Modal
+
+
+
 const ProfileModal = memo(({
   visible, bizName, bizLocation, userEmail, subStatus, isSubscribed, isTrialActive,
   nextDue, pendingCount, pendingTotal, onClose, onEditProfile, onLogout, onUpgrade, onPendingPayments, onChooseTheme, theme,
@@ -942,110 +945,132 @@ const ProfileModal = memo(({
   onClose: () => void; onEditProfile: () => void; onLogout: () => void;
   onUpgrade: () => void; onPendingPayments: () => void; onChooseTheme: () => void;
   theme: AppTheme;
-}) => (
-  <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
-    <TouchableWithoutFeedback onPress={onClose}>
-      <View style={styles.modalOverlay}>
-        <TouchableWithoutFeedback onPress={() => {}}>
-          <View style={[styles.profilePanel, { paddingBottom: 32 }]}>
-            <View style={styles.profileHandle} />
+}) => {
+  const insets = useSafeAreaInsets();
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  
 
-            <View style={styles.profileHeaderNew}>
-              <LinearGradient colors={[theme.colors.gradientStart, theme.colors.gradientEnd]} style={styles.profileAvatarNew}>
-                <Text style={styles.profileAvatarText}>
-                  {bizName ? bizName.charAt(0).toUpperCase() : (userEmail?.charAt(0).toUpperCase() || 'S')}
-                </Text>
-              </LinearGradient>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.profileNameNew}>{bizName || 'Your Business'}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
-                  {bizLocation ? (
-                    <>
-                      <Ionicons name="location-outline" size={12} color="#9CA3AF" />
-                      <Text style={styles.profileMetaNew}>{bizLocation}</Text>
-                    </>
-                  ) : null}
-                </View>
-                <View style={[styles.subBadgeNew, { backgroundColor: subStatus.bg }]}>
-                  <Ionicons name={subStatus.icon} size={11} color={subStatus.color} />
-                  <Text style={[styles.subBadgeText, { color: subStatus.color }]}>{subStatus.label}</Text>
-                </View>
-              </View>
-              <TouchableOpacity onPress={onEditProfile} style={styles.editIconBtn}>
-                <Ionicons name="pencil" size={15} color={theme.colors.primary} />
-              </TouchableOpacity>
+  useEffect(() => {
+    if (visible) {
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 11,
+      }).start();
+    } else {
+      slideAnim.setValue(SCREEN_HEIGHT);
+    }
+  }, [visible]);
+
+  return (
+    <Modal animationType="none" transparent={false} visible={visible} onRequestClose={onClose} statusBarTranslucent>
+      <Animated.View style={{ flex: 1, backgroundColor: '#fff', transform: [{ translateY: slideAnim }] }}>
+        {/* Gradient Header */}
+        <LinearGradient
+          colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+          style={{ paddingTop: insets.top + 16, paddingBottom: 24, paddingHorizontal: 20 }}
+        >
+          <TouchableOpacity onPress={onClose} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+            <Ionicons name="arrow-back" size={22} color="#fff" />
+          </TouchableOpacity>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: 28, fontWeight: '900', color: '#fff' }}>
+                {bizName ? bizName.charAt(0).toUpperCase() : (userEmail?.charAt(0).toUpperCase() || 'S')}
+              </Text>
             </View>
-
-            <View style={styles.statsRow}>
-              <View style={[styles.statBox, { borderColor: '#EEF2FF' }]}>
-                <Ionicons name="mail-outline" size={15} color="#6B7280" />
-                <Text style={styles.statLabel}>Account</Text>
-                <Text style={styles.statValue} numberOfLines={1}>{userEmail?.split('@')[0] || '—'}</Text>
-              </View>
-              <View style={[styles.statBox, { borderColor: '#FEF3C7' }]}>
-                <Ionicons name="diamond-outline" size={15} color="#D97706" />
-                <Text style={styles.statLabel}>Plan</Text>
-                <Text style={[styles.statValue, { color: '#D97706' }]}>{isSubscribed ? 'Pro' : 'Trial'}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 20, fontWeight: '900', color: '#fff' }}>{bizName || 'Your Business'}</Text>
+              {bizLocation ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
+                  <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.75)" />
+                  <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>{bizLocation}</Text>
+                </View>
+              ) : null}
+              <View style={[styles.subBadgeNew, { backgroundColor: 'rgba(255,255,255,0.2)', marginTop: 6 }]}>
+                <Ionicons name={subStatus.icon} size={11} color="#fff" />
+                <Text style={[styles.subBadgeText, { color: '#fff' }]}>{subStatus.label}</Text>
               </View>
             </View>
+            <TouchableOpacity onPress={onEditProfile} style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="pencil" size={16} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: SCREEN_HEIGHT * 0.38 }}>
-              <TouchableOpacity style={styles.menuItem} onPress={onPendingPayments}>
-                <View style={[styles.menuItemIcon, { backgroundColor: '#FFF7ED' }]}>
-                  <Ionicons name="time-outline" size={20} color="#F59E0B" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.menuItemTitle}>Pending Payments</Text>
-                  <Text style={styles.menuItemSub}>
-                    {pendingCount > 0 ? `${pendingCount} person${pendingCount !== 1 ? 's' : ''} · ₹${pendingTotal.toLocaleString('en-IN')} due` : 'No pending payments'}
-                  </Text>
-                </View>
-                {pendingCount > 0 && (
-                  <View style={styles.menuBadge}>
-                    <Text style={styles.menuBadgeText}>{pendingCount}</Text>
-                  </View>
-                )}
-                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
-              </TouchableOpacity>
+        {/* Body */}
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
+          {/* Stats Row */}
+          <View style={styles.statsRow}>
+            <View style={[styles.statBox, { borderColor: '#EEF2FF' }]}>
+              <Ionicons name="mail-outline" size={15} color="#6B7280" />
+              <Text style={styles.statLabel}>Account</Text>
+              <Text style={styles.statValue} numberOfLines={1}>{userEmail?.split('@')[0] || '—'}</Text>
+            </View>
+            <View style={[styles.statBox, { borderColor: '#FEF3C7' }]}>
+              <Ionicons name="diamond-outline" size={15} color="#D97706" />
+              <Text style={styles.statLabel}>Plan</Text>
+              <Text style={[styles.statValue, { color: '#D97706' }]}>{isSubscribed ? 'Pro' : isTrialActive ? 'Trial' : 'Expired'}</Text>
+            </View>
+          </View>
 
-              <TouchableOpacity style={styles.menuItem} onPress={onChooseTheme}>
-                <View style={[styles.menuItemIcon, { backgroundColor: '#F5F3FF' }]}>
-                  <Ionicons name="color-palette-outline" size={20} color="#7C3AED" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.menuItemTitle}>Choose Theme</Text>
-                  <Text style={styles.menuItemSub}>Personalise your app colours</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
-              </TouchableOpacity>
+          {/* Menu Items */}
+          <TouchableOpacity style={styles.menuItem} onPress={onPendingPayments}>
+            <View style={[styles.menuItemIcon, { backgroundColor: '#FFF7ED' }]}>
+              <Ionicons name="time-outline" size={20} color="#F59E0B" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.menuItemTitle}>Pending Payments</Text>
+              <Text style={styles.menuItemSub}>
+                {pendingCount > 0 ? `${pendingCount} person${pendingCount !== 1 ? 's' : ''} · ₹${pendingTotal.toLocaleString('en-IN')} due` : 'No pending payments'}
+              </Text>
+            </View>
+            {pendingCount > 0 && (
+              <View style={styles.menuBadge}><Text style={styles.menuBadgeText}>{pendingCount}</Text></View>
+            )}
+            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
 
-              <TouchableOpacity style={styles.menuItem} onPress={!isSubscribed ? onUpgrade : undefined} activeOpacity={isSubscribed ? 1 : 0.7}>
-                <View style={[styles.menuItemIcon, { backgroundColor: '#ECFDF5' }]}>
-                  <Ionicons name="sparkles" size={20} color="#10B981" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.menuItemTitle}>Subscription</Text>
-                  <Text style={styles.menuItemSub}>{isSubscribed ? `Renews ${nextDue} · ₹29/month` : isTrialActive ? 'Trial active — Upgrade to Pro' : 'Trial expired — Upgrade now'}</Text>
-                </View>
-                {!isSubscribed && (
-                  <View style={[styles.menuBadge, { backgroundColor: '#ECFDF5' }]}>
-                    <Text style={[styles.menuBadgeText, { color: '#10B981' }]}>Upgrade</Text>
-                  </View>
-                )}
-                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
-              </TouchableOpacity>
-            </ScrollView>
+          <TouchableOpacity style={styles.menuItem} onPress={onChooseTheme}>
+            <View style={[styles.menuItemIcon, { backgroundColor: '#F5F3FF' }]}>
+              <Ionicons name="color-palette-outline" size={20} color="#7C3AED" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.menuItemTitle}>Choose Theme</Text>
+              <Text style={styles.menuItemSub}>Personalise your app colours</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
 
+          <TouchableOpacity style={styles.menuItem} onPress={!isSubscribed ? onUpgrade : undefined} activeOpacity={isSubscribed ? 1 : 0.7}>
+            <View style={[styles.menuItemIcon, { backgroundColor: '#ECFDF5' }]}>
+              <Ionicons name="sparkles" size={20} color="#10B981" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.menuItemTitle}>Subscription</Text>
+              <Text style={styles.menuItemSub}>{isSubscribed ? `Renews ${nextDue} · ₹29/month` : isTrialActive ? 'Trial active — Upgrade to Pro' : 'Trial expired — Upgrade now'}</Text>
+            </View>
+            {!isSubscribed && (
+              <View style={[styles.menuBadge, { backgroundColor: '#ECFDF5' }]}>
+                <Text style={[styles.menuBadgeText, { color: '#10B981' }]}>Upgrade</Text>
+              </View>
+            )}
+            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
+
+          <View style={{ marginTop: 24 }}>
             <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
               <Ionicons name="log-out-outline" size={18} color="#DC2626" style={{ marginRight: 8 }} />
               <Text style={styles.logoutBtnText}>Logout</Text>
             </TouchableOpacity>
           </View>
-        </TouchableWithoutFeedback>
-      </View>
-    </TouchableWithoutFeedback>
-  </Modal>
-));
+        </ScrollView>
+      </Animated.View>
+    </Modal>
+  );
+});
 
 // Pending Payments Modal
 interface PendingPayment { id: string; name: string; phone: string; amount: number; date: string; notes: string; place: string; }
@@ -1468,18 +1493,22 @@ const EditProfileModal = memo(({
   visible,
   editingBizName,
   editingBizLocation,
+  editingBizCategory,
   isSavingProfile,
   onChangeName,
   onChangeLocation,
+  onChangeCategory,
   onSave,
   onClose,
 }: {
   visible: boolean;
   editingBizName: string;
   editingBizLocation: string;
+  editingBizCategory: string; 
   isSavingProfile: boolean;
   onChangeName: (v: string) => void;
   onChangeLocation: (v: string) => void;
+  onChangeCategory: (v: string) => void;
   onSave: () => void;
   onClose: () => void;
 }) => (
@@ -1530,6 +1559,21 @@ const EditProfileModal = memo(({
                       placeholder="Enter city"
                       value={editingBizLocation}
                       onChangeText={onChangeLocation}
+                      placeholderTextColor="#999"
+                      autoCorrect={false}
+                      blurOnSubmit={false}
+                    />
+                  </View>
+                </View>
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Business Category</Text>
+                  <View style={styles.formInputBox}>
+                    <Ionicons name="storefront-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="e.g. Grocery, Pharmacy, Clothing..."
+                      value={editingBizCategory}
+                      onChangeText={onChangeCategory}
                       placeholderTextColor="#999"
                       autoCorrect={false}
                       blurOnSubmit={false}
@@ -1837,6 +1881,7 @@ export default function HomeScreen() {
 
   const [bizName, setBizName] = useState('');
   const [bizLocation, setBizLocation] = useState('');
+  
   const [editProfileModalVisible, setEditProfileModalVisible] = useState(false);
   const [editingBizName, setEditingBizName] = useState('');
   const [editingBizLocation, setEditingBizLocation] = useState('');
@@ -1870,6 +1915,8 @@ export default function HomeScreen() {
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingTotal, setPendingTotal] = useState(0);
   const [aiModalVisible, setAiModalVisible] = useState(false); 
+  const [bizCategory, setBizCategory] = useState('');
+const [editingBizCategory, setEditingBizCategory] = useState('');
 
   const openBillDetail = useCallback((bill: SaleLog, number: number) => {
     setSelectedBill(bill);
@@ -1922,7 +1969,7 @@ export default function HomeScreen() {
         console.log('📋 Loading business details for user:', user.id);
         const { data, error } = await supabase
           .from('profiles')
-          .select('business_name, city')
+          .select('business_name, city, business_category,trial_started_at')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -1935,6 +1982,7 @@ export default function HomeScreen() {
           console.log('✅ Business details loaded:', data);
           setBizName(data.business_name || '');
           setBizLocation(data.city || '');
+          setBizCategory(data.business_category || '');
         } else {
           console.log('⚠️ No profile found, creating one...');
           const { error: insertError } = await supabase
@@ -1958,6 +2006,7 @@ export default function HomeScreen() {
   const openEditProfile = () => {
     setEditingBizName(bizName);
     setEditingBizLocation(bizLocation);
+    setEditingBizCategory(bizCategory);
     setEditProfileModalVisible(true);
   };
 
@@ -1976,6 +2025,7 @@ export default function HomeScreen() {
           id: user?.id,
           business_name: editingBizName.trim(),
           city: editingBizLocation.trim(),
+          business_category: editingBizCategory.trim(),
         });
 
       if (error) {
@@ -1988,6 +2038,7 @@ export default function HomeScreen() {
       console.log('✅ Profile saved successfully');
       setBizName(editingBizName.trim());
       setBizLocation(editingBizLocation.trim());
+      setBizCategory(editingBizCategory.trim());
       setEditProfileModalVisible(false);
       setIsSavingProfile(false);
     } catch (err) {
@@ -2038,18 +2089,19 @@ const loadData = useCallback(async () => {
 
       const todayDateStr = `${now.getDate()} ${months[now.getMonth()]}`;
 
-      const todaysBills = parsed.filter(
-        (bill: SaleLog) => bill.date === todayDateStr
-      );
+      // Store ALL bills in a separate ref, today's bills in salesLog for home display
+const todaysBills = parsed.filter(
+  (bill: SaleLog) => bill.date === todayDateStr
+);
 
-      setSalesLog(todaysBills);
+setSalesLog(parsed); // ← CHANGE: store ALL bills (not just today's)
 
-      setTodayTotal(
-        todaysBills.reduce(
-          (sum: number, bill: SaleLog) => sum + bill.total,
-          0
-        )
-      );
+setTodayTotal(
+  todaysBills.reduce(
+    (sum: number, bill: SaleLog) => sum + bill.total,
+    0
+  )
+);
     }
 
     setActiveSessions([...RAM_SESSIONS]);
@@ -2074,7 +2126,7 @@ const loadData = useCallback(async () => {
     if (!trialStart) return 7;
     const msPerDay = 1000 * 60 * 60 * 24;
     const elapsed = Math.floor((Date.now() - trialStart.getTime()) / msPerDay);
-    return Math.max(0, 7 - elapsed);
+    return Math.max(0, 3 - elapsed);
   }, [trialStart]);
 
   const isTrialActive = useCallback((): boolean => getTrialDaysLeft() > 0, [getTrialDaysLeft]);
@@ -2321,9 +2373,11 @@ const loadData = useCallback(async () => {
         visible={editProfileModalVisible}
         editingBizName={editingBizName}
         editingBizLocation={editingBizLocation}
+        editingBizCategory={editingBizCategory}      // ← ADD
         isSavingProfile={isSavingProfile}
         onChangeName={setEditingBizName}
         onChangeLocation={setEditingBizLocation}
+        onChangeCategory={setEditingBizCategory}     // ← ADD
         onSave={saveProfileChanges}
         onClose={() => setEditProfileModalVisible(false)}
       />
@@ -2484,7 +2538,12 @@ const loadData = useCallback(async () => {
       </View>
       <View style={styles.billsCountBadge}>
         <Ionicons name="receipt-outline" size={14} color="#fff" />
-        <Text style={styles.billsCountText}>{salesLog.length} bill{salesLog.length !== 1 ? 's' : ''}</Text>
+        <Text style={styles.billsCountText}>{(() => {
+  const now = new Date();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const todayStr = `${now.getDate()} ${months[now.getMonth()]}`;
+  return salesLog.filter(b => b.date === todayStr).length;
+          })()} bill{salesLog.filter(b => { const now = new Date(); const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return b.date === `${now.getDate()} ${months[now.getMonth()]}`; }).length !== 1 ? 's' : ''}</Text>
       </View>
     </View>
   </View>
@@ -2551,9 +2610,13 @@ const loadData = useCallback(async () => {
               />
             ))}
 
-            {salesLog.map((bill, index) => (
-              <TouchableOpacity
-                key={`bill-${bill.id}-${index}`}
+            {salesLog.filter(b => b.date === (() => {
+            const now = new Date();
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return `${now.getDate()} ${months[now.getMonth()]}`;
+          })()).map((bill, index) => (
+            <TouchableOpacity
+              key={`bill-${bill.id}-${index}`}
                 style={[styles.billCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
                 onPress={() => openBillDetail(bill, salesLog.length - index)}
               >

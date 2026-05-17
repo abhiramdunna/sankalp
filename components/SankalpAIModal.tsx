@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/lib/store';
 import { aiService, Message } from '@/lib/ai';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -86,9 +87,30 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
     scrollToBottom();
 
     try {
-      // Use the AI service with user data if logged in
       let response: string;
+
       if (user?.id) {
+        // Check trial/subscription
+        const trialStartStr = await AsyncStorage.getItem('trialStart');
+        const isSubed = await AsyncStorage.getItem('isSubscribed');
+        const trialStart = trialStartStr ? new Date(trialStartStr) : new Date();
+        const elapsed = Math.floor((Date.now() - trialStart.getTime()) / (1000 * 60 * 60 * 24));
+        const trialActive = elapsed < 3;
+        const subscribed = isSubed === 'true';
+
+        if (!subscribed && !trialActive) {
+          const lockedMsg: Message = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: '🔒 Your 3-day free trial has ended.\n\nSubscribe to Sankalp Pro (₹29/month) to continue getting AI business insights.',
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, lockedMsg]);
+          setIsLoading(false);
+          scrollToBottom();
+          return;
+        }
+
         response = await aiService.getResponse(userMessage.content, user.id, messages);
       } else {
         response = "Please log in to use Sankalp AI. You can ask me about your business sales, products, pending payments, and more!";
@@ -120,7 +142,7 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isUser = item.role === 'user';
-    
+
     return (
       <View style={[
         styles.messageRow,
@@ -153,7 +175,7 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
 
   const renderSuggestions = () => {
     if (messages.length > 2) return null;
-    
+
     return (
       <View style={styles.suggestionsContainer}>
         <Text style={styles.suggestionsTitle}>Try asking:</Text>

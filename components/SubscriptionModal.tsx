@@ -137,9 +137,9 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
           <View style={styles.priceCard}>
             <Text style={styles.priceLabel}>Special Launch Offer</Text>
             <Text style={styles.priceAmount}>₹29</Text>
-            <Text style={styles.priceDuration}>for 3 months</Text>
+            <Text style={styles.priceDuration}>per month · 30 days</Text>
             <View style={styles.savingsBadge}>
-              <Text style={styles.savingsText}>Save 67%</Text>
+              <Text style={styles.savingsText}>3-day free trial included</Text>
             </View>
           </View>
 
@@ -167,7 +167,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               <>
                 <Ionicons name={alreadySubscribed ? "checkmark-circle" : "rocket-outline"} size={20} color="#fff" />
                 <Text style={styles.purchaseButtonText}>
-                  {alreadySubscribed ? "Already Subscribed" : "Subscribe for ₹29"}
+                  {alreadySubscribed ? "Already Subscribed" : isTrialActive ? `Continue Free Trial · ${trialDaysLeft}d left` : "Subscribe — ₹29/month"}
                 </Text>
               </>
             )}

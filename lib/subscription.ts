@@ -216,7 +216,7 @@ class SubscriptionService {
    * Calculate remaining trial days
    */
   private calculateTrialDaysLeft(trialStart: Date): number {
-    const TRIAL_DAYS = 7;
+    const TRIAL_DAYS = 3;
     const now = new Date();
     const elapsed = Math.floor((now.getTime() - trialStart.getTime()) / (1000 * 60 * 60 * 24));
     return Math.max(0, TRIAL_DAYS - elapsed);
