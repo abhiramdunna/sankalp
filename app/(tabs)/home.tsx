@@ -935,10 +935,10 @@ const BillDetailModal = memo(({
 
 
 const ProfileModal = memo(({
-  visible, bizName, bizLocation, userEmail, subStatus, isSubscribed, isTrialActive,
+  visible, bizName, bizLocation, bizCategory, bizState, userEmail, subStatus, isSubscribed, isTrialActive,
   nextDue, pendingCount, pendingTotal, onClose, onEditProfile, onLogout, onUpgrade, onPendingPayments, onChooseTheme, theme,
 }: {
-  visible: boolean; bizName: string; bizLocation: string; userEmail: string;
+  visible: boolean; bizName: string; bizLocation: string; bizCategory: string; bizState: string; userEmail: string;
   subStatus: { label: string; color: string; bg: string; icon: any };
   isSubscribed: boolean; isTrialActive: boolean; nextDue: string;
   pendingCount: number; pendingTotal: number;
@@ -983,10 +983,18 @@ const ProfileModal = memo(({
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 20, fontWeight: '900', color: '#fff' }}>{bizName || 'Your Business'}</Text>
-              {bizLocation ? (
+              {(bizLocation || bizState) ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
                   <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.75)" />
-                  <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>{bizLocation}</Text>
+                  <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>
+                    {[bizLocation, bizState].filter(Boolean).join(', ')}
+                  </Text>
+                </View>
+              ) : null}
+              {bizCategory ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
+                  <Ionicons name="storefront-outline" size={11} color="rgba(255,255,255,0.75)" />
+                  <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: '600' }}>{bizCategory}</Text>
                 </View>
               ) : null}
               <View style={[styles.subBadgeNew, { backgroundColor: 'rgba(255,255,255,0.2)', marginTop: 6 }]}>
@@ -1002,13 +1010,51 @@ const ProfileModal = memo(({
 
         {/* Body */}
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
-          {/* Stats Row */}
-          <View style={styles.statsRow}>
-            <View style={[styles.statBox, { borderColor: '#EEF2FF' }]}>
-              <Ionicons name="mail-outline" size={15} color="#6B7280" />
-              <Text style={styles.statLabel}>Account</Text>
-              <Text style={styles.statValue} numberOfLines={1}>{userEmail?.split('@')[0] || '—'}</Text>
+          {/* Business Info Card */}
+          <View style={{ backgroundColor: '#F9FAFB', borderRadius: 16, borderWidth: 1.5, borderColor: '#F3F4F6', padding: 14, marginBottom: 16 }}>
+            <Text style={{ fontSize: 10, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 }}>Business Details</Text>
+            <View style={{ gap: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ width: 32, height: 32, borderRadius: 9, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="storefront-outline" size={15} color="#4F46E5" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.4 }}>Category</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#111', marginTop: 1 }}>{bizCategory || '—'}</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ width: 32, height: 32, borderRadius: 9, backgroundColor: '#F0FDF4', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="location-outline" size={15} color="#16A34A" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.4 }}>City</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#111', marginTop: 1 }}>{bizLocation || '—'}</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ width: 32, height: 32, borderRadius: 9, backgroundColor: '#FFF7ED', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="map-outline" size={15} color="#EA580C" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.4 }}>State</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#111', marginTop: 1 }}>{bizState || '—'}</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ width: 32, height: 32, borderRadius: 9, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="mail-outline" size={15} color="#7C3AED" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.4 }}>Account</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#111', marginTop: 1 }} numberOfLines={1}>{userEmail || '—'}</Text>
+                </View>
+              </View>
             </View>
+          </View>
+
+          {/* Plan Row */}
+          <View style={styles.statsRow}>
             <View style={[styles.statBox, { borderColor: '#FEF3C7' }]}>
               <Ionicons name="diamond-outline" size={15} color="#D97706" />
               <Text style={styles.statLabel}>Plan</Text>
@@ -1489,26 +1535,45 @@ const PendingPaymentsModal = memo(({
 });
 
 // Edit Profile Modal
+const INDIAN_STATES_LIST = [
+  'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat',
+  'Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh',
+  'Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan',
+  'Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal',
+  'Andaman and Nicobar Islands','Chandigarh','Dadra and Nagar Haveli','Daman and Diu',
+  'Delhi','Jammu and Kashmir','Ladakh','Lakshadweep','Puducherry',
+];
+
+const BUSINESS_CATEGORIES_LIST = [
+  'Grocery & Kirana','Pharmacy / Medical','Electronics','Clothing & Textiles',
+  'Restaurant / Hotel','Hardware & Tools','Stationery & Books','Cosmetics & Beauty',
+  'Auto / Vehicles','Agriculture / Seeds','Wholesale / Trading','Services / Repair','Other',
+];
+
 const EditProfileModal = memo(({
   visible,
   editingBizName,
   editingBizLocation,
   editingBizCategory,
+  editingBizState,
   isSavingProfile,
   onChangeName,
   onChangeLocation,
   onChangeCategory,
+  onChangeState,
   onSave,
   onClose,
 }: {
   visible: boolean;
   editingBizName: string;
   editingBizLocation: string;
-  editingBizCategory: string; 
+  editingBizCategory: string;
+  editingBizState: string;
   isSavingProfile: boolean;
   onChangeName: (v: string) => void;
   onChangeLocation: (v: string) => void;
   onChangeCategory: (v: string) => void;
+  onChangeState: (v: string) => void;
   onSave: () => void;
   onClose: () => void;
 }) => (
@@ -1534,6 +1599,7 @@ const EditProfileModal = memo(({
               </View>
 
               <View style={styles.editProfileForm}>
+                {/* Business Name */}
                 <View style={styles.formGroup}>
                   <Text style={styles.formLabel}>Business Name</Text>
                   <View style={styles.formInputBox}>
@@ -1550,6 +1616,31 @@ const EditProfileModal = memo(({
                   </View>
                 </View>
 
+                {/* Business Category chips */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Business Category</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {BUSINESS_CATEGORIES_LIST.map(cat => {
+                      const active = editingBizCategory === cat;
+                      return (
+                        <TouchableOpacity
+                          key={cat}
+                          onPress={() => onChangeCategory(cat)}
+                          style={{
+                            paddingHorizontal: 11, paddingVertical: 7, borderRadius: 10,
+                            borderWidth: 1.5,
+                            borderColor: active ? '#4F46E5' : '#E5E7EB',
+                            backgroundColor: active ? '#4F46E5' : '#F9FAFB',
+                          }}
+                        >
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: active ? '#fff' : '#374151' }}>{cat}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {/* City */}
                 <View style={styles.formGroup}>
                   <Text style={styles.formLabel}>City</Text>
                   <View style={styles.formInputBox}>
@@ -1565,20 +1656,42 @@ const EditProfileModal = memo(({
                     />
                   </View>
                 </View>
+
+                {/* State with suggestions */}
                 <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>Business Category</Text>
+                  <Text style={styles.formLabel}>State</Text>
                   <View style={styles.formInputBox}>
-                    <Ionicons name="storefront-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                    <Ionicons name="map-outline" size={18} color="#999" style={{ marginRight: 8 }} />
                     <TextInput
                       style={styles.formInput}
-                      placeholder="e.g. Grocery, Pharmacy, Clothing..."
-                      value={editingBizCategory}
-                      onChangeText={onChangeCategory}
+                      placeholder="e.g. Andhra Pradesh"
+                      value={editingBizState}
+                      onChangeText={onChangeState}
                       placeholderTextColor="#999"
                       autoCorrect={false}
                       blurOnSubmit={false}
                     />
                   </View>
+                  {editingBizState.length >= 2 && (() => {
+                    const suggestions = INDIAN_STATES_LIST.filter(s =>
+                      s.toLowerCase().startsWith(editingBizState.toLowerCase()) && s !== editingBizState
+                    ).slice(0, 5);
+                    if (suggestions.length === 0) return null;
+                    return (
+                      <View style={{ marginTop: 4, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden', elevation: 2 }}>
+                        {suggestions.map(s => (
+                          <TouchableOpacity
+                            key={s}
+                            onPress={() => onChangeState(s)}
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}
+                          >
+                            <Ionicons name="flag-outline" size={13} color="#6366F1" />
+                            <Text style={{ fontSize: 14, fontWeight: '600', color: '#374151' }}>{s}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    );
+                  })()}
                 </View>
 
                 <TouchableOpacity style={styles.saveProfileBtn} onPress={onSave} disabled={isSavingProfile}>
@@ -1916,7 +2029,9 @@ export default function HomeScreen() {
   const [pendingTotal, setPendingTotal] = useState(0);
   const [aiModalVisible, setAiModalVisible] = useState(false); 
   const [bizCategory, setBizCategory] = useState('');
-const [editingBizCategory, setEditingBizCategory] = useState('');
+  const [editingBizCategory, setEditingBizCategory] = useState('');
+  const [bizState, setBizState] = useState('');
+  const [editingBizState, setEditingBizState] = useState('');
 
   const openBillDetail = useCallback((bill: SaleLog, number: number) => {
     setSelectedBill(bill);
@@ -1969,7 +2084,7 @@ const [editingBizCategory, setEditingBizCategory] = useState('');
         console.log('📋 Loading business details for user:', user.id);
         const { data, error } = await supabase
           .from('profiles')
-          .select('business_name, city, business_category,trial_started_at')
+          .select('business_name, city, business_category, state, trial_started_at')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -1983,6 +2098,7 @@ const [editingBizCategory, setEditingBizCategory] = useState('');
           setBizName(data.business_name || '');
           setBizLocation(data.city || '');
           setBizCategory(data.business_category || '');
+          setBizState(data.state || '');
         } else {
           console.log('⚠️ No profile found, creating one...');
           const { error: insertError } = await supabase
@@ -2007,6 +2123,7 @@ const [editingBizCategory, setEditingBizCategory] = useState('');
     setEditingBizName(bizName);
     setEditingBizLocation(bizLocation);
     setEditingBizCategory(bizCategory);
+    setEditingBizState(bizState);
     setEditProfileModalVisible(true);
   };
 
@@ -2026,6 +2143,7 @@ const [editingBizCategory, setEditingBizCategory] = useState('');
           business_name: editingBizName.trim(),
           city: editingBizLocation.trim(),
           business_category: editingBizCategory.trim(),
+          state: editingBizState.trim(),
         });
 
       if (error) {
@@ -2039,6 +2157,7 @@ const [editingBizCategory, setEditingBizCategory] = useState('');
       setBizName(editingBizName.trim());
       setBizLocation(editingBizLocation.trim());
       setBizCategory(editingBizCategory.trim());
+      setBizState(editingBizState.trim());
       setEditProfileModalVisible(false);
       setIsSavingProfile(false);
     } catch (err) {
@@ -2338,6 +2457,8 @@ setTodayTotal(
         visible={profileVisible}
         bizName={bizName}
         bizLocation={bizLocation}
+        bizCategory={bizCategory}
+        bizState={bizState}
         userEmail={user?.email || ''}
         subStatus={subStatus}
         isSubscribed={isSubscribed}
@@ -2373,11 +2494,13 @@ setTodayTotal(
         visible={editProfileModalVisible}
         editingBizName={editingBizName}
         editingBizLocation={editingBizLocation}
-        editingBizCategory={editingBizCategory}      // ← ADD
+        editingBizCategory={editingBizCategory}
+        editingBizState={editingBizState}
         isSavingProfile={isSavingProfile}
         onChangeName={setEditingBizName}
         onChangeLocation={setEditingBizLocation}
-        onChangeCategory={setEditingBizCategory}     // ← ADD
+        onChangeCategory={setEditingBizCategory}
+        onChangeState={setEditingBizState}
         onSave={saveProfileChanges}
         onClose={() => setEditProfileModalVisible(false)}
       />

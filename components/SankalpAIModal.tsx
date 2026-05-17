@@ -33,7 +33,7 @@ const SUGGESTIONS = [
   'Show pending payments',
   'How much revenue this month?',
   'What do I owe suppliers?',
-  'Give me business tips',
+  'Give me tips to grow my business',
 ];
 
 export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose }) => {
@@ -43,7 +43,7 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
     {
       id: '1',
       role: 'assistant',
-      content: 'Namaste! 👋 I\'m Sankalp AI, your business assistant. Ask me anything about your business - sales, products, pending payments, or general questions!',
+      content: 'Namaste! 👋 I\'m Sankalp AI, your personal business assistant.\n\nAsk me about your sales, top products, pending payments, supplier dues — or just say "give me tips to grow my business" and I\'ll help! 🚀',
       timestamp: new Date(),
     },
   ]);
