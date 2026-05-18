@@ -9,9 +9,8 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   StyleSheet,
-  Dimensions,
+  StatusBar,
   Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,8 +18,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/lib/store';
 import { aiService, Message } from '@/lib/ai';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface SankalpAIModalProps {
   visible: boolean;
@@ -36,39 +33,55 @@ const SUGGESTIONS = [
   'Give me tips to grow my business',
 ];
 
+const INITIAL_MESSAGE: Message = {
+  id: '1',
+  role: 'assistant',
+  content:
+    "Namaste! 👋 I'm Sankalp AI, your personal business assistant.\n\nAsk me about your sales, top products, pending payments, supplier dues — or just say \"give me tips to grow my business\" and I'll help! 🚀",
+  timestamp: new Date(),
+};
+
 export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose }) => {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: 'Namaste! 👋 I\'m Sankalp AI, your personal business assistant.\n\nAsk me about your sales, top products, pending payments, supplier dues — or just say "give me tips to grow my business" and I\'ll help! 🚀',
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const flatListRef = useRef<FlatList>(null);
-  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+
+  // Animated dots for loading indicator
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 65,
-        friction: 11,
-      }).start();
-    } else {
-      slideAnim.setValue(SCREEN_HEIGHT);
+    if (!isLoading) {
+      dot1.setValue(0); dot2.setValue(0); dot3.setValue(0);
+      return;
     }
-  }, [visible]);
+    const makeDotAnim = (dot: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dot, { toValue: 1, duration: 280, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0, duration: 280, useNativeDriver: true }),
+          Animated.delay(840 - delay),
+        ])
+      );
+    const a1 = makeDotAnim(dot1, 0);
+    const a2 = makeDotAnim(dot2, 180);
+    const a3 = makeDotAnim(dot3, 360);
+    a1.start(); a2.start(); a3.start();
+    return () => { a1.stop(); a2.stop(); a3.stop(); };
+  }, [isLoading]);
 
   const scrollToBottom = useCallback(() => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 120);
+  }, []);
+
+  const resetChat = useCallback(() => {
+    setMessages([{ ...INITIAL_MESSAGE, id: Date.now().toString(), timestamp: new Date() }]);
+    setInputText('');
   }, []);
 
   const sendMessage = async () => {
@@ -90,7 +103,6 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
       let response: string;
 
       if (user?.id) {
-        // Check trial/subscription
         const trialStartStr = await AsyncStorage.getItem('trialStart');
         const isSubed = await AsyncStorage.getItem('isSubscribed');
         const trialStart = trialStartStr ? new Date(trialStartStr) : new Date();
@@ -99,13 +111,16 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
         const subscribed = isSubed === 'true';
 
         if (!subscribed && !trialActive) {
-          const lockedMsg: Message = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: '🔒 Your 3-day free trial has ended.\n\nSubscribe to Sankalp Pro (₹29/month) to continue getting AI business insights.',
-            timestamp: new Date(),
-          };
-          setMessages(prev => [...prev, lockedMsg]);
+          setMessages(prev => [
+            ...prev,
+            {
+              id: (Date.now() + 1).toString(),
+              role: 'assistant',
+              content:
+                '🔒 Your 3-day free trial has ended.\n\nSubscribe to Sankalp Pro (₹29/month) to continue getting AI business insights.',
+              timestamp: new Date(),
+            },
+          ]);
           setIsLoading(false);
           scrollToBottom();
           return;
@@ -113,27 +128,30 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
 
         response = await aiService.getResponse(userMessage.content, user.id, messages);
       } else {
-        response = "Please log in to use Sankalp AI. You can ask me about your business sales, products, pending payments, and more!";
+        response =
+          'Please log in to use Sankalp AI. You can ask me about your business sales, products, pending payments, and more!';
       }
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response,
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: response,
+          timestamp: new Date(),
+        },
+      ]);
       scrollToBottom();
-    } catch (error) {
-      console.error('AI Error:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'Sorry, I encountered an error. Please check your internet connection and try again.',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
+    } catch {
+      setMessages(prev => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: 'Sorry, I encountered an error. Please check your internet connection and try again.',
+          timestamp: new Date(),
+        },
+      ]);
     } finally {
       setIsLoading(false);
       scrollToBottom();
@@ -142,214 +160,218 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isUser = item.role === 'user';
-
     return (
-      <View style={[
-        styles.messageRow,
-        isUser ? styles.userRow : styles.assistantRow,
-      ]}>
+      <View style={[styles.messageRow, isUser ? styles.userRow : styles.assistantRow]}>
         {!isUser && (
-          <View style={styles.assistantAvatar}>
-            <Text style={styles.avatarText}>🤖</Text>
+          <View style={styles.botAvatar}>
+            <Text style={{ fontSize: 14 }}>🤖</Text>
           </View>
         )}
-        <View style={[
-          styles.messageBubble,
-          isUser ? styles.userBubble : styles.assistantBubble,
-        ]}>
-          <Text style={isUser ? styles.userMessageText : styles.assistantMessageText}>
-            {item.content}
-          </Text>
-          <Text style={styles.messageTime}>
+        <View style={[styles.bubble, isUser ? styles.userBubble : styles.botBubble]}>
+          <Text style={isUser ? styles.userText : styles.botText}>{item.content}</Text>
+          <Text style={[styles.timeText, isUser && { color: 'rgba(255,255,255,0.55)' }]}>
             {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Text>
         </View>
-        {isUser && (
-          <View style={styles.userAvatar}>
-            <Text style={styles.avatarText}>👤</Text>
-          </View>
-        )}
       </View>
     );
   };
 
-  const renderSuggestions = () => {
-    if (messages.length > 2) return null;
-
-    return (
-      <View style={styles.suggestionsContainer}>
-        <Text style={styles.suggestionsTitle}>Try asking:</Text>
-        <View style={styles.suggestionsGrid}>
-          {SUGGESTIONS.map((suggestion, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.suggestionChip}
-              onPress={() => setInputText(suggestion)}
-            >
-              <Text style={styles.suggestionText}>{suggestion}</Text>
-            </TouchableOpacity>
-          ))}
+  const renderFooter = () => {
+    if (isLoading) {
+      return (
+        <View style={[styles.messageRow, styles.assistantRow]}>
+          <View style={styles.botAvatar}>
+            <Text style={{ fontSize: 14 }}>🤖</Text>
+          </View>
+          <View style={[styles.bubble, styles.botBubble, { paddingVertical: 14, paddingHorizontal: 18 }]}>
+            <View style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
+              {[dot1, dot2, dot3].map((dot, i) => (
+                <Animated.View
+                  key={i}
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: 4,
+                    backgroundColor: '#6366F1',
+                    opacity: dot,
+                    transform: [
+                      { translateY: dot.interpolate({ inputRange: [0, 1], outputRange: [0, -5] }) },
+                    ],
+                  }}
+                />
+              ))}
+            </View>
+          </View>
         </View>
-      </View>
-    );
+      );
+    }
+
+    if (messages.length <= 2) {
+      return (
+        <View style={styles.suggestionsWrap}>
+          <Text style={styles.suggestionsLabel}>Try asking</Text>
+          <View style={styles.suggestionsGrid}>
+            {SUGGESTIONS.map((s, i) => (
+              <TouchableOpacity key={i} style={styles.chip} onPress={() => setInputText(s)}>
+                <Text style={styles.chipText}>{s}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      );
+    }
+
+    return <View style={{ height: 8 }} />;
   };
 
   return (
     <Modal
       visible={visible}
-      transparent
-      animationType="none"
+      animationType="slide"
+      presentationStyle="fullScreen"
       onRequestClose={onClose}
-      statusBarTranslucent
+      statusBarTranslucent={false}
     >
-      <View style={styles.modalOverlay}>
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
-        <Animated.View
-          style={[
-            styles.modalContainer,
-            { transform: [{ translateY: slideAnim }] },
-            { paddingBottom: insets.bottom },
-          ]}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <View style={styles.aiAvatar}>
-                <Text style={styles.aiAvatarText}>🤖</Text>
-              </View>
-              <View>
-                <Text style={styles.headerTitle}>Sankalp AI</Text>
-                <Text style={styles.headerSubtitle}>Your Business Assistant</Text>
-              </View>
-            </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={24} color="#6B7280" />
-            </TouchableOpacity>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+
+      {/*
+        Full-screen layout:
+        - KeyboardAvoidingView fills the screen
+        - 'padding' on iOS / 'height' on Android shrinks the view when keyboard opens
+        - FlatList (flex:1) absorbs the shrink — messages scroll up
+        - Input bar stays anchored at the bottom, always visible
+      */}
+      <KeyboardAvoidingView
+        style={[styles.screen, { paddingTop: insets.top }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        {/* ─── Header ─────────────────────────────────── */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.iconBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="arrow-back" size={22} color="#111827" />
+          </TouchableOpacity>
+
+          <View style={styles.headerMid}>
+            <View style={styles.onlineDot} />
+            <Text style={styles.headerTitle}>Sankalp AI</Text>
           </View>
 
-          {/* Messages */}
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            renderItem={renderMessage}
-            keyExtractor={item => item.id}
-            contentContainerStyle={styles.messagesList}
-            showsVerticalScrollIndicator={false}
-            ListFooterComponent={renderSuggestions}
-          />
-
-          {/* Input Area */}
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+          <TouchableOpacity
+            onPress={resetChat}
+            style={styles.iconBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <View style={styles.inputContainer}>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ask Sankalp AI..."
-                  placeholderTextColor="#9CA3AF"
-                  value={inputText}
-                  onChangeText={setInputText}
-                  multiline
-                  maxLength={500}
-                  editable={!isLoading}
-                />
-                <TouchableOpacity
-                  style={[
-                    styles.sendBtn,
-                    (!inputText.trim() || isLoading) && styles.sendBtnDisabled,
-                  ]}
-                  onPress={sendMessage}
-                  disabled={!inputText.trim() || isLoading}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Ionicons name="send" size={20} color="#fff" />
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </Animated.View>
-      </View>
+            <Ionicons name="create-outline" size={20} color="#6366F1" />
+          </TouchableOpacity>
+        </View>
+
+        {/* ─── Messages ────────────────────────────────── */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          ListFooterComponent={renderFooter}
+          keyboardShouldPersistTaps="handled"
+          onContentSizeChange={scrollToBottom}
+        />
+
+        {/* ─── Input Bar ───────────────────────────────── */}
+        <View style={[styles.inputBar, { paddingBottom: insets.bottom + 8 }]}>
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.input}
+              placeholder="Message Sankalp AI…"
+              placeholderTextColor="#9CA3AF"
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+              maxLength={500}
+              editable={!isLoading}
+              returnKeyType="send"
+              blurOnSubmit={false}
+              onSubmitEditing={sendMessage}
+            />
+            <TouchableOpacity
+              style={[styles.sendBtn, (!inputText.trim() || isLoading) && styles.sendBtnDim]}
+              onPress={sendMessage}
+              disabled={!inputText.trim() || isLoading}
+            >
+              <Ionicons name="arrow-up" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.disclaimer}>Sankalp AI can make mistakes. Verify important info.</Text>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  screen: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: '#F5F5FA',
   },
-  backdrop: {
-    flex: 1,
-  },
-  modalContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: SCREEN_HEIGHT * 0.85,
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
-  },
+
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EBEBF0',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 3,
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  aiAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#EEF2FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  aiAvatarText: {
-    fontSize: 24,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#111827',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  iconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  messagesList: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+  headerMid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  onlineDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: '#22C55E',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#111827',
+    letterSpacing: -0.3,
+  },
+
+  // Messages
+  list: {
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 8,
     flexGrow: 1,
   },
   messageRow: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: 10,
     alignItems: 'flex-end',
   },
   userRow: {
@@ -358,65 +380,62 @@ const styles = StyleSheet.create({
   assistantRow: {
     justifyContent: 'flex-start',
   },
-  assistantAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  botAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
     backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
+    marginBottom: 2,
   },
-  userAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#2563EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
-  },
-  avatarText: {
-    fontSize: 16,
-  },
-  messageBubble: {
+  bubble: {
     maxWidth: '80%',
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: 18,
   },
   userBubble: {
-    backgroundColor: '#2563EB',
+    backgroundColor: '#6366F1',
     borderBottomRightRadius: 4,
   },
-  assistantBubble: {
-    backgroundColor: '#F3F4F6',
+  botBubble: {
+    backgroundColor: '#fff',
     borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E9E9EF',
   },
-  userMessageText: {
+  userText: {
     color: '#fff',
     fontSize: 15,
     lineHeight: 22,
+    fontWeight: '500',
   },
-  assistantMessageText: {
+  botText: {
     color: '#1F2937',
     fontSize: 15,
     lineHeight: 22,
+    fontWeight: '400',
   },
-  messageTime: {
+  timeText: {
     fontSize: 10,
     color: '#9CA3AF',
     marginTop: 4,
     textAlign: 'right',
   },
-  suggestionsContainer: {
-    marginTop: 8,
-    marginBottom: 16,
+
+  // Suggestions
+  suggestionsWrap: {
+    paddingTop: 10,
+    paddingBottom: 4,
   },
-  suggestionsTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6B7280',
+  suggestionsLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
     marginBottom: 10,
   },
   suggestionsGrid: {
@@ -424,55 +443,65 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
-  suggestionChip: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 14,
+  chip: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 13,
     paddingVertical: 8,
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
   },
-  suggestionText: {
+  chipText: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#374151',
   },
-  inputContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+
+  // Input
+  inputBar: {
     backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#EBEBF0',
+    paddingHorizontal: 14,
+    paddingTop: 10,
   },
-  inputWrapper: {
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 24,
-    borderWidth: 1,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 26,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingLeft: 16,
+    paddingRight: 6,
+    paddingVertical: 6,
   },
   input: {
     flex: 1,
     fontSize: 15,
-    fontWeight: '500',
     color: '#111827',
-    maxHeight: 100,
-    paddingTop: 10,
-    paddingBottom: 10,
+    maxHeight: 120,
+    paddingTop: 8,
+    paddingBottom: 8,
+    fontWeight: '400',
   },
   sendBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#6366F1',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8,
+    marginLeft: 6,
   },
-  sendBtnDisabled: {
-    backgroundColor: '#9CA3AF',
+  sendBtnDim: {
+    backgroundColor: '#D1D5DB',
+  },
+  disclaimer: {
+    fontSize: 11,
+    color: '#C9C9C9',
+    textAlign: 'center',
+    marginTop: 7,
+    fontWeight: '500',
   },
 });

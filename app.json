@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Sankalp",
-    "slug": "sankalp-app",
+    "slug": "sankalp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -11,7 +11,7 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.sankalp.app",
+      "package": "com.sankalp.com",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -41,11 +41,16 @@
       ],
       "expo-web-browser",
       "expo-build-properties"
-      
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e218bf65-1813-4f87-b9ae-68f1e89ddddf"
+      }
     }
   }
 }
