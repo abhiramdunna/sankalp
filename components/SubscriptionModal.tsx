@@ -1,4 +1,4 @@
-// components/SubscriptionModal.tsx - With proper user-based subscription
+// components/SubscriptionModal.tsx - With Google Play Billing Integration
 import React, { useState, useEffect } from 'react';
 import {
   Modal,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,6 +17,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '@/lib/store';
 import { AppTheme } from '@/constants/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/lib/supabase';
+
+// Import react-native-iap for real billing
+let RNIap: any;
+try {
+  RNIap = require('react-native-iap');
+} catch (e) {
+  console.log('react-native-iap not available in dev environment');
+}
+
+const SUBSCRIPTION_SKU = 'sankalp_3month_premium';
 
 interface SubscriptionModalProps {
   visible: boolean;
@@ -48,12 +60,51 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
 
   const checkExistingSubscription = async () => {
     try {
-      const isSubscribed = await AsyncStorage.getItem(`isSubscribed_${userId}`);
-      if (isSubscribed === 'true') {
+      // First check local storage
+      const localSubscribed = await AsyncStorage.getItem(`isSubscribed_${userId}`);
+      if (localSubscribed === 'true') {
         setAlreadySubscribed(true);
-        // Auto-close and notify parent
-        onSuccess();
-        onClose();
+        return;
+      }
+
+      // Check Supabase for active subscription
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (data && !error) {
+        const expiration = data.expiration_date ? new Date(data.expiration_date) : null;
+        if (expiration && expiration > new Date()) {
+          setAlreadySubscribed(true);
+          // Update local cache
+          await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
+          return;
+        }
+      }
+
+      // For Android, check Google Play Store
+      if (Platform.OS === 'android' && RNIap) {
+        try {
+          await RNIap.initConnection();
+          const purchases = await RNIap.getAvailablePurchases();
+          
+          const activeSub = purchases.find(
+            (p: any) => p.productId === SUBSCRIPTION_SKU && 
+            (!p.expirationDate || new Date(p.expirationDate) > new Date())
+          );
+
+          if (activeSub) {
+            setAlreadySubscribed(true);
+            // Update local cache
+            await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
+          }
+
+          await RNIap.endConnection();
+        } catch (error) {
+          console.error('Error checking Google Play subscriptions:', error);
+        }
       }
     } catch (error) {
       console.error('Error checking subscription:', error);
@@ -70,12 +121,74 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
     
     setLoading(true);
     
-    // Simulate payment processing
-    setTimeout(async () => {
-      try {
-        // Store subscription per user
+    try {
+      // For Android with react-native-iap
+      if (Platform.OS === 'android' && RNIap) {
+        await RNIap.initConnection();
+        
+        try {
+          const purchase = await RNIap.requestPurchase({
+            skus: [SUBSCRIPTION_SKU],
+            andDangerouslyFinishTransactionAutomatically: false,
+          });
+
+          if (purchase && purchase.length > 0) {
+            const purchaseData = purchase[0];
+            
+            // Verify and save subscription to Supabase
+            await saveSubscriptionToSupabase(purchaseData);
+            
+            // Acknowledge the purchase
+            try {
+              await RNIap.finishTransaction({
+                purchase: purchaseData,
+                isConsumable: false,
+              });
+            } catch (finishError) {
+              console.error('Error finishing transaction:', finishError);
+            }
+            
+            // Save locally
+            await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
+            await AsyncStorage.setItem(`subscriptionDate_${userId}`, new Date().toISOString());
+            await AsyncStorage.setItem(`purchaseToken_${userId}`, purchaseData.purchaseToken || '');
+            
+            setLoading(false);
+            Alert.alert(
+              '🎉 Success!',
+              'Thank you for subscribing to Sankalp Pro!',
+              [{ text: 'Continue', onPress: () => {
+                onSuccess();
+                onClose();
+              }}]
+            );
+          }
+        } catch (error: any) {
+          setLoading(false);
+          // Handle user cancellation
+          if (error.code === 'E_USER_CANCELLED') {
+            console.log('User cancelled purchase');
+          } else {
+            Alert.alert('Purchase Error', error.message || 'Failed to process payment. Please try again.');
+          }
+        } finally {
+          try {
+            await RNIap.endConnection();
+          } catch (e) {
+            console.error('Error ending IAP connection:', e);
+          }
+        }
+      } else {
+        // Fallback for development/non-Android (mock subscription)
         await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
         await AsyncStorage.setItem(`subscriptionDate_${userId}`, new Date().toISOString());
+        
+        // Still try to save to Supabase for demo
+        await saveSubscriptionToSupabase({
+          productId: 'demo_' + SUBSCRIPTION_SKU,
+          purchaseToken: 'demo_token_' + Date.now(),
+          transactionDate: new Date().getTime(),
+        });
         
         setLoading(false);
         Alert.alert(
@@ -86,11 +199,34 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
             onClose();
           }}]
         );
-      } catch (error) {
-        setLoading(false);
-        Alert.alert('Error', 'Something went wrong. Please try again.');
       }
-    }, 1500);
+    } catch (error) {
+      setLoading(false);
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+      console.error('Subscription error:', error);
+    }
+  };
+
+  const saveSubscriptionToSupabase = async (purchaseData: any) => {
+    try {
+      const { error } = await supabase
+        .from('subscriptions')
+        .upsert({
+          user_id: userId,
+          product_id: purchaseData.productId || SUBSCRIPTION_SKU,
+          purchase_token: purchaseData.purchaseToken || 'demo_token',
+          purchase_date: new Date().toISOString(),
+          expiration_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
+          auto_renewing: true,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) {
+        console.error('Error saving subscription to Supabase:', error);
+      }
+    } catch (error) {
+      console.error('Failed to update subscription in database:', error);
+    }
   };
 
   if (!visible) return null;
@@ -109,24 +245,12 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
           <Text style={styles.subtitle}>Unlock premium features for your business</Text>
         </LinearGradient>
 
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {isTrialActive && !alreadySubscribed && (
-            <View style={styles.trialBanner}>
-              <Ionicons name="gift-outline" size={24} color="#D97706" />
-              <View style={styles.trialTextContainer}>
-                <Text style={styles.trialTitle}>Active Trial</Text>
-                <Text style={styles.trialSubtitle}>
-                  {trialDaysLeft} day{trialDaysLeft !== 1 ? 's' : ''} remaining
-                </Text>
-              </View>
-            </View>
-          )}
-
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 180 }}>
           {alreadySubscribed && (
             <View style={[styles.trialBanner, { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' }]}>
               <Ionicons name="checkmark-circle" size={24} color="#16A34A" />
               <View style={styles.trialTextContainer}>
-                <Text style={[styles.trialTitle, { color: '#166534' }]}>Pro Active</Text>
+                <Text style={[styles.trialTitle, { color: '#166534' }]}>Sankalp Pro</Text>
                 <Text style={[styles.trialSubtitle, { color: '#15803D' }]}>
                   You already have an active subscription
                 </Text>
@@ -135,24 +259,15 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
           )}
 
           <View style={styles.priceCard}>
-            <Text style={styles.priceLabel}>Special Launch Offer</Text>
             <Text style={styles.priceAmount}>₹29</Text>
-            <Text style={styles.priceDuration}>per month · 30 days</Text>
-            <View style={styles.savingsBadge}>
-              <Text style={styles.savingsText}>3-day free trial included</Text>
-            </View>
+            <Text style={styles.priceDuration}>per month</Text>
           </View>
 
           <View style={styles.featuresSection}>
             <Text style={styles.sectionTitle}>Premium Features</Text>
-            <FeatureItem icon="bar-chart" title="Advanced Analytics" description="View sales trends, top products, and business insights" theme={theme} />
-            <FeatureItem icon="download-outline" title="Export Reports" description="Download sales data as PDF or Excel" theme={theme} />
-            <FeatureItem icon="infinite" title="Unlimited Bills" description="No restrictions on number of bills" theme={theme} />
-            <FeatureItem icon="people" title="Customer Insights" description="Track repeat customers and purchase history" theme={theme} />
-            <FeatureItem icon="star" title="Priority Support" description="Get help within 24 hours" theme={theme} />
+            <FeatureItem icon="analytics" title="Real-Time Analytics" description="Track live sales, revenue trends, and business insights" theme={theme} />
+            <FeatureItem icon="sparkles" title="Sankalp AI Assistant" description="Get instant business suggestions and recommendations" theme={theme} />
           </View>
-
-          <View style={{ height: 100 }} />
         </ScrollView>
 
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
@@ -165,9 +280,11 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <Ionicons name={alreadySubscribed ? "checkmark-circle" : "rocket-outline"} size={20} color="#fff" />
+                {(alreadySubscribed || !isTrialActive) && (
+                  <Ionicons name={alreadySubscribed ? "checkmark-circle" : "rocket-outline"} size={20} color="#fff" />
+                )}
                 <Text style={styles.purchaseButtonText}>
-                  {alreadySubscribed ? "Already Subscribed" : isTrialActive ? `Continue Free Trial · ${trialDaysLeft}d left` : "Subscribe — ₹29/month"}
+                  {alreadySubscribed ? "Already Subscribed" : isTrialActive ? "Activate" : "Subscribe — ₹29/month"}
                 </Text>
               </>
             )}

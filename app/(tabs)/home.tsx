@@ -622,8 +622,6 @@ const ReviewBillModal = memo(({
     if (visible) setPaymentMode('cash');
   }, [visible]);
 
-  if (!visible) return null;
-
   const initials = (customerName || 'W').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
   const itemCount = items.reduce((s, i) => s + i.qty, 0);
 
@@ -633,7 +631,53 @@ const ReviewBillModal = memo(({
         <View style={{ backgroundColor: '#F9FAFB', borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', maxHeight: SCREEN_HEIGHT * 0.92 }}>
 
           {/* Gradient header */}
-         
+          <LinearGradient
+            colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={{ paddingTop: 20, paddingBottom: 24, paddingHorizontal: 20 }}
+          >
+            {/* Drag handle */}
+            <View style={{ width: 36, height: 4, backgroundColor: 'rgba(255,255,255,0.35)', borderRadius: 4, alignSelf: 'center', marginBottom: 18 }} />
+
+            {/* Top row: title + close */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>Review Bill</Text>
+              <TouchableOpacity
+                onPress={onClose}
+                style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Ionicons name="close" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Customer info */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontSize: 18, fontWeight: '900', color: '#fff' }}>{initials}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 17, fontWeight: '900', color: '#fff' }}>{customerName || 'Walk-in Customer'}</Text>
+                {customerPhone ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                    <Ionicons name="call-outline" size={12} color="rgba(255,255,255,0.75)" />
+                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>{customerPhone}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <View style={{ alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 }}>
+                <Ionicons name="layers-outline" size={13} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{itemCount} item{itemCount !== 1 ? 's' : ''}</Text>
+              </View>
+            </View>
+
+            {/* Total amount */}
+            <View style={{ marginTop: 16, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View>
+                <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }}>Total Amount</Text>
+                <Text style={{ fontSize: 28, fontWeight: '900', color: '#fff', letterSpacing: -1, marginTop: 2 }}>₹{total.toLocaleString('en-IN')}</Text>
+              </View>
+            </View>
+          </LinearGradient>
 
           {/* Items list */}
           <ScrollView
@@ -1010,6 +1054,25 @@ const ProfileModal = memo(({
 
         {/* Body */}
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
+          {/* Sankalp Pro Section */}
+          <TouchableOpacity style={[styles.menuItem, { backgroundColor: isSubscribed ? '#DCFCE7' : '#FEF3C7', borderWidth: 1, borderColor: isSubscribed ? '#86EFAC' : '#FDE68A', marginBottom: 16 }]} onPress={onUpgrade} activeOpacity={0.7}>
+            <View style={[styles.menuItemIcon, { backgroundColor: isSubscribed ? '#ECFDF5' : '#FFF9E6' }]}>
+              <Ionicons name={isSubscribed ? "checkmark-circle" : "sparkles"} size={20} color={isSubscribed ? "#10B981" : "#F59E0B"} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.menuItemTitle, { color: isSubscribed ? '#166534' : '#92400E' }]}>Sankalp Pro</Text>
+              {isSubscribed ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={[styles.menuItemSub, { color: '#15803D' }]}>Next billing: </Text>
+                  <Text style={[styles.menuItemSub, { color: '#10B981', fontWeight: '700', textDecorationLine: 'underline' }]}>{nextDue}</Text>
+                </View>
+              ) : (
+                <Text style={[styles.menuItemSub, { color: '#B45309' }]}>Tap to activate</Text>
+              )}
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={isSubscribed ? "#16A34A" : "#D97706"} style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
+
           {/* Business Info Card */}
           <View style={{ backgroundColor: '#F9FAFB', borderRadius: 16, borderWidth: 1.5, borderColor: '#F3F4F6', padding: 14, marginBottom: 16 }}>
             <Text style={{ fontSize: 10, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 }}>Business Details</Text>
@@ -1053,15 +1116,6 @@ const ProfileModal = memo(({
             </View>
           </View>
 
-          {/* Plan Row */}
-          <View style={styles.statsRow}>
-            <View style={[styles.statBox, { borderColor: '#FEF3C7' }]}>
-              <Ionicons name="diamond-outline" size={15} color="#D97706" />
-              <Text style={styles.statLabel}>Plan</Text>
-              <Text style={[styles.statValue, { color: '#D97706' }]}>{isSubscribed ? 'Pro' : isTrialActive ? 'Trial' : 'Expired'}</Text>
-            </View>
-          </View>
-
           {/* Menu Items */}
           <TouchableOpacity style={styles.menuItem} onPress={onPendingPayments}>
             <View style={[styles.menuItemIcon, { backgroundColor: '#FFF7ED' }]}>
@@ -1087,22 +1141,6 @@ const ProfileModal = memo(({
               <Text style={styles.menuItemTitle}>Choose Theme</Text>
               <Text style={styles.menuItemSub}>Personalise your app colours</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem} onPress={!isSubscribed ? onUpgrade : undefined} activeOpacity={isSubscribed ? 1 : 0.7}>
-            <View style={[styles.menuItemIcon, { backgroundColor: '#ECFDF5' }]}>
-              <Ionicons name="sparkles" size={20} color="#10B981" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.menuItemTitle}>Subscription</Text>
-              <Text style={styles.menuItemSub}>{isSubscribed ? `Renews ${nextDue} · ₹29/month` : isTrialActive ? 'Trial active — Upgrade to Pro' : 'Trial expired — Upgrade now'}</Text>
-            </View>
-            {!isSubscribed && (
-              <View style={[styles.menuBadge, { backgroundColor: '#ECFDF5' }]}>
-                <Text style={[styles.menuBadgeText, { color: '#10B981' }]}>Upgrade</Text>
-              </View>
-            )}
             <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
           </TouchableOpacity>
 
@@ -1616,27 +1654,20 @@ const EditProfileModal = memo(({
                   </View>
                 </View>
 
-                {/* Business Category chips */}
+                {/* Business Category input */}
                 <View style={styles.formGroup}>
                   <Text style={styles.formLabel}>Business Category</Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                    {BUSINESS_CATEGORIES_LIST.map(cat => {
-                      const active = editingBizCategory === cat;
-                      return (
-                        <TouchableOpacity
-                          key={cat}
-                          onPress={() => onChangeCategory(cat)}
-                          style={{
-                            paddingHorizontal: 11, paddingVertical: 7, borderRadius: 10,
-                            borderWidth: 1.5,
-                            borderColor: active ? '#4F46E5' : '#E5E7EB',
-                            backgroundColor: active ? '#4F46E5' : '#F9FAFB',
-                          }}
-                        >
-                          <Text style={{ fontSize: 13, fontWeight: '600', color: active ? '#fff' : '#374151' }}>{cat}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
+                  <View style={styles.formInputBox}>
+                    <Ionicons name="grid-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="e.g., Grocery & Kirana, Pharmacy"
+                      value={editingBizCategory}
+                      onChangeText={onChangeCategory}
+                      placeholderTextColor="#999"
+                      autoCorrect={false}
+                      blurOnSubmit={false}
+                    />
                   </View>
                 </View>
 
@@ -2008,6 +2039,7 @@ export default function HomeScreen() {
   const [products, setProducts] = useState<{ name: string; price: number }[]>([]);
   const [trialStart, setTrialStart] = useState<Date | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subscriptionDate, setSubscriptionDate] = useState<Date | null>(null);
   const [activeSessions, setActiveSessions] = useState<Session[]>([]);
   const [liveBillingVisible, setLiveBillingVisible] = useState(false);
   const [editingSession, setEditingSession] = useState<Session | null>(null);
@@ -2171,6 +2203,7 @@ const loadData = useCallback(async () => {
   try {
     const storedTrialStart = await AsyncStorage.getItem('trialStart');
     const storedSubscribed = await AsyncStorage.getItem('isSubscribed');
+    const storedSubDate = await AsyncStorage.getItem('subscriptionDate');
 
     if (storedTrialStart) {
       setTrialStart(new Date(storedTrialStart));
@@ -2178,6 +2211,10 @@ const loadData = useCallback(async () => {
 
     if (storedSubscribed === 'true') {
       setIsSubscribed(true);
+    }
+
+    if (storedSubDate) {
+      setSubscriptionDate(new Date(storedSubDate));
     }
 
     if (!storedTrialStart) {
@@ -2237,9 +2274,22 @@ setTodayTotal(
     setCurrentDateTime(
       `Sankalp · ${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]} · ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
     );
-    const nm = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    setNextDue(`${nm.getDate()} ${months[nm.getMonth()]}`);
   }, []);
+
+  const calculateRenewalDate = useCallback(() => {
+    const now = new Date();
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    // Calculate 30 days from subscription date for renewal date
+    if (subscriptionDate) {
+      const renewalDate = new Date(subscriptionDate);
+      renewalDate.setDate(renewalDate.getDate() + 30);
+      setNextDue(`${renewalDate.getDate()} ${months[renewalDate.getMonth()]}`);
+    } else {
+      // Fallback: if no subscription date, show first of next month
+      const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      setNextDue(`${nextMonth.getDate()} ${months[nextMonth.getMonth()]}`);
+    }
+  }, [subscriptionDate]);
 
   const getTrialDaysLeft = useCallback((): number => {
     if (!trialStart) return 7;
@@ -2251,8 +2301,8 @@ setTodayTotal(
   const isTrialActive = useCallback((): boolean => getTrialDaysLeft() > 0, [getTrialDaysLeft]);
 
   const getSubscriptionStatus = useCallback(() => {
-    if (isSubscribed) return { label: 'Pro — Active', color: '#16A34A', bg: '#DCFCE7', icon: 'checkmark-circle' as const };
-    if (isTrialActive()) return { label: `Free Trial — ${getTrialDaysLeft()} day${getTrialDaysLeft() !== 1 ? 's' : ''} left`, color: '#D97706', bg: '#FEF3C7', icon: 'time-outline' as const };
+    if (isSubscribed) return { label: 'Sankalp Pro', color: '#16A34A', bg: '#DCFCE7', icon: 'checkmark-circle' as const };
+    if (isTrialActive()) return { label: 'Sankalp', color: '#D97706', bg: '#FEF3C7', icon: 'sparkles' as const };
     return { label: 'Trial Expired', color: '#DC2626', bg: '#FEE2E2', icon: 'close-circle' as const };
   }, [isSubscribed, isTrialActive, getTrialDaysLeft]);
 
@@ -2288,6 +2338,7 @@ setTodayTotal(
     loadData();
     loadBusinessDetails();
     updateDateTime();
+    calculateRenewalDate();
     const interval = setInterval(updateDateTime, 30000);
 
     // Load pending payments summary
@@ -2302,6 +2353,11 @@ setTodayTotal(
 
     return () => clearInterval(interval);
   }, [loadData, loadBusinessDetails, updateDateTime, user?.id]);
+
+  // Update renewal date when subscription changes
+  useEffect(() => {
+    calculateRenewalDate();
+  }, [calculateRenewalDate]);
 
   // Reload products every time the home tab comes into focus
   useFocusEffect(
@@ -2529,9 +2585,13 @@ setTodayTotal(
         <SubscriptionModal
             visible={subscriptionModalVisible}
             onClose={() => setSubscriptionModalVisible(false)}
-            onSuccess={() => {
+            onSuccess={async () => {
               // Handle successful subscription
+              const now = new Date();
               setIsSubscribed(true);
+              setSubscriptionDate(now);
+              await AsyncStorage.setItem('isSubscribed', 'true');
+              await AsyncStorage.setItem('subscriptionDate', now.toISOString());
               setSubscriptionModalVisible(false);
               showSuccess('Thank you for subscribing to Sankalp Pro! 🎉');
             }}
