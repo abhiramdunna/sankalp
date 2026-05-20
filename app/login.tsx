@@ -14,9 +14,12 @@ import {
   StyleSheet,
   Text,
   View,
+  ScrollView,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 
 import { signInWithGoogle, type AuthMode } from '@/lib/auth';
 import { useAuthStore } from '@/lib/store';
@@ -38,6 +41,8 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingTitle, setLoadingTitle] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [modalConfig, setModalConfig] = useState<{
     title: string;
     message: string;
@@ -85,13 +90,6 @@ export default function Login() {
     try {
       const result = await signInWithGoogle(mode);
 
-      /**
-       * Because we suppressed the SIGNED_IN event in _layout.tsx during
-       * signInWithGoogle(), we must manually update the store here now
-       * that all checks have passed and we know the user is legitimate.
-       *
-       * This store update triggers useProtectedRoute which handles navigation.
-       */
       const { data: profile } = await supabase
         .from('profiles')
         .select('business_name, city')
@@ -144,6 +142,44 @@ export default function Login() {
     setModalConfig(null);
   };
 
+  // Terms Modal Component
+  const TermsModal = () => (
+    <Modal visible={showTermsModal} animationType="slide" transparent={false}>
+      <SafeAreaView style={styles.policyModalContainer}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={() => setShowTermsModal(false)}>
+            <Ionicons name="close" size={28} color="#1E1B4B" />
+          </TouchableOpacity>
+          <Text style={styles.modalHeaderTitle}>Terms of Service</Text>
+          <View style={{ width: 28 }} />
+        </View>
+        <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={true}>
+          <Text style={styles.modalHeading}>Sankalp - Terms of Service</Text>
+          <Text style={styles.modalText}>{`1. Acceptance of Terms\n\nBy accessing and using the Sankalp application, you agree to be bound by these Terms of Service. If you do not agree, please do not use this service.\n\n2. Use License\n\nPermission is granted to temporarily download one copy of the materials on Sankalp's App for personal, non-commercial transitory viewing only.\n\n3. Disclaimer\n\nThe materials on Sankalp's App are provided on an 'as is' basis. Sankalp makes no warranties, expressed or implied.\n\n4. Limitations\n\nIn no event shall Sankalp be liable for any damages arising out of the use or inability to use the materials on the App.\n\n5. User Accounts\n\nYou must provide accurate, complete, and current information. You are solely responsible for maintaining the confidentiality of your account and password.\n\n6. Business Operations\n\nYou are solely responsible for the accuracy and legitimacy of all business data you enter into the App.\n\n7. Payment and Billing\n\n• Free Trial: Users may receive a free trial period. After the trial ends, subscription charges will apply.\n• Subscription: Charges are billed automatically on the date specified during signup.\n• Cancellation: You may cancel at any time through your account settings.\n• Refunds: All sales are final.\n\n8. Intellectual Property Rights\n\nSankalp owns all intellectual property rights for materials on the App.\n\n9. Acceptable Use Policy\n\nYou agree not to:\n• Violate any applicable law or regulation\n• Transmit unlawful, threatening, or obscene material\n• Upload viruses or malicious code\n• Engage in unauthorized access or scraping\n\n10. Suspension and Termination\n\nSankalp reserves the right to suspend or terminate your account for violation of Terms, unlawful activity, or non-payment.\n\nFor the complete Terms of Service, please visit our website or contact us at support@sankalp.app`}</Text>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+
+  // Privacy Policy Modal Component
+  const PrivacyModal = () => (
+    <Modal visible={showPrivacyModal} animationType="slide" transparent={false}>
+      <SafeAreaView style={styles.policyModalContainer}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={() => setShowPrivacyModal(false)}>
+            <Ionicons name="close" size={28} color="#1E1B4B" />
+          </TouchableOpacity>
+          <Text style={styles.modalHeaderTitle}>Privacy Policy</Text>
+          <View style={{ width: 28 }} />
+        </View>
+        <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={true}>
+          <Text style={styles.modalHeading}>Sankalp - Privacy Policy</Text>
+          <Text style={styles.modalText}>{`1. Introduction\n\nSankalp is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information.\n\n2. Information We Collect\n\nWe collect:\n• Personal Information: Name, email, business details, location\n• Business Data: Sales records, customer information, billing data\n• Device Information: Device type, OS, unique identifiers\n• Usage Data: Features used, pages visited, time spent\n\n3. How We Use Your Information\n\nWe use your information to:\n• Create and maintain your account\n• Process transactions and provide services\n• Improve our service and features\n• Send service-related communications\n• Comply with legal requirements\n\n4. Data Security & Protection\n\n✓ Your data is completely safe with us\n✓ We will NOT use your data anywhere outside the App\n✓ We implement end-to-end encryption\n✓ We use secure Supabase backend with row-level security\n✓ Regular security audits and monitoring\n\n5. What We Do NOT Do\n\n✓ We do NOT sell your data to third parties\n✓ We do NOT share your customer information with anyone\n✓ We do NOT use your data for marketing purposes\n✓ We do NOT combine your data with other services\n✓ We do NOT use your data for AI training without consent\n\n6. Data Retention\n\n• Active Accounts: Data retained while you maintain the account\n• Deleted Accounts: Data permanently deleted within 30 days\n• Backup Data: Retained up to 90 days for disaster recovery\n\n7. Your Privacy Rights\n\nYou have the right to:\n• Access your data\n• Correct inaccurate information\n• Delete your data (Right to be Forgotten)\n• Receive your data in portable format\n• Withdraw consent\n\n8. Payment Information\n\n• All payments processed through secure, PCI-DSS compliant gateways\n• We do NOT store full credit card information\n• Payment data is encrypted and isolated from App data\n\n9. Contact Us\n\nFor privacy concerns:\nEmail: privacy@sankalp.app\nSupport: support@sankalp.app\n\nFor the complete Privacy Policy, please visit our website.`}</Text>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+
   return (
     <LinearGradient
       colors={['#4F46E5', '#7C3AED', '#9333EA']}
@@ -158,19 +194,20 @@ export default function Login() {
         >
           {!isLoading ? (
             <>
+              {/* ── Hero ── */}
               <Animated.View
                 style={[
                   styles.hero,
                   { opacity: heroFade, transform: [{ translateY: heroRise }] },
                 ]}
               >
-                <View style={styles.logoTile}>
-                  <Text style={styles.logoText}>24</Text>
+                <View style={styles.brandRow}>
+                  <Text style={styles.brand}>Sankalp</Text>
                 </View>
-                <Text style={styles.brand}>Sankalp</Text>
                 <Text style={styles.subtitle}>Your business, your way</Text>
               </Animated.View>
 
+              {/* ── Card ── */}
               <Animated.View
                 style={[
                   styles.card,
@@ -206,9 +243,24 @@ export default function Login() {
                   <Text style={styles.googleBtnText}>Sign Up with Google</Text>
                 </Pressable>
 
-                <Text style={styles.terms}>
-                  By continuing, you agree to our Terms of Service and Privacy Policy
-                </Text>
+                <View style={styles.termsContainer}>
+                  <Text style={styles.termsLabel}>By continuing, you agree to our</Text>
+                  <View style={styles.termsButtonsRow}>
+                    <TouchableOpacity 
+                      style={[styles.termsButton, styles.termsButtonFirst]}
+                      onPress={() => setShowTermsModal(true)}
+                    >
+                      <Text style={styles.termsButtonText}>Terms of Service</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.termsDivider}>and</Text>
+                    <TouchableOpacity 
+                      style={[styles.termsButton, styles.termsButtonLast]}
+                      onPress={() => setShowPrivacyModal(true)}
+                    >
+                      <Text style={styles.termsButtonText}>Privacy Policy</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </Animated.View>
             </>
           ) : (
@@ -272,6 +324,8 @@ export default function Login() {
           </View>
         </Modal>
       )}
+      <TermsModal />
+      <PrivacyModal />
     </LinearGradient>
   );
 }
@@ -283,69 +337,203 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'space-between',
     paddingHorizontal: 24,
-    paddingTop: 28,
+    paddingTop: 48,
     paddingBottom: 20,
   },
-  hero: { alignItems: 'center', marginTop: 18 },
+
+  // ── Hero ────────────────────────────────────────────────────
+  hero: {
+    alignItems: 'center',
+    marginTop: 18,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 14,
+  },
   logoTile: {
-    width: 84,
-    height: 84,
-    borderRadius: 26,
+    width: 38,
+    height: 38,
+    borderRadius: 11,
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 5,
   },
-  logoText: { fontSize: 28, fontWeight: '900', color: '#ffffff', letterSpacing: 1 },
-  brand: { marginTop: 20, fontSize: 48, fontWeight: '900', color: '#ffffff', letterSpacing: 0.2 },
+  logoText: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#fff',
+  },
+  brand: {
+    fontSize: 44,
+    fontWeight: '900',
+    color: '#ffffff',
+    letterSpacing: 0.3,
+  },
   subtitle: {
-    marginTop: 4,
-    fontSize: 20,
-    lineHeight: 26,
-    color: '#fff6e8',
-    fontWeight: '700',
+    fontSize: 18,
+    lineHeight: 24,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '600',
     textAlign: 'center',
+    letterSpacing: 0.2,
   },
+
+  // ── Card ────────────────────────────────────────────────────
   card: {
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingVertical: 22,
+    backgroundColor: 'rgba(255,255,255,0.97)',
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
     marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 12,
   },
-  title: { fontSize: 36, lineHeight: 42, fontWeight: '900', color: '#111827' },
-  message: { marginTop: 6, marginBottom: 18, color: '#7a818c', fontSize: 24, lineHeight: 30, fontWeight: '600' },
+  title: {
+    fontSize: 38,
+    fontWeight: '900',
+    color: '#1E1B4B',
+    letterSpacing: -0.5,
+    marginBottom: 6,
+  },
+  message: {
+    marginBottom: 16,
+    color: '#A78BFA',
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
   googleBtn: {
-    height: 56,
-    borderRadius: 12,
+    height: 54,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#dadada',
+    borderColor: '#EDE9FE',
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 10,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    elevation: 2,
   },
   pressed: { opacity: 0.78 },
-  g: { fontWeight: '900', color: '#4285f4', fontSize: 18 },
-  googleBtnText: { fontSize: 21, fontWeight: '800', color: '#0f172a' },
+  g: { fontWeight: '900', color: '#4285f4', fontSize: 20 },
+  googleBtnText: { fontSize: 17, fontWeight: '800', color: '#1E1B4B' },
   dividerRow: {
-    marginTop: 14,
-    marginBottom: 12,
+    marginTop: 18,
+    marginBottom: 16,
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
   },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#e1e1e1' },
-  dividerText: { fontSize: 12, fontWeight: '700', color: '#b4b8bf' },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#EDE9FE' },
+  dividerText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#A78BFA',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    letterSpacing: 0.5,
+  },
   terms: {
-    marginTop: 14,
-    color: '#8e96a3',
-    fontSize: 12,
+    marginTop: 18,
+    color: '#C4B5FD',
+    fontSize: 13,
     lineHeight: 18,
     textAlign: 'center',
-    fontWeight: '600',
+    fontWeight: '500',
+    letterSpacing: 0.2,
   },
+  termsContainer: {
+    marginTop: 12,
+    alignItems: 'center',
+    gap: 0,
+  },
+  termsLabel: {
+    color: '#A78BFA',
+    fontSize: 11,
+    lineHeight: 15,
+    textAlign: 'center',
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  termsButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    flexWrap: 'wrap',
+  },
+  termsButton: {
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+  },
+  termsButtonFirst: {
+    marginRight: 0,
+  },
+  termsButtonLast: {
+    marginLeft: 0,
+  },
+  termsButtonText: {
+    color: '#A78BFA',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  termsDivider: {
+    color: '#A78BFA',
+    fontSize: 11,
+    fontWeight: '500',
+    marginHorizontal: 4,
+  },
+
+  // ── Policy Modals ───────────────────────────────────────────
+  policyModalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1E1B4B',
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+  },
+  modalHeading: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1E1B4B',
+    marginBottom: 16,
+  },
+  modalText: {
+    fontSize: 15,
+    lineHeight: 24,
+    color: '#374151',
+    fontWeight: '400',
+    marginBottom: 32,
+  },
+
+  // ── Loading ─────────────────────────────────────────────────
+
   loadingCard: {
     flex: 1,
     alignItems: 'center',
@@ -353,9 +541,11 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 26,
   },
-  loadingTitle: { fontSize: 34, fontWeight: '900', color: '#ffffff', textAlign: 'center' },
-  loadingSub: { fontSize: 20, color: 'rgba(255,255,255,0.8)', fontWeight: '700', marginBottom: 12 },
+  loadingTitle: { fontSize: 32, fontWeight: '900', color: '#ffffff', textAlign: 'center' },
+  loadingSub: { fontSize: 18, color: 'rgba(255,255,255,0.7)', fontWeight: '600', marginBottom: 12 },
   loadingIndicator: { marginTop: 8, transform: [{ scale: 1.2 }] },
+
+  // ── Modal ───────────────────────────────────────────────────
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -386,12 +576,12 @@ const styles = StyleSheet.create({
   modalIconError: { backgroundColor: '#FEE2E2' },
   modalIconWarning: { backgroundColor: '#FEF3C7' },
   modalIconText: { fontSize: 32 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#111827', marginBottom: 8, textAlign: 'center' },
-  modalMessage: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  modalTitle: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 8, textAlign: 'center' },
+  modalMessage: { fontSize: 16, color: '#6B7280', textAlign: 'center', marginBottom: 24, lineHeight: 22 },
   modalButtons: { flexDirection: 'row', gap: 12, width: '100%' },
   modalButton: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
-  modalButtonPrimary: { backgroundColor: '#4F46E5' },
-  modalButtonSecondary: { backgroundColor: '#F3F4F6' },
-  modalButtonTextPrimary: { color: 'white', fontWeight: '600', fontSize: 14 },
-  modalButtonTextSecondary: { color: '#4B5563', fontWeight: '600', fontSize: 14 },
+  modalButtonPrimary: { backgroundColor: '#7C3AED' },
+  modalButtonSecondary: { backgroundColor: '#F5F3FF' },
+  modalButtonTextPrimary: { color: 'white', fontWeight: '700', fontSize: 16 },
+  modalButtonTextSecondary: { color: '#4338CA', fontWeight: '700', fontSize: 16 },
 });

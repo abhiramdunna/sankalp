@@ -980,14 +980,14 @@ const BillDetailModal = memo(({
 
 const ProfileModal = memo(({
   visible, bizName, bizLocation, bizCategory, bizState, userEmail, subStatus, isSubscribed, isTrialActive,
-  nextDue, pendingCount, pendingTotal, onClose, onEditProfile, onLogout, onUpgrade, onPendingPayments, onChooseTheme, theme,
+  nextDue, pendingCount, pendingTotal, onClose, onEditProfile, onLogout, onUpgrade, onPendingPayments, onChooseTheme, onDeleteAccount, theme,
 }: {
   visible: boolean; bizName: string; bizLocation: string; bizCategory: string; bizState: string; userEmail: string;
   subStatus: { label: string; color: string; bg: string; icon: any };
   isSubscribed: boolean; isTrialActive: boolean; nextDue: string;
   pendingCount: number; pendingTotal: number;
   onClose: () => void; onEditProfile: () => void; onLogout: () => void;
-  onUpgrade: () => void; onPendingPayments: () => void; onChooseTheme: () => void;
+  onUpgrade: () => void; onPendingPayments: () => void; onChooseTheme: () => void; onDeleteAccount: () => void;
   theme: AppTheme;
 }) => {
   const insets = useSafeAreaInsets();
@@ -1149,9 +1149,195 @@ const ProfileModal = memo(({
               <Ionicons name="log-out-outline" size={18} color="#DC2626" style={{ marginRight: 8 }} />
               <Text style={styles.logoutBtnText}>Logout</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.logoutBtn, { backgroundColor: '#7F1D1D', marginTop: 12 }]} 
+              onPress={onDeleteAccount}
+            >
+              <Ionicons name="trash-outline" size={18} color="#FCA5A5" style={{ marginRight: 8 }} />
+              <Text style={[styles.logoutBtnText, { color: '#FCA5A5' }]}>Delete Account</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </Animated.View>
+    </Modal>
+  );
+});
+
+// Delete Account Modal
+const DeleteAccountModal = memo(({ 
+  visible, 
+  onClose, 
+  onConfirm 
+}: { 
+  visible: boolean; 
+  onClose: () => void; 
+  onConfirm: (reason: string, confirmText: string) => void;
+}) => {
+  const insets = useSafeAreaInsets();
+  const [confirmText, setConfirmText] = useState('');
+  const [selectedReason, setSelectedReason] = useState('');
+  const { theme } = useThemeStore();
+
+  const deleteReasons = [
+    'Not using the app anymore',
+    'Found a better alternative',
+    'Privacy/Security concerns',
+    'Technical issues',
+    'Too expensive',
+    'Other reason'
+  ];
+
+  const isConfirmValid = confirmText === 'DELETE MY ACCOUNT' && selectedReason !== '';
+
+  return (
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center' }}>
+          <View style={{ 
+            backgroundColor: '#fff', 
+            borderRadius: 20, 
+            marginHorizontal: 20, 
+            maxHeight: '90%',
+            elevation: 8,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 3.84,
+          }}>
+          <ScrollView showsVerticalScrollIndicator={true} style={{ paddingHorizontal: 20, paddingTop: 24 }}>
+            {/* Header */}
+            <View style={{ marginBottom: 24 }}>
+              <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: '#FEE2E2', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                <Ionicons name="warning-outline" size={28} color="#DC2626" />
+              </View>
+              <Text style={{ fontSize: 22, fontWeight: '900', color: '#111827', marginBottom: 8 }}>Delete Account</Text>
+              <Text style={{ fontSize: 14, color: '#6B7280', fontWeight: '500', lineHeight: 20 }}>
+                This action is permanent. All your data will be deleted and cannot be recovered.
+              </Text>
+            </View>
+
+            {/* Why are you leaving? */}
+            <View style={{ marginBottom: 24 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 12 }}>Why are you leaving?</Text>
+              <View style={{ gap: 10 }}>
+                {deleteReasons.map((reason, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    onPress={() => setSelectedReason(reason)}
+                    style={{
+                      paddingHorizontal: 14,
+                      paddingVertical: 12,
+                      borderRadius: 10,
+                      borderWidth: 1.5,
+                      borderColor: selectedReason === reason ? '#DC2626' : '#E5E7EB',
+                      backgroundColor: selectedReason === reason ? '#FEF2F2' : '#FFFFFF',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <View style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: 9,
+                      borderWidth: 2,
+                      borderColor: selectedReason === reason ? '#DC2626' : '#D1D5DB',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: 10,
+                    }}>
+                      {selectedReason === reason && (
+                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#DC2626' }} />
+                      )}
+                    </View>
+                    <Text style={{ fontSize: 14, color: '#374151', fontWeight: '500', flex: 1 }}>{reason}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Confirmation Text */}
+            <View style={{ marginBottom: 24 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 12 }}>
+                Type <Text style={{ color: '#DC2626', fontWeight: '900' }}>DELETE MY ACCOUNT</Text> to confirm
+              </Text>
+              <TextInput
+                style={{
+                  borderWidth: 1.5,
+                  borderColor: confirmText === 'DELETE MY ACCOUNT' ? '#DC2626' : '#E5E7EB',
+                  borderRadius: 10,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  fontSize: 14,
+                  fontWeight: '500',
+                  backgroundColor: confirmText === 'DELETE MY ACCOUNT' ? '#FEF2F2' : '#FFFFFF',
+                }}
+                placeholder="Type here to confirm..."
+                placeholderTextColor="#9CA3AF"
+                value={confirmText}
+                onChangeText={setConfirmText}
+                autoCapitalize="characters"
+              />
+            </View>
+
+            {/* Warning Message */}
+            <View style={{ 
+              backgroundColor: '#FEF2F2', 
+              borderRadius: 10, 
+              paddingHorizontal: 12, 
+              paddingVertical: 12, 
+              marginBottom: 24,
+              flexDirection: 'row',
+              gap: 10,
+            }}>
+              <Ionicons name="information-circle-outline" size={16} color="#DC2626" style={{ marginTop: 2 }} />
+              <Text style={{ fontSize: 12, color: '#991B1B', fontWeight: '500', flex: 1, lineHeight: 18 }}>
+                Your account and all associated data will be permanently deleted.
+              </Text>
+            </View>
+
+            {/* Buttons */}
+            <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
+              <TouchableOpacity
+                onPress={onClose}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 10,
+                  borderWidth: 1.5,
+                  borderColor: '#E5E7EB',
+                  alignItems: 'center',
+                  backgroundColor: '#F9FAFB',
+                }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#374151' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                disabled={!isConfirmValid}
+                onPress={() => {
+                  onConfirm(selectedReason, confirmText);
+                  setConfirmText('');
+                  setSelectedReason('');
+                }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  backgroundColor: isConfirmValid ? '#DC2626' : '#FCA5A5',
+                }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>Delete Account</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 });
@@ -2036,6 +2222,9 @@ export default function HomeScreen() {
   const [nextDue, setNextDue] = useState('');
   const [profileVisible, setProfileVisible] = useState(false);
   const [themePickerVisible, setThemePickerVisible] = useState(false);
+  const [deleteAccountModalVisible, setDeleteAccountModalVisible] = useState(false);
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
+  const [deleteReason, setDeleteReason] = useState('');
   const [products, setProducts] = useState<{ name: string; price: number }[]>([]);
   const [trialStart, setTrialStart] = useState<Date | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -2541,10 +2730,106 @@ setTodayTotal(
           setProfileVisible(false);
           setTimeout(() => setThemePickerVisible(true), 300);
         }}
+        onDeleteAccount={() => {
+          setProfileVisible(false);
+          setTimeout(() => setDeleteAccountModalVisible(true), 300);
+        }}
       />
       <ThemePickerModal
         visible={themePickerVisible}
         onClose={() => setThemePickerVisible(false)}
+      />
+      <DeleteAccountModal
+        visible={deleteAccountModalVisible}
+        onClose={() => {
+          setDeleteAccountModalVisible(false);
+          setDeleteConfirmationText('');
+          setDeleteReason('');
+        }}
+        onConfirm={async (reason: string, confirmText: string) => {
+          try {
+            const userId = user?.id;
+            const userEmail = user?.email;
+            console.log('🗑️ Starting account deletion for user:', userId);
+
+            if (!userId) {
+              throw new Error('User ID not found');
+            }
+
+            // Step 1: Fetch user profile data before deletion
+            console.log('📋 Fetching profile data...');
+            const { data: profileData, error: fetchError } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', userId)
+              .single();
+
+            if (fetchError && fetchError.code !== 'PGRST116') {
+              console.error('❌ Error fetching profile:', fetchError);
+            }
+
+            console.log('📝 Profile data:', profileData);
+
+            // Step 2: Save deleted account details to deleted_accounts table
+            console.log('💾 Saving deletion record...');
+            const { error: recordError } = await supabase
+              .from('deleted_accounts')
+              .insert({
+                user_id: userId,
+                email: userEmail,
+                business_name: profileData?.business_name,
+                business_category: profileData?.business_category,
+                city: profileData?.city,
+                state: profileData?.state,
+                deletion_reason: reason,
+              });
+
+            if (recordError) {
+              console.error('⚠️ Error saving deletion record:', recordError);
+              // Continue with deletion even if this fails
+            } else {
+              console.log('✅ Deletion record saved successfully');
+            }
+
+            // Step 3: Delete profile from database
+            console.log('🗑️ Deleting profile from database...');
+            const { error: dbError } = await supabase
+              .from('profiles')
+              .delete()
+              .eq('id', userId);
+
+            if (dbError) {
+              console.error('❌ Database deletion error:', dbError);
+              throw dbError;
+            }
+
+            console.log('✅ Profile deleted successfully');
+
+            // Clear app state
+            console.log('🔄 Clearing app state...');
+            setUser(null);
+            setSession(null);
+            await AsyncStorage.clear();
+            
+            setDeleteAccountModalVisible(false);
+            setDeleteConfirmationText('');
+            setDeleteReason('');
+            
+            // Sign out
+            console.log('👋 Signing out...');
+            const { error: signOutError } = await supabase.auth.signOut();
+            if (signOutError) {
+              console.error('❌ Sign out error:', signOutError);
+            } else {
+              console.log('✅ Signed out successfully');
+            }
+
+            showSuccess('Account deleted successfully');
+          } catch (error) {
+            console.error('❌ Error deleting account:', error);
+            showError('Failed to delete account. Please try again.');
+          }
+        }}
       />
       <EditProfileModal
         visible={editProfileModalVisible}
