@@ -4,7 +4,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore, useThemeStore } from '@/lib/store';
 import { AppTheme } from '@/constants/theme';
+import { subscriptionService } from '@/lib/subscription';
 import { db as DatabaseService } from '@/lib/database';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
+import { PremiumAccessOverlay } from '@/components/PremiumAccessOverlay';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -65,6 +68,8 @@ const CHART_W = SCREEN_WIDTH - 84; // 16 margin + 4 gap + 48 y-axis + 16 margin
 const AnimatedCounter: React.FC<{ value: number; textStyle: any }> = ({ value, textStyle }) => {
   const anim = useRef(new Animated.Value(0)).current;
   const [display, setDisplay] = useState(0);
+
+  
 
   useEffect(() => {
     anim.setValue(0);
@@ -535,6 +540,10 @@ type TrendKey = 'Daily' | 'Weekly' | 'Monthly';
 export default function AnalyticsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
+const { user } = useAuthStore(); 
+const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
   const { theme } = useThemeStore();
   const styles = makeStyles(theme);
   const calendarStyles = makeCalendarStyles(theme);
@@ -596,6 +605,40 @@ export default function AnalyticsScreen() {
       };
     }, [])
   );
+
+ useEffect(() => {
+    const checkSubscription = async () => {
+      if (!user?.id) {
+        setIsLoadingSubscription(false);
+        return;
+      }
+      
+      try {
+        await subscriptionService.initialize(user.id);
+        const status = await subscriptionService.refreshStatus(user.id);
+        setSubscriptionStatus(status);
+        
+        if (!status.isSubscribed && !status.isTrialActive) {
+          setShowSubscriptionModal(true);
+        }
+      } catch (error) {
+        console.error('Subscription check error:', error);
+      } finally {
+        setIsLoadingSubscription(false);
+      }
+    };
+    
+    checkSubscription();
+    
+    const unsubscribe = subscriptionService.onStatusChange((status) => {
+      setSubscriptionStatus(status);
+      if (!status.isSubscribed && !status.isTrialActive) {
+        setShowSubscriptionModal(true);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [user?.id]);
 
   const filterSalesByDateRange = (sales: SaleLog[], start: Date, end: Date) => {
     const startOfDay = new Date(start);
@@ -906,8 +949,9 @@ export default function AnalyticsScreen() {
     </Modal>
   );
 
-  // ── Loading state ──
-  if (loading) {
+  
+  // ── Loading state (now includes subscription check) ──
+  if (loading || isLoadingSubscription) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <LinearGradient
@@ -929,6 +973,8 @@ export default function AnalyticsScreen() {
     );
   }
 
+  
+  // ── Main render: Analytics with optional premium overlay ──
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
 
@@ -1308,6 +1354,32 @@ export default function AnalyticsScreen() {
           onCancel={() => setShowCustomCalendar(false)}
         />
       )}
+
+      {/* ── Premium Access Overlay (Trial Expired) ── */}
+      <PremiumAccessOverlay
+        visible={!subscriptionStatus?.isSubscribed && !subscriptionStatus?.isTrialActive}
+        featureName="Analytics"
+        trialDaysLeft={subscriptionStatus?.trialDaysLeft || 0}
+        onUpgradePress={() => setShowSubscriptionModal(true)}
+        onClose={() => {
+          // Allow users to dismiss and continue viewing (analytics still runs in background)
+        }}
+        theme={theme}
+      />
+
+      {/* ── Subscription Modal ── */}
+      <SubscriptionModal
+        visible={showSubscriptionModal}
+        onClose={() => setShowSubscriptionModal(false)}
+        onSuccess={() => {
+          if (user?.id) {
+            subscriptionService.refreshStatus(user.id);
+          }
+        }}
+        userId={user?.id || ''}
+        isTrialActive={subscriptionStatus?.isTrialActive || false}
+        trialDaysLeft={subscriptionStatus?.trialDaysLeft || 0}
+      />
 
     </View>
   );
@@ -1860,6 +1932,53 @@ const makeStyles = (theme: AppTheme) => StyleSheet.create({
     color: '#9CA3AF',
     fontWeight: '700',
     marginTop: 2,
+  },
+  upgradeContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  lockIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  upgradeTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#111',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  upgradeSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  trialExpiredText: {
+    fontSize: 13,
+    color: '#EF4444',
+    fontWeight: '700',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  upgradeButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  upgradeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
   },
 });
 

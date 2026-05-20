@@ -267,6 +267,39 @@ class SubscriptionService {
     
     return true;
   }
+
+  /**
+   * Check if user has access to premium features
+   * Returns true if subscribed or trial is active
+   */
+  isPremiumAccessible(): boolean {
+    if (!this.cachedStatus) return false;
+    return this.cachedStatus.isSubscribed || this.cachedStatus.isTrialActive;
+  }
+
+  /**
+   * Get days remaining in trial (returns -1 if trial expired)
+   */
+  getTrialDaysRemaining(): number {
+    if (!this.cachedStatus) return 0;
+    return this.cachedStatus.trialDaysLeft;
+  }
+
+  /**
+   * Check if trial is still active
+   */
+  isTrialActive(): boolean {
+    if (!this.cachedStatus) return false;
+    return this.cachedStatus.isTrialActive;
+  }
+
+  /**
+   * Check if user is fully subscribed (not on trial)
+   */
+  isFullySubscribed(): boolean {
+    if (!this.cachedStatus) return false;
+    return this.cachedStatus.isSubscribed && !this.cachedStatus.isTrialActive;
+  }
 }
 
 export const subscriptionService = SubscriptionService.getInstance();

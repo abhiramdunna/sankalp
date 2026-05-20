@@ -2686,11 +2686,11 @@ setTodayTotal(
     <View style={styles.headerRightButtons}>
       {/* Sankalp AI Button */}
       <TouchableOpacity 
-        style={styles.aiHeaderBtn} 
+        style={[styles.aiHeaderBtn, { shadowColor: theme.colors.primary }]} 
         onPress={() => setAiModalVisible(true)}
       >
         <LinearGradient
-          colors={['#8B5CF6', '#6366F1']}
+          colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.aiGradient}
@@ -2847,7 +2847,6 @@ aiHeaderBtn: {
   borderRadius: 24,
   overflow: 'hidden',
   elevation: 2,
-  shadowColor: '#8B5CF6',
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.25,
   shadowRadius: 4,

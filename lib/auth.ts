@@ -118,7 +118,9 @@ export async function signInWithGoogle(mode: AuthMode): Promise<AuthResult> {
 
     // ── LOGIN ──────────────────────────────────────────────────────────────
     if (mode === 'login') {
-      if (!profileExists) {
+      if (!profileExists || !isComplete) {
+        // Unsuppress BEFORE signing out so _layout.tsx can process SIGNED_OUT event
+        setSuppressAuthEvent(false);
         await supabase.auth.signOut();
         throw new Error('NO_ACCOUNT_FOUND');
       }

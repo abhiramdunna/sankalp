@@ -15,8 +15,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useThemeStore } from '@/lib/store';
 import { aiService, Message } from '@/lib/ai';
+import { subscriptionService } from '@/lib/subscription';
+import { PremiumAccessOverlay } from './PremiumAccessOverlay';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface SankalpAIModalProps {
@@ -44,15 +46,49 @@ const INITIAL_MESSAGE: Message = {
 export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose }) => {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
+  const { theme } = useThemeStore();
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
+  const [showPremiumOverlay, setShowPremiumOverlay] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   // Animated dots for loading indicator
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
   const dot3 = useRef(new Animated.Value(0)).current;
+
+  // Initialize subscription status on mount
+  useEffect(() => {
+    if (!visible || !user?.id) return;
+
+    const initSubscription = async () => {
+      try {
+        await subscriptionService.initialize(user.id);
+        const status = await subscriptionService.refreshStatus(user.id);
+        setSubscriptionStatus(status);
+        
+        // Show overlay if trial has expired
+        if (!status.isSubscribed && !status.isTrialActive) {
+          setShowPremiumOverlay(true);
+        }
+      } catch (error) {
+        console.error('Subscription check error:', error);
+      }
+    };
+
+    initSubscription();
+
+    const unsubscribe = subscriptionService.onStatusChange((status) => {
+      setSubscriptionStatus(status);
+      if (!status.isSubscribed && !status.isTrialActive) {
+        setShowPremiumOverlay(true);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [visible, user?.id]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -85,7 +121,30 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
   }, []);
 
   const sendMessage = async () => {
-    if (!inputText.trim() || isLoading) return;
+    if (!inputText.trim() || isLoading || !user?.id) return;
+
+    // Check if user has premium access
+    if (!subscriptionStatus?.isSubscribed && !subscriptionStatus?.isTrialActive) {
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: 'user',
+          content: inputText.trim(),
+          timestamp: new Date(),
+        },
+        {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content:
+            '🔒 Your 3-day free trial has ended.\n\nUpgrade to Sankalp Pro to continue getting AI business insights. Your assistant is ready to help you grow! 📈',
+          timestamp: new Date(),
+        },
+      ]);
+      setInputText('');
+      scrollToBottom();
+      return;
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -100,37 +159,7 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
     scrollToBottom();
 
     try {
-      let response: string;
-
-      if (user?.id) {
-        const trialStartStr = await AsyncStorage.getItem('trialStart');
-        const isSubed = await AsyncStorage.getItem('isSubscribed');
-        const trialStart = trialStartStr ? new Date(trialStartStr) : new Date();
-        const elapsed = Math.floor((Date.now() - trialStart.getTime()) / (1000 * 60 * 60 * 24));
-        const trialActive = elapsed < 3;
-        const subscribed = isSubed === 'true';
-
-        if (!subscribed && !trialActive) {
-          setMessages(prev => [
-            ...prev,
-            {
-              id: (Date.now() + 1).toString(),
-              role: 'assistant',
-              content:
-                '🔒 Your 3-day free trial has ended.\n\nSubscribe to Sankalp Pro (₹29/month) to continue getting AI business insights.',
-              timestamp: new Date(),
-            },
-          ]);
-          setIsLoading(false);
-          scrollToBottom();
-          return;
-        }
-
-        response = await aiService.getResponse(userMessage.content, user.id, messages);
-      } else {
-        response =
-          'Please log in to use Sankalp AI. You can ask me about your business sales, products, pending payments, and more!';
-      }
+      const response = await aiService.getResponse(userMessage.content, user.id, messages);
 
       setMessages(prev => [
         ...prev,
@@ -294,15 +323,15 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
               onChangeText={setInputText}
               multiline
               maxLength={500}
-              editable={!isLoading}
+              editable={!isLoading && (subscriptionStatus?.isSubscribed || subscriptionStatus?.isTrialActive)}
               returnKeyType="send"
               blurOnSubmit={false}
               onSubmitEditing={sendMessage}
             />
             <TouchableOpacity
-              style={[styles.sendBtn, (!inputText.trim() || isLoading) && styles.sendBtnDim]}
+              style={[styles.sendBtn, (!inputText.trim() || isLoading || (!subscriptionStatus?.isSubscribed && !subscriptionStatus?.isTrialActive)) && styles.sendBtnDim]}
               onPress={sendMessage}
-              disabled={!inputText.trim() || isLoading}
+              disabled={!inputText.trim() || isLoading || (!subscriptionStatus?.isSubscribed && !subscriptionStatus?.isTrialActive)}
             >
               <Ionicons name="arrow-up" size={18} color="#fff" />
             </TouchableOpacity>
@@ -310,6 +339,19 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
           <Text style={styles.disclaimer}>Sankalp AI can make mistakes. Verify important info.</Text>
         </View>
       </KeyboardAvoidingView>
+
+      {/* ─── Premium Access Overlay ─────────────────────── */}
+      <PremiumAccessOverlay
+        visible={showPremiumOverlay}
+        featureName="AI Assistant"
+        trialDaysLeft={subscriptionStatus?.trialDaysLeft || 0}
+        onUpgradePress={() => {
+          // Handle upgrade - this would typically navigate to subscription screen
+          console.log('Upgrade pressed from AI Modal');
+        }}
+        onClose={() => setShowPremiumOverlay(false)}
+        theme={theme}
+      />
     </Modal>
   );
 };
