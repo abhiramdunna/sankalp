@@ -301,9 +301,6 @@ export default function CompleteProfile() {
           {/* ── Top section: logo + step counter ── */}
           <Animated.View style={[styles.topSection, { opacity: fadeAnim }]}>
             <View style={styles.brandRow}>
-              <View style={styles.logoTile}>
-                <Text style={styles.logoText}>S</Text>
-              </View>
               <Text style={styles.brand}>Sankalp</Text>
             </View>
 

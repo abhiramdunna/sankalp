@@ -115,7 +115,7 @@ These Terms of Service, along with the Privacy Policy, constitute the entire agr
 
 If you have any questions about these Terms of Service, please contact us at:
 
-**Email**: support@sankalp.app  
+**Email**: sankalp6490@gmail.com  
 **Address**: [Your Company Address]  
 **Phone**: [Your Phone Number]
 

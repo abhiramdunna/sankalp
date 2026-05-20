@@ -63,6 +63,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { user, isLoading, setUser, setSession, setLoading, clearAuth } = useAuthStore();
   const [appReady, setAppReady] = useState(false);
+  const [isSessionRestored, setIsSessionRestored] = useState(false);
   const initDone = useRef(false);
 
   useEffect(() => {
@@ -71,7 +72,7 @@ export default function RootLayout() {
 
     async function initializeApp() {
       try {
-        console.log('🔍 Initializing app...');
+        console.log('🔍 Initializing app - restoring session...');
         configureGoogleSignIn();
         setLoading(true);
 
@@ -83,17 +84,25 @@ export default function RootLayout() {
         } else if (session?.user) {
           console.log('✅ Found existing session:', session.user.email);
 
-          const { data: profile } = await supabase
+          // Fetch profile to check completion status
+          const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('business_name, city')
             .eq('id', session.user.id)
             .maybeSingle();
 
+          if (profileError) {
+            console.log('⚠️ Could not fetch profile:', profileError);
+          }
+
+          const hasComplete = !!(profile?.business_name && profile?.city);
+          console.log('📋 Profile status:', { exists: !!profile, isComplete: hasComplete });
+
           setUser({
             id: session.user.id,
             email: session.user.email || '',
             user_metadata: session.user.user_metadata,
-            hasCompleteProfile: !!(profile?.business_name && profile?.city),
+            hasCompleteProfile: hasComplete,
           });
           setSession({
             access_token: session.access_token,
@@ -149,10 +158,12 @@ export default function RootLayout() {
           }
         );
 
+        setIsSessionRestored(true);
         return () => subscription?.unsubscribe();
       } catch (error) {
         console.error('❌ Init error:', error);
         clearAuth();
+        setIsSessionRestored(true);
       } finally {
         setAppReady(true);
         setLoading(false);
@@ -163,9 +174,9 @@ export default function RootLayout() {
     initializeApp();
   }, []);
 
-  useProtectedRoute(user, appReady && !isLoading);
+  useProtectedRoute(user, appReady && !isLoading && isSessionRestored);
 
-  if (!appReady || isLoading) {
+  if (!appReady || isLoading || !isSessionRestored) {
     return null;
   }
 

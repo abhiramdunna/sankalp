@@ -137,7 +137,7 @@ You have the right to:
 
 ### 7.2 Exercising Your Rights
 
-To exercise any of these rights, please contact us at privacy@sankalp.app with your request. We will respond within 30 days.
+To exercise any of these rights, please contact us at sankalp6490@gmail.com with your request. We will respond within 30 days.
 
 ## 8. Cookies & Tracking
 
@@ -161,7 +161,7 @@ We do NOT use third-party tracking cookies or pixels to track you across other a
 
 The Sankalp App is not intended for children under the age of 18. We do not knowingly collect personal information from children under 18. If we become aware that a child under 18 has provided us with personal information, we will delete such information and terminate the child's account.
 
-Parents or guardians who believe their child has provided information to Sankalp should contact us immediately at privacy@sankalp.app.
+Parents or guardians who believe their child has provided information to Sankalp should contact us immediately at sankalp6490@gmail.com.
 
 ## 10. Security of Payment Information
 
@@ -234,8 +234,8 @@ Your continued use of the App after changes constitute acceptance of the updated
 
 If you have questions about this Privacy Policy or our privacy practices, please contact us:
 
-**Email**: privacy@sankalp.app  
-**Support Email**: support@sankalp.app  
+**Email**: sankalp6490@gmail.com  
+**Support Email**: sankalp6490@gmail.com  
 **Mailing Address**: [Your Company Address]  
 **Phone**: [Your Phone Number]  
 
@@ -243,7 +243,7 @@ If you have questions about this Privacy Policy or our privacy practices, please
 
 To submit data access, deletion, or portability requests:
 
-1. Email privacy@sankalp.app with your request
+1. Email sankalp6490@gmail.com with your request
 2. Include your account email and specific request details
 3. We will verify your identity before processing
 4. Response within 30 days
@@ -251,7 +251,7 @@ To submit data access, deletion, or portability requests:
 ### 16.3 Complaints
 
 If you believe your privacy rights have been violated, you can:
-- Contact us at privacy@sankalp.app
+- Contact us at sankalp6490@gmail.com
 - Lodge a complaint with your local data protection authority
 - Pursue legal remedies as applicable
 
@@ -263,7 +263,7 @@ California residents have the right to:
 - Delete personal information collected from you
 - Not be discriminated against for exercising your privacy rights
 
-To make a request, contact privacy@sankalp.app.
+To make a request, contact sankalp6490@gmail.com.
 
 ## 18. Accessibility
 

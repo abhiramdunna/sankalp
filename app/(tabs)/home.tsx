@@ -3017,6 +3017,28 @@ setTodayTotal(
   </View>
 </LinearGradient>
 
+      {/* Incomplete Profile Warning Banner */}
+      {(!bizName || !bizLocation || !bizCategory || !bizState) && (
+        <View style={[styles.incompleteProfileBanner, { backgroundColor: 'rgba(250, 204, 21, 0.1)' }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <View style={{ marginRight: 12 }}>
+              <Ionicons name="warning-outline" size={24} color="#D97706" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#D97706', marginBottom: 2 }}>Complete Your Profile</Text>
+              <Text style={{ fontSize: 12, color: '#B45309', lineHeight: 16 }}>Add your business details to unlock all features and improve your experience</Text>
+            </View>
+          </View>
+          <TouchableOpacity 
+            style={[styles.incompleteProfileBtn, { backgroundColor: '#D97706' }]}
+            onPress={() => setEditProfileModalVisible(true)}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>Edit</Text>
+            <Ionicons name="arrow-forward-outline" size={12} color="#fff" style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Quick Actions */}
       <View style={styles.quickActionsContainer}>
         <Text style={[styles.quickActionsTitle, { color: theme.colors.textPrimary }]}>Quick Actions</Text>
@@ -3331,4 +3353,8 @@ aiBtnText: {
   ppAmount: { fontSize: 17, fontWeight: '900', color: '#D97706' },
   ppDeleteBtn: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 3 },
   ppDeleteText: { fontSize: 11, color: '#10B981', fontWeight: '700' },
+  
+  // Incomplete Profile Banner Styles
+  incompleteProfileBanner: { marginHorizontal: 16, marginTop: 12, marginBottom: 12, borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(217, 119, 6, 0.2)' },
+  incompleteProfileBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
 });
