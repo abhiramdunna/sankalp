@@ -1,6 +1,6 @@
 // home.tsx — Complete working version with session persistence, business details, and profile fixes
 
-import { useAuthStore } from '@/lib/store';
+
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { SankalpAIModal } from '@/components/SankalpAIModal';
@@ -35,7 +35,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ─── Import shared theme system ──────────────────────────────────────────────
-import { useThemeStore } from '@/lib/store';
+import { useAuthStore, useThemeStore } from '@/lib/store';
 import { THEMES, DEFAULT_THEME_ID, type AppTheme, type ThemeId } from '@/constants/theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -1439,6 +1439,9 @@ const PendingPaymentsModal = memo(({
     } catch (e) { toast('Something went wrong'); }
   };
 
+  // Get sequential bill number for the day (resets to 1 each day)
+
+
   const openDetail = (p: PendingPayment) => {
     setDetailPayment(p);
     setShowDetail(true);
@@ -2076,41 +2079,24 @@ const ViewAllBillsModal = memo(({
             )}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity
-              onPress={() => { setBillsDateFilter('All'); setShowCalendar(false); }}
-              style={{
-                paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
-                backgroundColor: billsDateFilter === 'All' ? theme.colors.primary : '#F3F4F6',
-                borderWidth: 1, borderColor: billsDateFilter === 'All' ? theme.colors.primary : '#E5E7EB',
-              }}
-            >
-              <Text style={{ fontSize: 12, fontWeight: '700', color: billsDateFilter === 'All' ? '#fff' : '#6B7280' }}>All</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setShowCalendar(c => !c)}
-              style={{
-                flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
-                backgroundColor: billsDateFilter !== 'All' ? theme.colors.primaryLight : '#F3F4F6',
-                borderWidth: 1, borderColor: billsDateFilter !== 'All' ? theme.colors.primary : '#E5E7EB',
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Ionicons name="calendar-outline" size={14} color={billsDateFilter !== 'All' ? theme.colors.primary : '#9CA3AF'} />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: billsDateFilter !== 'All' ? theme.colors.primary : '#6B7280' }}>
-                  {billsDateFilter !== 'All' ? billsDateFilter : 'Pick a date'}
-                </Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                {billsDateFilter !== 'All' && (
-                  <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); setBillsDateFilter('All'); setShowCalendar(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name="close-circle" size={14} color={theme.colors.primary} />
-                  </TouchableOpacity>
-                )}
-                <Ionicons name={showCalendar ? 'chevron-up' : 'chevron-down'} size={13} color={billsDateFilter !== 'All' ? theme.colors.primary : '#9CA3AF'} />
-              </View>
-            </TouchableOpacity>
-          </View>
+  <TouchableOpacity
+    onPress={() => setShowCalendar(c => !c)}
+    style={{
+      flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14,
+      backgroundColor: theme.colors.primaryLight,
+      borderWidth: 1, borderColor: theme.colors.primary,
+    }}
+  >
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Ionicons name="calendar-outline" size={16} color={theme.colors.primary} />
+      <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.primary }}>
+        {billsDateFilter}
+      </Text>
+    </View>
+    <Ionicons name={showCalendar ? 'chevron-up' : 'chevron-down'} size={16} color={theme.colors.primary} />
+  </TouchableOpacity>
+</View>
           {showCalendar && (
             <View style={{ marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#fff', overflow: 'hidden' }}>
               <MiniCalendar
@@ -2218,7 +2204,8 @@ export default function HomeScreen() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [todayTotal, setTodayTotal] = useState(0);
   const [salesLog, setSalesLog] = useState<SaleLog[]>([]);
-  const [currentDateTime, setCurrentDateTime] = useState('');
+const [todaysBills, setTodaysBills] = useState<SaleLog[]>([]);
+const [currentDateTime, setCurrentDateTime] = useState('');
   const [nextDue, setNextDue] = useState('');
   const [profileVisible, setProfileVisible] = useState(false);
   const [themePickerVisible, setThemePickerVisible] = useState(false);
@@ -2264,11 +2251,37 @@ export default function HomeScreen() {
   const [editingBizState, setEditingBizState] = useState('');
   const [showIncompleteProfileWarning, setShowIncompleteProfileWarning] = useState(false);
 
-  const openBillDetail = useCallback((bill: SaleLog, number: number) => {
-    setSelectedBill(bill);
-    setSelectedBillNumber(number);
-    setBillDetailVisible(true);
-  }, []);
+    // Get sequential bill number for the day (resets to 1 each day)
+const getBillNumberForDate = useCallback((billDate: string, currentBillId: number, allBillsForDate: SaleLog[]) => {
+  // Sort bills by time (ascending) to get sequential order
+  const sortedBills = [...allBillsForDate].sort((a, b) => {
+    const getTimeValue = (timeStr: string) => {
+      const [time, modifier] = timeStr.split(' ');
+      let [hours, minutes] = time.split(':');
+      let hour = parseInt(hours);
+      if (modifier === 'PM' && hour !== 12) hour += 12;
+      if (modifier === 'AM' && hour === 12) hour = 0;
+      return hour * 60 + parseInt(minutes);
+    };
+    return getTimeValue(a.time) - getTimeValue(b.time);
+  });
+  
+  const index = sortedBills.findIndex(b => b.id === currentBillId);
+  return index + 1;
+}, []);
+
+ const openBillDetail = useCallback((bill: SaleLog, number: number) => {
+  // Get all bills for the same date
+  const billsForDate = salesLog.filter(b => b.date === bill.date);
+  // Calculate sequential number for that day
+  const sequentialNumber = getBillNumberForDate(bill.date, bill.id, billsForDate);
+  
+  setSelectedBill(bill);
+  setSelectedBillNumber(sequentialNumber);
+  setBillDetailVisible(true);
+}, [salesLog, getBillNumberForDate]);
+
+
 
   const handleDeleteBill = useCallback((bill: SaleLog) => {
     Alert.alert(
@@ -2282,8 +2295,17 @@ export default function HomeScreen() {
           onPress: async () => {
             try {
               await DatabaseService.deleteSaleLog(bill.id);
-              setSalesLog(prev => prev.filter(b => b.id !== bill.id));
-              setTodayTotal(prev => prev - bill.total);
+                setSalesLog(prev => prev.filter(b => b.id !== bill.id));
+
+                // Also remove from today's bills if it's today's bill
+                const now = new Date();
+                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const todayStr = `${now.getDate()} ${months[now.getMonth()]}`;
+                if (bill.date === todayStr) {
+                  setTodaysBills(prev => prev.filter(b => b.id !== bill.id));
+                }
+
+                setTodayTotal(prev => prev - bill.total);
               setBillDetailVisible(false);
               setSelectedBill(null);
               showSuccess('Bill deleted');
@@ -2307,6 +2329,9 @@ export default function HomeScreen() {
     setToastType('error');
     setShowToast(true);
   }, []);
+
+  // Get sequential bill number for the day (resets to 1 each day)
+
 
   // Load business details from Supabase
   const loadBusinessDetails = useCallback(async () => {
@@ -2466,21 +2491,20 @@ const loadData = useCallback(async () => {
         'Jul','Aug','Sep','Oct','Nov','Dec'
       ];
 
-      const todayDateStr = `${now.getDate()} ${months[now.getMonth()]}`;
+      const todayStr = `${now.getDate()} ${months[now.getMonth()]}`;
 
-      // Store ALL bills in a separate ref, today's bills in salesLog for home display
-const todaysBills = parsed.filter(
-  (bill: SaleLog) => bill.date === todayDateStr
-);
+      // Filter today's bills
+      const todaysFilteredBills = parsed.filter((bill: SaleLog) => bill.date === todayStr);
+      
+      setSalesLog(parsed); // Store ALL bills
+      setTodaysBills(todaysFilteredBills);
 
-setSalesLog(parsed); // ← CHANGE: store ALL bills (not just today's)
-
-setTodayTotal(
-  todaysBills.reduce(
-    (sum: number, bill: SaleLog) => sum + bill.total,
-    0
-  )
-);
+      setTodayTotal(
+        todaysFilteredBills.reduce(
+          (sum: number, bill: SaleLog) => sum + bill.total,
+          0
+        )
+      );
     }
 
     setActiveSessions([...RAM_SESSIONS]);
@@ -2488,7 +2512,7 @@ setTodayTotal(
   } catch (e) {
     console.error('loadData error:', e);
   }
-}, []);
+}, [user?.id]);
 
   const updateDateTime = useCallback(() => {
     const now = new Date();
@@ -2555,6 +2579,16 @@ setTodayTotal(
       ]
     );
   }, [router, setUser, setSession]);
+
+  // Set today's date filter when View All modal opens
+useEffect(() => {
+  if (viewAllBillsVisible) {
+    const now = new Date();
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const todayStr = `${now.getDate()} ${months[now.getMonth()]}`;
+    setBillsDateFilter(todayStr);
+  }
+}, [viewAllBillsVisible]);
 
   // Initialize data on mount
   useEffect(() => {
@@ -2676,6 +2710,13 @@ setTodayTotal(
     
     const updatedBills = [newBill, ...salesLog];
     setSalesLog(updatedBills);
+
+    // Also update today's bills if this bill is for today
+    const todayStr = `${now.getDate()} ${months[now.getMonth()]}`;
+    if (newBill.date === todayStr) {
+      setTodaysBills(prev => [newBill, ...prev]);
+    }
+
     setTodayTotal(prev => prev + reviewData.total);
 
     if (reviewData.sessionId) {
@@ -2693,26 +2734,33 @@ setTodayTotal(
   }
 }, [reviewData, salesLog, showSuccess, showError]);
 
-  const handleQuickEntrySave = useCallback(async (name: string, phone: string, amount: number, note: string, paymentMode: 'cash' | 'upi') => {
-    const now = new Date();
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const newBill: SaleLog = {
-      id: Date.now() + Math.floor(Math.random() * 10000),
-      total: amount,
-      time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-      date: `${now.getDate()} ${months[now.getMonth()]}`,
-      items: [{ name: note || 'Quick Bill', price: amount, qty: 1 }],
-      customerName: name,
-      phone,
-      paymentMode,
-    };
-    const updated = [newBill, ...salesLog];
-    setSalesLog(updated);
-    await DatabaseService.addSaleLog(newBill, salesLog);
-    setTodayTotal(prev => prev + amount);
-    setQuickEntryVisible(false);
-    showSuccess(`₹${amount} saved!`);
-  }, [salesLog, showSuccess]);
+const handleQuickEntrySave = useCallback(async (name: string, phone: string, amount: number, note: string, paymentMode: 'cash' | 'upi') => {
+  const now = new Date();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const newBill: SaleLog = {
+    id: Date.now() + Math.floor(Math.random() * 10000),
+    total: amount,
+    time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+    date: `${now.getDate()} ${months[now.getMonth()]}`,
+    items: [{ name: note || 'Quick Bill', price: amount, qty: 1 }],
+    customerName: name,
+    phone,
+    paymentMode,
+  };
+  const updated = [newBill, ...salesLog];
+  setSalesLog(updated);
+  await DatabaseService.addSaleLog(newBill, salesLog);
+
+  // Also update today's bills
+  const todayStr = `${now.getDate()} ${months[now.getMonth()]}`;
+  if (newBill.date === todayStr) {
+    setTodaysBills(prev => [newBill, ...prev]);
+  }
+
+  setTodayTotal(prev => prev + amount);
+  setQuickEntryVisible(false);
+  showSuccess(`₹${amount} saved!`);
+}, [salesLog, showSuccess]);
 
   const CARD_COLORS = useRef([
     { bg: '#EEF2FF', border: '#2563EB', badgeBg: '#2563EB', amtColor: '#2563EB' },
@@ -2723,19 +2771,22 @@ setTodayTotal(
   const subStatus = getSubscriptionStatus();
 
   // View All Bills Modal state
-  const [billsDateFilter, setBillsDateFilter] = useState<string>('All');
+  const [billsDateFilter, setBillsDateFilter] = useState<string>(''); 
   const [billsSearchQuery, setBillsSearchQuery] = useState<string>('');
 
   const filteredBills = useMemo(() => {
-    let bills = billsDateFilter === 'All' ? salesLog : salesLog.filter(b => b.date === billsDateFilter);
-    if (billsSearchQuery.trim()) {
-      const q = billsSearchQuery.toLowerCase();
-      bills = bills.filter(b => (b.customerName || '').toLowerCase().includes(q) || (b.phone || '').includes(q));
-    }
-    return bills;
-  }, [salesLog, billsDateFilter, billsSearchQuery]);
+  // If filter is empty, treat as "All"
+  const filterValue = billsDateFilter === '' ? 'All' : billsDateFilter;
+  let bills = filterValue === 'All' ? salesLog : salesLog.filter(b => b.date === filterValue);
+  if (billsSearchQuery.trim()) {
+    const q = billsSearchQuery.toLowerCase();
+    bills = bills.filter(b => (b.customerName || '').toLowerCase().includes(q) || (b.phone || '').includes(q));
+  }
+  return bills;
+}, [salesLog, billsDateFilter, billsSearchQuery]);
 
   const filteredTotal = useMemo(() => filteredBills.reduce((s, b) => s + b.total, 0), [filteredBills]);
+  
   const [subscriptionModalVisible, setSubscriptionModalVisible] = useState(false);
 
 
@@ -3035,14 +3086,8 @@ setTodayTotal(
         <Text style={styles.collectionValue}>₹{todayTotal.toLocaleString('en-IN')}</Text>
       </View>
       <View style={styles.billsCountBadge}>
-        <Ionicons name="receipt-outline" size={14} color="#fff" />
-        <Text style={styles.billsCountText}>{(() => {
-  const now = new Date();
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const todayStr = `${now.getDate()} ${months[now.getMonth()]}`;
-  return salesLog.filter(b => b.date === todayStr).length;
-          })()} bill{salesLog.filter(b => { const now = new Date(); const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return b.date === `${now.getDate()} ${months[now.getMonth()]}`; }).length !== 1 ? 's' : ''}</Text>
-      </View>
+  <Ionicons name="receipt-outline" size={14} color="#fff" />
+<Text style={styles.billsCountText}>{todaysBills.length} bill{todaysBills.length !== 1 ? 's' : ''}</Text></View>
     </View>
   </View>
 </LinearGradient>
@@ -3130,11 +3175,7 @@ setTodayTotal(
               />
             ))}
 
-            {salesLog.filter(b => b.date === (() => {
-            const now = new Date();
-            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            return `${now.getDate()} ${months[now.getMonth()]}`;
-          })()).map((bill, index) => (
+            {todaysBills.map((bill, index) => (
             <TouchableOpacity
               key={`bill-${bill.id}-${index}`}
                 style={[styles.billCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}

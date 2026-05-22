@@ -4,9 +4,47 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '@/lib/store';
+import { useEffect } from 'react';
+import { Platform } from 'react-native';
 
 export default function RootLayout() {
   const { theme } = useThemeStore();
+  useEffect(() => {
+  if (Platform.OS !== 'android') return;
+
+  let updateSub: any;
+  let errorSub: any;
+
+  const setup = async () => {
+    try {
+      const RNIap = require('react-native-iap');
+      await RNIap.initConnection();
+
+      updateSub = RNIap.purchaseUpdatedListener(async (purchase: any) => {
+        if (purchase?.purchaseToken) {
+          try {
+            await RNIap.finishTransaction({ purchase, isConsumable: false });
+          } catch (e) {
+            console.warn('IAP finishTransaction error:', e);
+          }
+        }
+      });
+
+      errorSub = RNIap.purchaseErrorListener((err: any) => {
+        console.warn('IAP background error:', err);
+      });
+    } catch (e) {
+      console.warn('IAP setup error:', e);
+    }
+  };
+
+  setup();
+
+  return () => {
+    updateSub?.remove();
+    errorSub?.remove();
+  };
+}, []);
 
   return (
     <SafeAreaProvider>
