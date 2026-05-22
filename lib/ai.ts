@@ -37,7 +37,7 @@ class AIService {
           DatabaseService.loadSuppliers(),
           supabase
   .from('profiles')
-  .select('business_name, city, business_category')
+  .select('business_name, city, business_category, state')
   .eq('id', userId)
   .single(),
           supabase
@@ -47,7 +47,8 @@ class AIService {
         ]);
 
       let context = `BUSINESS DATA FOR ${profile.data?.business_name || 'Business'}\n`;
-context += `Business Type: ${profile.data?.business_category || 'General'}\n\n`;
+context += `Business Type: ${profile.data?.business_category || 'General'}\n`;
+context += `Location: ${profile.data?.city || 'Unknown'}, ${profile.data?.state || 'India'}\n\n`;
 
       // -------------------------
       // PRODUCTS
@@ -258,6 +259,7 @@ You help users with:
 - Supplier management and pending bills
 - Customer pending payments
 - Practical business tips and advice tailored to their business type
+- Location-aware business recommendations and feasibility analysis
 - How to use Sankalp app features
 
 Respond ONLY in English. Be warm, concise, and actionable.
@@ -268,13 +270,18 @@ IMPORTANT RULES FOR DATA QUESTIONS:
 - If data is missing: say "I don't have that information in your records yet."
 - Never invent or estimate business data.
 
-FOR BUSINESS TIPS QUESTIONS:
+FOR BUSINESS TIPS AND LOCATION-AWARE QUESTIONS:
 - When a user asks for business tips, growth advice, or general guidance, give 3–5 practical, specific tips relevant to their business type (from the profile below).
 - Draw on their actual data where possible (e.g. if a product sells a lot, suggest stocking more).
-- You do NOT need real-time data to answer tips — use your knowledge of Indian small business best practices.
+- IMPORTANT: When user asks questions about their business type and location (e.g., "is fishing nets good for my location?"), always CONSIDER THE LOCATION and BUSINESS TYPE TOGETHER.
+  * Use your knowledge of geography, climate, industries, and local markets in India
+  * Provide location-specific insights based on the city and state
+  * Example: If business type is "Fishing nets" and location is "Sompeta", mention that Sompeta is near the seashore and is excellent for fishing-related businesses
+  * If suggesting business feasibility, explain WHY based on location characteristics
+- You do NOT need real-time data to answer tips or location-based questions — use your knowledge of Indian small business best practices and geography.
 
 Only decline to answer if the question is completely unrelated to business (e.g. cricket, movies, politics). In that case reply:
-"I'm here to help with your business! Ask me about sales, products, suppliers, or tips to grow."
+"I'm here to help with your business! Ask me about sales, products, suppliers, tips to grow, or if your business type suits your location."
 
 Business data:
 ${userContext}

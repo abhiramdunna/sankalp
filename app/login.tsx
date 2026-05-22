@@ -20,6 +20,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useThemeStore } from '@/lib/store';
+import { type AppTheme } from '@/constants/theme';
 
 import { signInWithGoogle, type AuthMode } from '@/lib/auth';
 import { useAuthStore } from '@/lib/store';
@@ -36,6 +38,7 @@ function getErrorMessage(err: any): string {
 }
 
 export default function Login() {
+  const { theme } = useThemeStore();
   const { setIsNewSignup, setUser, setSession } = useAuthStore();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -182,7 +185,7 @@ export default function Login() {
 
   return (
     <LinearGradient
-      colors={['#4F46E5', '#7C3AED', '#9333EA']}
+  colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.container}
@@ -202,7 +205,16 @@ export default function Login() {
                 ]}
               >
                 <View style={styles.brandRow}>
-                  <Text style={styles.brand}>Sankalp</Text>
+                  <Text
+                style={[
+                  styles.brand,
+                  {
+                    textShadowColor: `${theme.colors.primary}50`,
+                  },
+                ]}
+              >
+                Sankalp
+              </Text>
                 </View>
                 <Text style={styles.subtitle}>Your business, your way</Text>
               </Animated.View>
@@ -211,7 +223,10 @@ export default function Login() {
               <Animated.View
                 style={[
                   styles.card,
-                  { opacity: cardFade, transform: [{ translateY: cardRise }] },
+                  {
+                borderColor: `${theme.colors.primary}15`,
+                shadowColor: theme.colors.primary,
+              },
                 ]}
               >
                 <Text style={styles.title}>Welcome!</Text>
@@ -220,7 +235,14 @@ export default function Login() {
                 </Text>
 
                 <Pressable
-                  style={({ pressed }) => [styles.googleBtn, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+              styles.googleBtn,
+              {
+                borderColor: `${theme.colors.primary}25`,
+                backgroundColor: '#FFFFFF',
+              },
+              pressed && styles.pressed,
+            ]}
                   onPress={() => handleAuth('login')}
                   disabled={isLoading}
                 >
@@ -250,14 +272,28 @@ export default function Login() {
                       style={[styles.termsButton, styles.termsButtonFirst]}
                       onPress={() => setShowTermsModal(true)}
                     >
-                      <Text style={styles.termsButtonText}>Terms of Service</Text>
+                      <Text
+                    style={[
+                      styles.termsButtonText,
+                      { color: theme.colors.primary },
+                    ]}
+                  >
+                    Terms of Service
+                  </Text>
                     </TouchableOpacity>
                     <Text style={styles.termsDivider}>and</Text>
                     <TouchableOpacity 
                       style={[styles.termsButton, styles.termsButtonLast]}
                       onPress={() => setShowPrivacyModal(true)}
                     >
-                      <Text style={styles.termsButtonText}>Privacy Policy</Text>
+                      <Text
+  style={[
+    styles.termsButtonText,
+    { color: theme.colors.primary },
+  ]}
+>
+  Privacy policy
+</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -269,9 +305,8 @@ export default function Login() {
               <Text style={styles.loadingTitle}>{loadingTitle}</Text>
               <Text style={styles.loadingSub}>Please wait a moment</Text>
               <ActivityIndicator
-                size="large"
-                color="#ffffff"
-                style={styles.loadingIndicator}
+          size="large"
+          color={theme.colors.primary}
               />
             </View>
           )}
@@ -425,6 +460,12 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   pressed: { opacity: 0.78 },
+  modernShadow: {
+  shadowOffset: { width: 0, height: 10 },
+  shadowOpacity: 0.18,
+  shadowRadius: 20,
+  elevation: 10,
+},
   g: { fontWeight: '900', color: '#4285f4', fontSize: 20 },
   googleBtnText: { fontSize: 20, fontWeight: '800', color: '#1E1B4B' },
   dividerRow: {

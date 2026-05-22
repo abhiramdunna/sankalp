@@ -21,6 +21,7 @@ import {
   Keyboard,
 } from 'react-native';
 import FeatureShowcase from '@/app/features-showcase';
+import { useThemeStore } from '@/lib/store';
 
 // ─── Indian States ────────────────────────────────────────────────────────────
 const INDIAN_STATES = [
@@ -61,12 +62,12 @@ const STEPS: Step[] = ['business_name', 'business_category', 'city', 'state'];
 const STEP_META: Record<Step, { question: string; placeholder: string; hint: string }> = {
   business_name: {
     question: "What's your\nbusiness name?",
-    placeholder: "e.g. Sharma General Store",
+    placeholder: "e.g. Rahul Shoe Mart",
     hint: "Your official store or brand name",
   },
   business_category: {
     question: "What type of\nbusiness is it?",
-    placeholder: "e.g. Grocery & Kirana, Pharmacy…",
+    placeholder: "e.g. Grocery",
     hint: "Describe what you sell or offer",
   },
   city: {
@@ -82,6 +83,7 @@ const STEP_META: Record<Step, { question: string; placeholder: string; hint: str
 };
 
 export default function CompleteProfile() {
+  const { theme } = useThemeStore();
   const router = useRouter();
   const { user, clearAuth, updateProfileStatus, setIsNewSignup, isNewSignup } = useAuthStore();
 
@@ -257,10 +259,11 @@ export default function CompleteProfile() {
   // ── Loading ─────────────────────────────────────────────────────────────────
   if (isChecking) {
     return (
-      <LinearGradient colors={['#4F46E5', '#7C3AED', '#9333EA']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.container}>
+      <LinearGradient
+  colors={[theme.colors.gradientStart, theme.colors.gradientEnd]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.container}>
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="rgba(255,255,255,0.8)" />
+            <ActivityIndicator size="large" color={theme.colors.primary} />
             <Text style={styles.loadingText}>Setting up…</Text>
           </View>
         </SafeAreaView>
@@ -287,7 +290,7 @@ export default function CompleteProfile() {
 
   return (
     <LinearGradient
-      colors={['#4F46E5', '#7C3AED', '#9333EA']}
+      colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.container}
@@ -301,7 +304,16 @@ export default function CompleteProfile() {
           {/* ── Top section: logo + step counter ── */}
           <Animated.View style={[styles.topSection, { opacity: fadeAnim }]}>
             <View style={styles.brandRow}>
-              <Text style={styles.brand}>Sankalp</Text>
+              <Text
+  style={[
+    styles.brand,
+    {
+      textShadowColor: `${theme.colors.primary}70`,
+    },
+  ]}
+>
+  Sankalp
+</Text>
             </View>
 
             <Text style={styles.stepCounter}>{currentStepIndex + 1} of {STEPS.length}</Text>
@@ -311,7 +323,12 @@ export default function CompleteProfile() {
           <Animated.View
             style={[
               styles.card,
-              { opacity: fadeAnim, transform: [{ translateY: cardRise }] },
+{
+  opacity: fadeAnim,
+  transform: [{ translateY: cardRise }],
+  borderColor: `${theme.colors.primary}15`,
+  shadowColor: theme.colors.primary,
+},
             ]}
           >
             <ScrollView
@@ -326,11 +343,11 @@ export default function CompleteProfile() {
                   { opacity: questionFadeAnim, transform: [{ translateX: slideAnim }] },
                 ]}
               >
-                <Text style={styles.stepTag}>
+                <Text style={[styles.stepTag, { color: `${theme.colors.primary}99` }]}>
                   {String(currentStepIndex + 1).padStart(2, '0')} —
                 </Text>
                 <Text style={styles.question}>{meta.question}</Text>
-                <Text style={styles.hint}>{meta.hint}</Text>
+                <Text style={[styles.hint, { color: `${theme.colors.primary}99` }]}>{meta.hint}</Text>
               </Animated.View>
 
               {/* Input */}
@@ -344,7 +361,7 @@ export default function CompleteProfile() {
                   <TextInput
                     style={styles.textInput}
                     placeholder={meta.placeholder}
-                    placeholderTextColor="#C4B5FD"
+                    placeholderTextColor={`${theme.colors.primary}70`}
                     value={getCurrentValue()}
                     onChangeText={handleChange}
                     autoFocus
@@ -356,19 +373,31 @@ export default function CompleteProfile() {
                   />
                   {getCurrentValue().length > 0 && (
                     <TouchableOpacity onPress={() => handleChange('')} style={styles.clearBtn}>
-                      <Ionicons name="close-circle" size={20} color="#C4B5FD" />
+                      <Ionicons
+  name="close-circle"
+  size={20}
+  color={`${theme.colors.primary}80`}
+/>
                     </TouchableOpacity>
                   )}
                 </View>
 
                 {/* Animated underline */}
                 <View style={styles.underlineTrack}>
-                  <Animated.View style={[styles.underlineFill, { width: underlineWidth }]} />
+                  <Animated.View
+  style={[
+    styles.underlineFill,
+    {
+      width: underlineWidth,
+      backgroundColor: theme.colors.primary,
+    },
+  ]}
+/>
                 </View>
 
                 {/* Suggestions */}
                 {suggestions.length > 0 && (
-                  <View style={styles.suggestionsBox}>
+                  <View style={[styles.suggestionsBox, { borderColor: `${theme.colors.primary}30` }]}>
                     {suggestions.map((s, i) => (
                       <TouchableOpacity
                         key={s}
@@ -382,10 +411,10 @@ export default function CompleteProfile() {
                         <Ionicons
                           name={currentStep === 'city' ? 'location' : 'flag'}
                           size={13}
-                          color="#7C3AED"
+                          color={theme.colors.primary}
                         />
-                        <Text style={styles.suggestionText}>{s}</Text>
-                        <Ionicons name="arrow-forward" size={12} color="#C4B5FD" style={{ marginLeft: 'auto' }} />
+                        <Text style={[styles.suggestionText, { color: theme.colors.primary }]}>{s}</Text>
+                        <Ionicons name="arrow-forward" size={12} color={`${theme.colors.primary}70`} style={{ marginLeft: 'auto' }} />
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -400,9 +429,20 @@ export default function CompleteProfile() {
                     { step: 1, label: 'Category', value: businessCategory },
                     { step: 2, label: 'City', value: city },
                   ].filter(a => a.step < currentStepIndex && a.value).map(a => (
-                    <View key={a.step} style={styles.prevChip}>
+                    <View key={a.step} style={[
+  styles.prevChip,
+  {
+    backgroundColor: `${theme.colors.primary}10`,
+    borderColor: `${theme.colors.primary}20`,
+  },
+]}>
                       <Text style={styles.prevChipLabel}>{a.label}</Text>
-                      <Text style={styles.prevChipValue} numberOfLines={1}>{a.value}</Text>
+                      <Text style={[
+  styles.prevChipValue,
+  {
+    color: theme.colors.primary,
+  },
+]} numberOfLines={1}>{a.value}</Text>
                     </View>
                   ))}
                 </View>
@@ -411,9 +451,14 @@ export default function CompleteProfile() {
               {/* Enter hint */}
               {canAdvance() && (
                 <View style={styles.enterHint}>
-                  <Text style={styles.enterHintText}>
+                  <Text style={[styles.enterHintText, { color: `${theme.colors.primary}70` }]}>
                     Press{' '}
-                    <Text style={styles.enterHintKey}>Return ↵</Text>
+                    <Text style={[
+  styles.enterHintKey,
+  {
+    color: theme.colors.primary,
+  },
+]}>Return ↵</Text>
                     {' '}to continue
                   </Text>
                 </View>
@@ -422,15 +467,28 @@ export default function CompleteProfile() {
               {/* Action buttons */}
               <View style={styles.actionRow}>
                 {currentStepIndex > 0 ? (
-                  <TouchableOpacity style={styles.backBtn} onPress={handleBack} activeOpacity={0.7}>
-                    <Ionicons name="arrow-back" size={16} color="#7C3AED" />
+                  <TouchableOpacity style={[
+  styles.backBtn,
+  {
+    backgroundColor: `${theme.colors.primary}10`,
+    borderColor: `${theme.colors.primary}20`,
+  },
+]} onPress={handleBack} activeOpacity={0.7}>
+                    <Ionicons name="arrow-back" size={16} color={theme.colors.primary} />
                   </TouchableOpacity>
                 ) : (
                   <View style={{ width: 44 }} />
                 )}
 
                 <TouchableOpacity
-                  style={[styles.nextBtn, !canAdvance() && styles.nextBtnDisabled]}
+                  style={[
+  styles.nextBtn,
+  {
+    backgroundColor: theme.colors.primary,
+    shadowColor: theme.colors.primary,
+  },
+  !canAdvance() && styles.nextBtnDisabled,
+]}
                   onPress={handleNext}
                   disabled={!canAdvance() || isLoading}
                   activeOpacity={0.85}

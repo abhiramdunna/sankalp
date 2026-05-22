@@ -606,6 +606,13 @@ const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
     }, [])
   );
 
+  useEffect(() => {
+  if (salesLog.length > 0) {
+    console.log('📊 Sales Log Sample:', salesLog.slice(0, 3));
+    console.log('📊 Date formats:', salesLog.slice(0, 3).map(s => s.date));
+  }
+}, [salesLog]);
+
  useEffect(() => {
     const checkSubscription = async () => {
       if (!user?.id) {
@@ -685,26 +692,48 @@ const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
   };
 
   const parseBillDate = (dateStr: string): Date | null => {
-    const parts = dateStr.trim().split(' ');
-    if (parts.length < 2) return null;
-    const day = parseInt(parts[0]);
-    const monthStr = parts[1];
-    if (isNaN(day) || !(monthStr in monthsMap)) return null;
-    const monthNum = monthsMap[monthStr];
-    let year: number;
-    if (parts.length >= 3 && /^\d{4}$/.test(parts[2])) {
-      year = parseInt(parts[2]);
-    } else {
-      const cy = new Date().getFullYear();
-      year = monthNum > new Date().getMonth() ? cy - 1 : cy;
-    }
-    const d = new Date(year, monthNum, day);
-    d.setHours(0, 0, 0, 0);
-    return d;
+  if (!dateStr) return null;
+  
+  const parts = dateStr.trim().split(' ');
+  if (parts.length < 2) return null;
+  
+  const day = parseInt(parts[0]);
+  const monthStr = parts[1];
+  
+  // Month mapping
+  const monthsMap: Record<string, number> = {
+    'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+    'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
   };
+  
+  if (isNaN(day) || !(monthStr in monthsMap)) return null;
+  
+  const monthNum = monthsMap[monthStr];
+  
+  // Parse year
+  let year: number;
+  if (parts.length >= 3 && /^\d{4}$/.test(parts[2])) {
+    year = parseInt(parts[2]);
+  } else {
+    // If no year provided, assume current or previous year
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth();
+    year = monthNum > currentMonth ? currentYear - 1 : currentYear;
+  }
+  
+  const d = new Date(year, monthNum, day);
+  d.setHours(0, 0, 0, 0);
+  
+  // Validate date is valid
+  if (isNaN(d.getTime())) return null;
+  
+  return d;
+};
 
   const generateChartData = (sales: SaleLog[], start: Date, end: Date, trend: TrendKey) => {
     const filtered = filterSalesByDateRange(sales, start, end);
+
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     if (trend === 'Monthly') {
       const byMonth: Record<string, number> = {};
@@ -754,45 +783,50 @@ const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
       return { data, labels };
     }
 
-    // Daily (default)
-    const byDate: Record<string, number> = {};
-    filtered.forEach(bill => {
-      if (!bill.date) return;
-      const parts = bill.date.trim().split(' ');
-      if (parts.length < 2) return;
-      const day = parseInt(parts[0]);
-      const monthStr = parts[1];
-      if (isNaN(day) || !(monthStr in monthsMap)) return;
-      const monthNum = monthsMap[monthStr];
-      let year: number;
-      if (parts.length >= 3 && /^\d{4}$/.test(parts[2])) {
-        year = parseInt(parts[2]);
-      } else {
-        const cy = new Date().getFullYear();
-        year = monthNum > new Date().getMonth() ? cy - 1 : cy;
-      }
-      const key = `${day} ${monthStr} ${year}`;
-      byDate[key] = (byDate[key] || 0) + bill.total;
-    });
 
-    const data: number[] = [];
-    const labels: string[] = [];
-    const current = new Date(start);
-    current.setHours(0, 0, 0, 0);
-    const endDay = new Date(end);
-    endDay.setHours(23, 59, 59, 999);
 
-    while (current <= endDay) {
-      const d = current.getDate();
-      const m = monthNames[current.getMonth()];
-      const y = current.getFullYear();
-      const key = `${d} ${m} ${y}`;
-      data.push(byDate[key] || 0);
-      labels.push(`${d} ${m}`);
-      current.setDate(current.getDate() + 1);
-    }
+    // Daily (default) - Improved version
+const byDate: Record<string, number> = {};
+filtered.forEach(bill => {
+  if (!bill.date) return;
+  const parsedDate = parseBillDate(bill.date);
+  if (!parsedDate) return;
+  
+  const key = `${parsedDate.getDate()} ${monthNames[parsedDate.getMonth()]} ${parsedDate.getFullYear()}`;
+  byDate[key] = (byDate[key] || 0) + bill.total;
+});
 
-    return { data, labels };
+const data: number[] = [];
+const labels: string[] = [];
+const current = new Date(start);
+current.setHours(0, 0, 0, 0);
+const endDay = new Date(end);
+endDay.setHours(23, 59, 59, 999);
+let daysWithNoData = 0;
+
+while (current <= endDay) {
+  const d = current.getDate();
+  const m = monthNames[current.getMonth()];
+  const y = current.getFullYear();
+  const key = `${d} ${m} ${y}`;
+  const value = byDate[key] || 0;
+  data.push(value);
+  labels.push(`${d} ${m}`);
+  
+  if (value === 0 && filtered.length > 0) {
+    daysWithNoData++;
+  }
+  
+  current.setDate(current.getDate() + 1);
+}
+
+// Log if we have data but chart shows zeros
+if (filtered.length > 0 && daysWithNoData === data.length) {
+  console.warn('⚠️ Chart showing zeros but have sales data! Check date parsing.');
+  console.log('Sample bill dates:', filtered.slice(0, 3).map(b => b.date));
+}
+
+return { data, labels };
   };
 
   const filteredSales = useMemo(() => filterSalesByDateRange(salesLog, startDate, endDate),
@@ -805,6 +839,8 @@ const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
     weekStart.setHours(0, 0, 0, 0);
     return filterSalesByDateRange(salesLog, weekStart, now);
   }, [salesLog]);
+
+  
 
   const analytics = useMemo(() => {
     const totalRevenue = filteredSales.reduce((sum, bill) => sum + bill.total, 0);
@@ -862,6 +898,18 @@ const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
 
   const chartData = useMemo(() => generateChartData(salesLog, startDate, endDate, activeTrend),
     [salesLog, startDate, endDate, activeTrend]);
+
+    useEffect(() => {
+  console.log('📈 Chart Data:', {
+    dataLength: chartData.data.length,
+    data: chartData.data.slice(0, 5),
+    labels: chartData.labels.slice(0, 5),
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+    activeTrend,
+    totalSalesLogs: salesLog.length
+  });
+}, [chartData, salesLog, startDate, endDate, activeTrend]);
 
   const FILTERS: { key: FilterKey; label: string }[] = [
     { key: 'month', label: 'This Month' },
@@ -961,10 +1009,24 @@ const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
           style={[styles.header, { paddingTop: insets.top + 8 }]}
         >
           <View style={styles.headerRow}>
-            <View>
-              <Text style={styles.headerTitle}>Analytics</Text>
-            </View>
-          </View>
+  <View>
+    <Text style={styles.headerTitle}>Analytics</Text>
+  </View>
+  {/* 👇 ADD THIS DEBUG BUTTON */}
+  <TouchableOpacity 
+    onPress={() => {
+      console.log('=== ANALYTICS DEBUG ===');
+      console.log('Sales Log Count:', salesLog.length);
+      console.log('Filtered Sales:', filterSalesByDateRange(salesLog, startDate, endDate).length);
+      console.log('Date Range:', startDate.toDateString(), '-', endDate.toDateString());
+      console.log('Chart Data:', chartData);
+      console.log('Sample bill dates:', salesLog.slice(0, 5).map(b => b.date));
+    }}
+    style={{ padding: 8 }}
+  >
+    <Ionicons name="bug-outline" size={24} color="#fff" />
+  </TouchableOpacity>
+</View>
         </LinearGradient>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: '#9CA3AF', fontWeight: '700', fontSize: 14 }}>Loading...</Text>

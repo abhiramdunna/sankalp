@@ -27,7 +27,7 @@ try {
   console.log('react-native-iap not available in dev environment');
 }
 
-const SUBSCRIPTION_SKU = 'sankalp_3month_premium';
+const SUBSCRIPTION_SKU = '30_days_plan';
 
 interface SubscriptionModalProps {
   visible: boolean;
@@ -122,7 +122,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
     setLoading(true);
     
     try {
-      // For Android with react-native-iap
+      // For Android with react-native-iap - ALL purchases go through Play Store
       if (Platform.OS === 'android' && RNIap) {
         await RNIap.initConnection();
         
@@ -169,6 +169,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
           if (error.code === 'E_USER_CANCELLED') {
             console.log('User cancelled purchase');
           } else {
+            console.error('Purchase error:', error);
             Alert.alert('Purchase Error', error.message || 'Failed to process payment. Please try again.');
           }
         } finally {

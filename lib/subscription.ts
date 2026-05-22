@@ -5,8 +5,8 @@ import { supabase } from './supabase';
 import { db } from './database';
 
 // Google Play Console: Create subscription with 7-day trial
-// Product ID: sankalp_3month_premium
-export const SUBSCRIPTION_SKU = 'sankalp_3month_premium';
+// Product ID: 30_days_plan
+export const SUBSCRIPTION_SKU = '30_days_plan';
 
 export interface SubscriptionStatus {
   isSubscribed: boolean;

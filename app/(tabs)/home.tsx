@@ -1008,7 +1008,7 @@ const ProfileModal = memo(({
   }, [visible]);
 
   return (
-    <Modal animationType="none" transparent={false} visible={visible} onRequestClose={onClose} statusBarTranslucent>
+    <Modal animationType="none" transparent={true} visible={visible} onRequestClose={onClose} statusBarTranslucent>
       <Animated.View style={{ flex: 1, backgroundColor: '#fff', transform: [{ translateY: slideAnim }] }}>
         {/* Gradient Header */}
         <LinearGradient
@@ -1469,7 +1469,7 @@ const PendingPaymentsModal = memo(({
 
   if (!visible) return null;
   return (
-    <Modal animationType="slide" transparent={false} visible={visible} onRequestClose={onClose} statusBarTranslucent>
+    <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose} statusBarTranslucent>
       <Toast visible={showToast} message={toastMsg} type={toastType} onHide={() => setShowToast(false)} />
       <View style={{ flex: 1, backgroundColor: '#F5F3FF' }}>
         <LinearGradient colors={['#F59E0B', '#D97706']} style={[styles.ppHeader, { paddingTop: insets.top + 12 }]}>
@@ -1660,7 +1660,7 @@ const PendingPaymentsModal = memo(({
         </Modal>
 
         {/* Add Payment Full Screen */}
-        <Modal animationType="slide" transparent={false} visible={showAdd} onRequestClose={() => { setShowAdd(false); resetForm(); }} statusBarTranslucent>
+        <Modal animationType="slide" transparent={true} visible={showAdd} onRequestClose={() => { setShowAdd(false); resetForm(); }} statusBarTranslucent>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={{ flex: 1, backgroundColor: '#fff' }}
@@ -2050,7 +2050,7 @@ const ViewAllBillsModal = memo(({
   }, [setBillsDateFilter]);
 
   return (
-    <Modal animationType="slide" transparent={false} visible={visible} onRequestClose={onClose}>
+    <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#F9FAFB', paddingTop: insetTop }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#fff' }}>
           <TouchableOpacity onPress={onClose} style={{ marginRight: 12 }}>
@@ -2248,11 +2248,21 @@ export default function HomeScreen() {
   const [pendingPaymentsVisible, setPendingPaymentsVisible] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingTotal, setPendingTotal] = useState(0);
-  const [aiModalVisible, setAiModalVisible] = useState(false); 
+  const [aiModalVisible, setAiModalVisible] = useState(false);
+
+  // ── Modal transition helper ───────────────────────────────────────────────
+  // Instead of setProfileVisible(false) + setTimeout + setOtherVisible(true),
+  // use this so both state changes happen in the SAME render — no gap where
+  // the tab navigator re-focuses Home between modals.
+  const switchFromProfile = useCallback((open: () => void) => {
+    setProfileVisible(false);
+    open(); // runs in the same synchronous batch
+  }, []);
   const [bizCategory, setBizCategory] = useState('');
   const [editingBizCategory, setEditingBizCategory] = useState('');
   const [bizState, setBizState] = useState('');
   const [editingBizState, setEditingBizState] = useState('');
+  const [showIncompleteProfileWarning, setShowIncompleteProfileWarning] = useState(false);
 
   const openBillDetail = useCallback((bill: SaleLog, number: number) => {
     setSelectedBill(bill);
@@ -2391,15 +2401,39 @@ export default function HomeScreen() {
 const loadData = useCallback(async () => {
   try {
     const storedTrialStart = await AsyncStorage.getItem('trialStart');
-    const storedSubscribed = await AsyncStorage.getItem('isSubscribed');
-    const storedSubDate = await AsyncStorage.getItem('subscriptionDate');
+    // Match the key used in SubscriptionModal.tsx
+    const storedSubscribed = await AsyncStorage.getItem(`isSubscribed_${user?.id}`);
+    const storedSubDate = await AsyncStorage.getItem(`subscriptionDate_${user?.id}`);
 
     if (storedTrialStart) {
       setTrialStart(new Date(storedTrialStart));
     }
 
     if (storedSubscribed === 'true') {
+      console.log('✅ Subscription restored from AsyncStorage');
       setIsSubscribed(true);
+    } else if (user?.id) {
+      // If not in AsyncStorage, check Supabase for active subscription
+      try {
+        const { data, error } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (data && !error) {
+          const expiration = data.expiration_date ? new Date(data.expiration_date) : null;
+          if (expiration && expiration > new Date()) {
+            console.log('✅ Subscription found in Supabase, restoring...');
+            setIsSubscribed(true);
+            // Update AsyncStorage for next time
+            await AsyncStorage.setItem(`isSubscribed_${user.id}`, 'true');
+            await AsyncStorage.setItem(`subscriptionDate_${user.id}`, data.purchase_date);
+          }
+        }
+      } catch (err) {
+        console.error('Error checking subscription in Supabase:', err);
+      }
     }
 
     if (storedSubDate) {
@@ -2547,6 +2581,16 @@ setTodayTotal(
   useEffect(() => {
     calculateRenewalDate();
   }, [calculateRenewalDate]);
+
+  // Delay showing incomplete profile warning to let the page load naturally
+  // Check if profile details are present after 5 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowIncompleteProfileWarning(true);
+    }, 5000); // Show after 5 seconds
+
+    return () => clearTimeout(timer);
+  }, []);
 
   // Reload products every time the home tab comes into focus
   useFocusEffect(
@@ -2713,27 +2757,12 @@ setTodayTotal(
         pendingTotal={pendingTotal}
         theme={theme}
         onClose={() => setProfileVisible(false)}
-        onEditProfile={() => {
-          setProfileVisible(false);
-          setTimeout(() => openEditProfile(), 300);
-        }}
+        onEditProfile={() => switchFromProfile(openEditProfile)}
         onLogout={handleLogout}
-        onUpgrade={() => {
-          setProfileVisible(false);
-          setTimeout(() => setSubscriptionModalVisible(true), 300);
-        }}
-        onPendingPayments={() => {
-          setProfileVisible(false);
-          setTimeout(() => setPendingPaymentsVisible(true), 300);
-        }}
-        onChooseTheme={() => {
-          setProfileVisible(false);
-          setTimeout(() => setThemePickerVisible(true), 300);
-        }}
-        onDeleteAccount={() => {
-          setProfileVisible(false);
-          setTimeout(() => setDeleteAccountModalVisible(true), 300);
-        }}
+        onUpgrade={() => switchFromProfile(() => setSubscriptionModalVisible(true))}
+        onPendingPayments={() => switchFromProfile(() => setPendingPaymentsVisible(true))}
+        onChooseTheme={() => switchFromProfile(() => setThemePickerVisible(true))}
+        onDeleteAccount={() => switchFromProfile(() => setDeleteAccountModalVisible(true))}
       />
       <ThemePickerModal
         visible={themePickerVisible}
@@ -2875,8 +2904,9 @@ setTodayTotal(
               const now = new Date();
               setIsSubscribed(true);
               setSubscriptionDate(now);
-              await AsyncStorage.setItem('isSubscribed', 'true');
-              await AsyncStorage.setItem('subscriptionDate', now.toISOString());
+              // Use user-specific keys to match loadData
+              await AsyncStorage.setItem(`isSubscribed_${user?.id}`, 'true');
+              await AsyncStorage.setItem(`subscriptionDate_${user?.id}`, now.toISOString());
               setSubscriptionModalVisible(false);
               showSuccess('Thank you for subscribing to Sankalp Pro! 🎉');
             }}
@@ -3018,7 +3048,7 @@ setTodayTotal(
 </LinearGradient>
 
       {/* Incomplete Profile Warning Banner */}
-      {(!bizName || !bizLocation || !bizCategory || !bizState) && (
+      {showIncompleteProfileWarning && (!bizName || !bizLocation || !bizCategory || !bizState) && (
         <View style={[styles.incompleteProfileBanner, { backgroundColor: 'rgba(250, 204, 21, 0.1)' }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
             <View style={{ marginRight: 12 }}>
