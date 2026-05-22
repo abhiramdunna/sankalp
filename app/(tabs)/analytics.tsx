@@ -1,13 +1,10 @@
-﻿// analytics.tsx — Complete redesign matching the screenshot UI
-// Matches home.tsx style system: #2563EB blue, same nav, same card patterns
-
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore, useThemeStore } from '@/lib/store';
 import { AppTheme } from '@/constants/theme';
-import { subscriptionService } from '@/lib/subscription';
 import { db as DatabaseService } from '@/lib/database';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
-import { PremiumAccessOverlay } from '@/components/PremiumAccessOverlay';
+import { PremiumAccessOverlay } from '@/components/PremiumAccessOverlay';  // ← ADD THIS
+import { useSubscriptionAccess } from '@/hooks/useSubscriptionAccess';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -541,9 +538,9 @@ export default function AnalyticsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
+
 const { user } = useAuthStore(); 
-const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
+
   const { theme } = useThemeStore();
   const styles = makeStyles(theme);
   const calendarStyles = makeCalendarStyles(theme);
@@ -563,6 +560,16 @@ const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
   const [filterLabel, setFilterLabel] = useState('This Month');
   const [showTransactionsModal, setShowTransactionsModal] = useState(false);
 
+
+  const { 
+  canAccessPremium, 
+  isSubscribed, 
+  isTrialActive, 
+  trialDaysLeft, 
+  isLoading: subscriptionLoading,
+  refreshAccess 
+} = useSubscriptionAccess(user?.id);
+  
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
@@ -613,39 +620,7 @@ const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
   }
 }, [salesLog]);
 
- useEffect(() => {
-    const checkSubscription = async () => {
-      if (!user?.id) {
-        setIsLoadingSubscription(false);
-        return;
-      }
-      
-      try {
-        await subscriptionService.initialize(user.id);
-        const status = await subscriptionService.refreshStatus(user.id);
-        setSubscriptionStatus(status);
-        
-        if (!status.isSubscribed && !status.isTrialActive) {
-          setShowSubscriptionModal(true);
-        }
-      } catch (error) {
-        console.error('Subscription check error:', error);
-      } finally {
-        setIsLoadingSubscription(false);
-      }
-    };
-    
-    checkSubscription();
-    
-    const unsubscribe = subscriptionService.onStatusChange((status) => {
-      setSubscriptionStatus(status);
-      if (!status.isSubscribed && !status.isTrialActive) {
-        setShowSubscriptionModal(true);
-      }
-    });
-    
-    return () => unsubscribe();
-  }, [user?.id]);
+ 
 
   const filterSalesByDateRange = (sales: SaleLog[], start: Date, end: Date) => {
     const startOfDay = new Date(start);
@@ -999,7 +974,7 @@ return { data, labels };
 
   
   // ── Loading state (now includes subscription check) ──
-  if (loading || isLoadingSubscription) {
+  if (loading || subscriptionLoading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <LinearGradient
@@ -1419,29 +1394,26 @@ return { data, labels };
 
       {/* ── Premium Access Overlay (Trial Expired) ── */}
       <PremiumAccessOverlay
-        visible={!subscriptionStatus?.isSubscribed && !subscriptionStatus?.isTrialActive}
-        featureName="Analytics"
-        trialDaysLeft={subscriptionStatus?.trialDaysLeft || 0}
-        onUpgradePress={() => setShowSubscriptionModal(true)}
-        onClose={() => {
-          // Allow users to dismiss and continue viewing (analytics still runs in background)
-        }}
-        theme={theme}
-      />
+  visible={!canAccessPremium && !subscriptionLoading && !isTrialActive}
+  featureName="Analytics"
+  trialDaysLeft={trialDaysLeft}
+  onUpgradePress={() => setShowSubscriptionModal(true)}
+  onClose={() => {}}
+  theme={theme}
+/>
 
       {/* ── Subscription Modal ── */}
       <SubscriptionModal
-        visible={showSubscriptionModal}
-        onClose={() => setShowSubscriptionModal(false)}
-        onSuccess={() => {
-          if (user?.id) {
-            subscriptionService.refreshStatus(user.id);
-          }
-        }}
-        userId={user?.id || ''}
-        isTrialActive={subscriptionStatus?.isTrialActive || false}
-        trialDaysLeft={subscriptionStatus?.trialDaysLeft || 0}
-      />
+  visible={showSubscriptionModal}
+  onClose={() => setShowSubscriptionModal(false)}
+  onSuccess={() => {
+    refreshAccess();
+    setShowSubscriptionModal(false);
+  }}
+  userId={user?.id || ''}
+  isTrialActive={isTrialActive}
+  trialDaysLeft={trialDaysLeft}
+/>
 
     </View>
   );

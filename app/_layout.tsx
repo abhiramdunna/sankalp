@@ -11,6 +11,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { configureGoogleSignIn, suppressAuthEvent } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
+import { initRevenueCat } from '@/lib/revenuecat';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -66,6 +67,11 @@ export default function RootLayout() {
   const [isSessionRestored, setIsSessionRestored] = useState(false);
   const initDone = useRef(false);
 
+  // ✅ MOVE THIS HERE - BEFORE any conditional returns
+  useEffect(() => {
+    initRevenueCat();
+  }, []);
+
   useEffect(() => {
     if (initDone.current) return;
     initDone.current = true;
@@ -118,9 +124,6 @@ export default function RootLayout() {
             console.log('🔄 Auth event:', event, '| suppressed:', suppressAuthEvent);
 
             if (event === 'SIGNED_IN' && newSession?.user) {
-              // If signInWithGoogle() is still running its checks, ignore this event.
-              // signInWithGoogle() will unsuppress and the store will be updated
-              // by login.tsx calling setUser manually after the function returns.
               if (suppressAuthEvent) {
                 console.log('⏸️ SIGNED_IN suppressed — auth checks still running');
                 return;
@@ -176,6 +179,7 @@ export default function RootLayout() {
 
   useProtectedRoute(user, appReady && !isLoading && isSessionRestored);
 
+  // ✅ Now this conditional return is AFTER all hooks
   if (!appReady || isLoading || !isSessionRestored) {
     return null;
   }

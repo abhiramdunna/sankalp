@@ -1,4 +1,4 @@
-// components/SubscriptionModal.tsx - With Google Play Billing Integration
+// components/SubscriptionModal.tsx - RevenueCat Only (Expo compatible)
 import React, { useState, useEffect } from 'react';
 import {
   Modal,
@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
-  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,16 +17,11 @@ import { useThemeStore } from '@/lib/store';
 import { AppTheme } from '@/constants/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
+import { presentPaywall, checkEntitlement, getCustomerInfo } from '@/lib/revenuecat';
 
-// Import react-native-iap for real billing
-let RNIap: any;
-try {
-  RNIap = require('react-native-iap');
-} catch (e) {
-  console.log('react-native-iap not available in dev environment');
-}
-
-const SUBSCRIPTION_SKU = '30_days_plan';
+// Your product ID from RevenueCat dashboard
+const PRODUCT_ID = '30_days_plan';
+const ENTITLEMENT_ID = 'Sankalp Pro'; // Create this in RevenueCat dashboard
 
 interface SubscriptionModalProps {
   visible: boolean;
@@ -51,7 +45,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [alreadySubscribed, setAlreadySubscribed] = useState(false);
 
-  // Check if user already has subscription
+  // Check if user already has subscription via RevenueCat
   useEffect(() => {
     if (visible && userId) {
       checkExistingSubscription();
@@ -60,50 +54,34 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
 
   const checkExistingSubscription = async () => {
     try {
-      // First check local storage
+      // First check local storage for speed
       const localSubscribed = await AsyncStorage.getItem(`isSubscribed_${userId}`);
       if (localSubscribed === 'true') {
         setAlreadySubscribed(true);
         return;
       }
 
-      // Check Supabase for active subscription
-      const { data, error } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
+      // Check RevenueCat for active entitlement
+      const hasPro = await checkEntitlement(ENTITLEMENT_ID);
+      
+      if (hasPro) {
+        setAlreadySubscribed(true);
+        await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
+        await AsyncStorage.setItem(`subscriptionDate_${userId}`, new Date().toISOString());
+      } else {
+        // Also check Supabase as backup
+        const { data, error } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle();
 
-      if (data && !error) {
-        const expiration = data.expiration_date ? new Date(data.expiration_date) : null;
-        if (expiration && expiration > new Date()) {
-          setAlreadySubscribed(true);
-          // Update local cache
-          await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
-          return;
-        }
-      }
-
-      // For Android, check Google Play Store
-      if (Platform.OS === 'android' && RNIap) {
-        try {
-          await RNIap.initConnection();
-          const purchases = await RNIap.getAvailablePurchases();
-          
-          const activeSub = purchases.find(
-            (p: any) => p.productId === SUBSCRIPTION_SKU && 
-            (!p.expirationDate || new Date(p.expirationDate) > new Date())
-          );
-
-          if (activeSub) {
+        if (data && !error) {
+          const expiration = data.expiration_date ? new Date(data.expiration_date) : null;
+          if (expiration && expiration > new Date()) {
             setAlreadySubscribed(true);
-            // Update local cache
             await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
           }
-
-          await RNIap.endConnection();
-        } catch (error) {
-          console.error('Error checking Google Play subscriptions:', error);
         }
       }
     } catch (error) {
@@ -111,122 +89,75 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
     }
   };
 
-  const handleSubscribe = async () => {
-    // Double-check before processing
+  const saveSubscriptionToSupabase = async () => {
+  try {
+    const customerInfo = await getCustomerInfo();
+    if (!customerInfo) return;
+
+    const entitlement = customerInfo.entitlements.active[ENTITLEMENT_ID];
+    if (!entitlement) return;
+
+    // Use latestPurchaseDate instead of purchaseDate
+    const purchaseDate = entitlement.latestPurchaseDate || new Date().toISOString();
+    
+    const { error } = await supabase
+      .from('subscriptions')
+      .upsert({
+        user_id: userId,
+        product_id: PRODUCT_ID,
+        purchase_token: customerInfo.originalAppUserId || 'revenuecat_user',
+        purchase_date: purchaseDate,
+        expiration_date: entitlement.expirationDate || null,
+        auto_renewing: true,
+        updated_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      console.error('Error saving subscription to Supabase:', error);
+    }
+  } catch (error) {
+    console.error('Failed to update subscription in database:', error);
+  }
+};
+
+  const handleActivate = async () => {
     if (alreadySubscribed) {
       Alert.alert('Already Subscribed', 'You already have an active subscription!');
       onClose();
       return;
     }
-    
+
     setLoading(true);
-    
     try {
-      // For Android with react-native-iap - ALL purchases go through Play Store
-      if (Platform.OS === 'android' && RNIap) {
-        await RNIap.initConnection();
+      // Show RevenueCat paywall
+      const purchased = await presentPaywall();
+      
+      if (purchased) {
+        // Verify the purchase
+        const hasPro = await checkEntitlement(ENTITLEMENT_ID);
         
-        try {
-          const purchase = await RNIap.requestPurchase({
-            skus: [SUBSCRIPTION_SKU],
-            andDangerouslyFinishTransactionAutomatically: false,
-          });
-
-          if (purchase && purchase.length > 0) {
-            const purchaseData = purchase[0];
-            
-            // Verify and save subscription to Supabase
-            await saveSubscriptionToSupabase(purchaseData);
-            
-            // Acknowledge the purchase
-            try {
-              await RNIap.finishTransaction({
-                purchase: purchaseData,
-                isConsumable: false,
-              });
-            } catch (finishError) {
-              console.error('Error finishing transaction:', finishError);
-            }
-            
-            // Save locally
-            await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
-            await AsyncStorage.setItem(`subscriptionDate_${userId}`, new Date().toISOString());
-            await AsyncStorage.setItem(`purchaseToken_${userId}`, purchaseData.purchaseToken || '');
-            
-            setLoading(false);
-            Alert.alert(
-              '🎉 Success!',
-              'Thank you for subscribing to Sankalp Pro!',
-              [{ text: 'Continue', onPress: () => {
-                onSuccess();
-                onClose();
-              }}]
-            );
-          }
-        } catch (error: any) {
-          setLoading(false);
-          // Handle user cancellation
-          if (error.code === 'E_USER_CANCELLED') {
-            console.log('User cancelled purchase');
-          } else {
-            console.error('Purchase error:', error);
-            Alert.alert('Purchase Error', error.message || 'Failed to process payment. Please try again.');
-          }
-        } finally {
-          try {
-            await RNIap.endConnection();
-          } catch (e) {
-            console.error('Error ending IAP connection:', e);
-          }
+        if (hasPro) {
+          // Save to Supabase
+          await saveSubscriptionToSupabase();
+          
+          // Save to local storage
+          await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
+          await AsyncStorage.setItem(`subscriptionDate_${userId}`, new Date().toISOString());
+          
+          setAlreadySubscribed(true);
+          
+          Alert.alert('🎉 Success!', 'Welcome to Sankalp Pro!', [
+            { text: 'Continue', onPress: () => { onSuccess(); onClose(); } },
+          ]);
+        } else {
+          throw new Error('Purchase verification failed. Please contact support.');
         }
-      } else {
-        // Fallback for development/non-Android (mock subscription)
-        await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
-        await AsyncStorage.setItem(`subscriptionDate_${userId}`, new Date().toISOString());
-        
-        // Still try to save to Supabase for demo
-        await saveSubscriptionToSupabase({
-          productId: 'demo_' + SUBSCRIPTION_SKU,
-          purchaseToken: 'demo_token_' + Date.now(),
-          transactionDate: new Date().getTime(),
-        });
-        
-        setLoading(false);
-        Alert.alert(
-          '🎉 Success!',
-          'Thank you for subscribing to Sankalp Pro!',
-          [{ text: 'Continue', onPress: () => {
-            onSuccess();
-            onClose();
-          }}]
-        );
       }
-    } catch (error) {
+    } catch (e: any) {
+      console.warn('RevenueCat error:', e);
+      Alert.alert('Purchase Error', e?.message || 'Failed to complete purchase. Please try again.');
+    } finally {
       setLoading(false);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
-      console.error('Subscription error:', error);
-    }
-  };
-
-  const saveSubscriptionToSupabase = async (purchaseData: any) => {
-    try {
-      const { error } = await supabase
-        .from('subscriptions')
-        .upsert({
-          user_id: userId,
-          product_id: purchaseData.productId || SUBSCRIPTION_SKU,
-          purchase_token: purchaseData.purchaseToken || 'demo_token',
-          purchase_date: new Date().toISOString(),
-          expiration_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
-          auto_renewing: true,
-          updated_at: new Date().toISOString(),
-        });
-
-      if (error) {
-        console.error('Error saving subscription to Supabase:', error);
-      }
-    } catch (error) {
-      console.error('Failed to update subscription in database:', error);
     }
   };
 
@@ -251,9 +182,21 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
             <View style={[styles.trialBanner, { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' }]}>
               <Ionicons name="checkmark-circle" size={24} color="#16A34A" />
               <View style={styles.trialTextContainer}>
-                <Text style={[styles.trialTitle, { color: '#166534' }]}>Sankalp Pro</Text>
+                <Text style={[styles.trialTitle, { color: '#166534' }]}>Sankalp Pro Active</Text>
                 <Text style={[styles.trialSubtitle, { color: '#15803D' }]}>
-                  You already have an active subscription
+                  You have an active subscription
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {!alreadySubscribed && isTrialActive && (
+            <View style={[styles.trialBanner, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
+              <Ionicons name="sparkles" size={24} color="#D97706" />
+              <View style={styles.trialTextContainer}>
+                <Text style={[styles.trialTitle, { color: '#92400E' }]}>Trial Active</Text>
+                <Text style={[styles.trialSubtitle, { color: '#B45309' }]}>
+                  {trialDaysLeft} day{trialDaysLeft !== 1 ? 's' : ''} left in your free trial
                 </Text>
               </View>
             </View>
@@ -266,26 +209,34 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
 
           <View style={styles.featuresSection}>
             <Text style={styles.sectionTitle}>Premium Features</Text>
-            <FeatureItem icon="analytics" title="Real-Time Analytics" description="Track live sales, revenue trends, and business insights" theme={theme} />
-            <FeatureItem icon="sparkles" title="Sankalp AI Assistant" description="Get instant business suggestions and recommendations" theme={theme} />
+            <FeatureItem 
+              icon="analytics" 
+              title="Real-Time Analytics" 
+              description="Track live sales, revenue trends, and business insights" 
+              theme={theme} 
+            />
+            <FeatureItem 
+              icon="sparkles" 
+              title="Sankalp AI Assistant" 
+              description="Get instant business suggestions and recommendations" 
+              theme={theme} 
+            />
           </View>
         </ScrollView>
 
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
           <TouchableOpacity
             style={[styles.purchaseButton, { backgroundColor: alreadySubscribed ? '#9CA3AF' : theme.colors.primary }]}
-            onPress={handleSubscribe}
+            onPress={handleActivate}
             disabled={loading || alreadySubscribed}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                {(alreadySubscribed || !isTrialActive) && (
-                  <Ionicons name={alreadySubscribed ? "checkmark-circle" : "rocket-outline"} size={20} color="#fff" />
-                )}
+                <Ionicons name={alreadySubscribed ? "checkmark-circle" : "rocket-outline"} size={20} color="#fff" />
                 <Text style={styles.purchaseButtonText}>
-                  {alreadySubscribed ? "Already Subscribed" : isTrialActive ? "Activate" : "Subscribe — ₹29/month"}
+                  {alreadySubscribed ? "Already Subscribed" : "Subscribe — ₹29/month"}
                 </Text>
               </>
             )}
@@ -302,7 +253,6 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
   );
 };
 
-// FeatureItem and FaqItem components (same as before)
 const FeatureItem: React.FC<{ icon: string; title: string; description: string; theme: AppTheme }> = 
 ({ icon, title, description, theme }) => (
   <View style={styles.featureItem}>
@@ -316,35 +266,19 @@ const FeatureItem: React.FC<{ icon: string; title: string; description: string; 
   </View>
 );
 
-const FaqItem: React.FC<{ question: string; answer: string; theme: AppTheme }> = ({ question, answer, theme }) => {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <TouchableOpacity style={styles.faqItem} onPress={() => setExpanded(!expanded)} activeOpacity={0.7}>
-      <View style={styles.faqHeader}>
-        <Text style={styles.faqQuestion}>{question}</Text>
-        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={theme.colors.primary} />
-      </View>
-      {expanded && <Text style={styles.faqAnswer}>{answer}</Text>}
-    </TouchableOpacity>
-  );
-};
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingHorizontal: 20, paddingBottom: 30, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
   closeButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   title: { fontSize: 32, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
   subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginTop: 4 },
-  trialBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', marginHorizontal: 16, marginTop: 16, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#FDE68A' },
+  trialBanner: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: 16, padding: 16, borderRadius: 16, borderWidth: 1 },
   trialTextContainer: { marginLeft: 12, flex: 1 },
-  trialTitle: { fontSize: 16, fontWeight: '800', color: '#92400E' },
-  trialSubtitle: { fontSize: 13, color: '#B45309', fontWeight: '600', marginTop: 2 },
+  trialTitle: { fontSize: 16, fontWeight: '800' },
+  trialSubtitle: { fontSize: 13, fontWeight: '600', marginTop: 2 },
   priceCard: { backgroundColor: '#fff', marginHorizontal: 16, marginTop: 20, padding: 24, borderRadius: 20, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 },
-  priceLabel: { fontSize: 13, color: '#10B981', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   priceAmount: { fontSize: 48, fontWeight: '900', color: '#111', letterSpacing: -1 },
   priceDuration: { fontSize: 14, color: '#6B7280', fontWeight: '600', marginTop: 4 },
-  savingsBadge: { backgroundColor: '#ECFDF5', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, marginTop: 12 },
-  savingsText: { fontSize: 12, fontWeight: '700', color: '#10B981' },
   featuresSection: { paddingHorizontal: 16, marginTop: 24 },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: '#111', marginBottom: 16 },
   featureItem: { flexDirection: 'row', marginBottom: 20 },
@@ -352,11 +286,6 @@ const styles = StyleSheet.create({
   featureTextContainer: { flex: 1 },
   featureTitle: { fontSize: 16, fontWeight: '800', color: '#111', marginBottom: 4 },
   featureDescription: { fontSize: 13, color: '#6B7280', lineHeight: 18 },
-  faqSection: { paddingHorizontal: 16, marginTop: 24 },
-  faqItem: { backgroundColor: '#F9FAFB', borderRadius: 12, padding: 16, marginBottom: 10 },
-  faqHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  faqQuestion: { fontSize: 14, fontWeight: '700', color: '#111', flex: 1 },
-  faqAnswer: { fontSize: 13, color: '#6B7280', marginTop: 12, lineHeight: 18 },
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
   purchaseButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 14, gap: 8 },
   purchaseButtonText: { color: '#fff', fontSize: 16, fontWeight: '800' },

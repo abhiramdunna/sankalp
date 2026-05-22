@@ -3,8 +3,10 @@
  * https://docs.expo.dev/guides/color-schemes/
  */
 
-import { Colors } from '@/constants/theme';
+import * as Theme from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+
+const Colors = (Theme as any).Colors ?? (Theme as any).default ?? Theme;
 
 export function useThemeColor(
   props: { light?: string; dark?: string },

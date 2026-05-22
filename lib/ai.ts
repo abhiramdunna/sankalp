@@ -4,9 +4,19 @@ import { supabase } from './supabase';
 import { db as DatabaseService } from './database';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const genAI = new GoogleGenerativeAI(
-  process.env.EXPO_PUBLIC_GEMINI_API_KEY!
-);
+function getGeminiClient() {
+  const apiKey =
+    process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim() ||
+    process.env.GEMINI_API_KEY?.trim();
+
+  if (!apiKey) {
+    throw new Error(
+      'Missing Gemini API key. Set EXPO_PUBLIC_GEMINI_API_KEY in .env and restart Expo.'
+    );
+  }
+
+  return new GoogleGenerativeAI(apiKey);
+}
 
 export interface Message {
   id: string;
@@ -244,6 +254,7 @@ context += `Location: ${profile.data?.city || 'Unknown'}, ${profile.data?.state 
 
     try {
       const userContext = await this.fetchUserContext(userId);
+      const genAI = getGeminiClient();
 
       const model = genAI.getGenerativeModel({
         model: 'gemini-2.5-flash',
@@ -306,6 +317,17 @@ Sankalp AI:
       return response.text();
     } catch (error) {
       console.error('Gemini API Error:', error);
+
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (
+        message.includes('unregistered callers') ||
+        message.includes('403')
+      ) {
+        return (
+          'Gemini is rejecting this API key. Make sure Generative Language API is enabled for your Google Cloud project, the key is unrestricted for testing, and EXPO_PUBLIC_GEMINI_API_KEY matches the active project.'
+        );
+      }
 
       return `I'm unable to process your request right now. Please try again later.`;
     }

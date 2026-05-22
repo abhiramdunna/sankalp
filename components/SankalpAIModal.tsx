@@ -17,8 +17,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore, useThemeStore } from '@/lib/store';
 import { aiService, Message } from '@/lib/ai';
-import { subscriptionService } from '@/lib/subscription';
-import { PremiumAccessOverlay } from './PremiumAccessOverlay';
+import { useSubscriptionAccess } from '@/hooks/useSubscriptionAccess';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface SankalpAIModalProps {
@@ -44,7 +44,7 @@ const INITIAL_MESSAGE: Message = {
   timestamp: new Date(),
 };
 
-// ─── Typewriter message bubble ────────────────────────────────────────────────
+// Typewriter message bubble
 const TypewriterMessage = React.memo(({
   content,
   onDone,
@@ -62,7 +62,6 @@ const TypewriterMessage = React.memo(({
 
     const tick = () => {
       if (indexRef.current < content.length) {
-        // Advance 2 chars per tick for a snappier feel
         indexRef.current = Math.min(indexRef.current + 2, content.length);
         setDisplayed(content.slice(0, indexRef.current));
         timerRef.current = setTimeout(tick, 12);
@@ -86,48 +85,24 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
-  const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
-  const [showPremiumOverlay, setShowPremiumOverlay] = useState(false);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+
+  const { 
+    canAccessPremium, 
+    isTrialActive, 
+    trialDaysLeft, 
+    isLoading: accessLoading,
+    refreshAccess 
+  } = useSubscriptionAccess(user?.id);
 
   // Animated dots for loading indicator
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
   const dot3 = useRef(new Animated.Value(0)).current;
 
-  // Derive theme colors
   const primary = theme?.colors?.primary ?? '#6366F1';
   const primaryLight = theme?.colors?.primaryLight ?? '#EEF2FF';
-
-  // Initialize subscription status on mount
-  useEffect(() => {
-    if (!visible || !user?.id) return;
-
-    const initSubscription = async () => {
-      try {
-        await subscriptionService.initialize(user.id);
-        const status = await subscriptionService.refreshStatus(user.id);
-        setSubscriptionStatus(status);
-
-        if (!status.isSubscribed && !status.isTrialActive) {
-          setShowPremiumOverlay(true);
-        }
-      } catch (error) {
-        console.error('Subscription check error:', error);
-      }
-    };
-
-    initSubscription();
-
-    const unsubscribe = subscriptionService.onStatusChange((status) => {
-      setSubscriptionStatus(status);
-      if (!status.isSubscribed && !status.isTrialActive) {
-        setShowPremiumOverlay(true);
-      }
-    });
-
-    return () => unsubscribe();
-  }, [visible, user?.id]);
 
   // Animated loading dots
   useEffect(() => {
@@ -165,7 +140,7 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
     if (!inputText.trim() || isLoading || !user?.id) return;
 
     // Check premium access
-    if (!subscriptionStatus?.isSubscribed && !subscriptionStatus?.isTrialActive) {
+    if (!canAccessPremium) {
       const trialEndId = (Date.now() + 1).toString();
       setMessages(prev => [
         ...prev,
@@ -178,8 +153,9 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
         {
           id: trialEndId,
           role: 'assistant',
-          content:
-            '🔒 Your 3-day free trial has ended.\n\nUpgrade to Sankalp Pro to continue getting AI business insights. Your assistant is ready to help you grow! 📈',
+          content: isTrialActive
+            ? `🔒 Your 3-day free trial ends in ${trialDaysLeft} day${trialDaysLeft !== 1 ? 's' : ''}.\n\nUpgrade to Sankalp Pro to continue getting AI business insights! 📈`
+            : '🔒 Your 3-day free trial has ended.\n\nUpgrade to Sankalp Pro to continue getting AI business insights. Your assistant is ready to help you grow! 📈',
           timestamp: new Date(),
         },
       ]);
@@ -215,7 +191,7 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
         },
       ]);
       setIsLoading(false);
-      setTypingMessageId(assistantId);  // trigger typewriter
+      setTypingMessageId(assistantId);
       scrollToBottom();
     } catch {
       const errId = (Date.now() + 1).toString();
@@ -324,6 +300,49 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
 
   const canSend = !isLoading && !typingMessageId;
 
+  // Show upgrade screen if no access
+  if (!accessLoading && !canAccessPremium && visible) {
+    return (
+      <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+        <View style={[styles.screen, { justifyContent: 'center', alignItems: 'center', paddingTop: insets.top }]}>
+          <View style={styles.upgradeContainer}>
+            <View style={[styles.lockIconContainer, { backgroundColor: primaryLight }]}>
+              <Ionicons name="lock-closed" size={48} color={primary} />
+            </View>
+            <Text style={styles.upgradeTitle}>AI Assistant Locked</Text>
+            <Text style={styles.upgradeSubtitle}>
+              {isTrialActive 
+                ? `Your free trial ends in ${trialDaysLeft} day${trialDaysLeft !== 1 ? 's' : ''}. Subscribe to continue using AI Assistant.`
+                : 'Subscribe to Sankalp Pro to unlock AI-powered business insights and recommendations.'}
+            </Text>
+            <TouchableOpacity 
+              style={[styles.upgradeButton, { backgroundColor: primary }]}
+              onPress={() => setShowSubscriptionModal(true)}
+            >
+              <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={{ marginTop: 20 }}>
+              <Text style={[styles.maybeLaterText, { color: primary }]}>Maybe Later</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <SubscriptionModal
+          visible={showSubscriptionModal}
+          onClose={() => setShowSubscriptionModal(false)}
+          onSuccess={() => {
+            refreshAccess();
+            setShowSubscriptionModal(false);
+            onClose();
+          }}
+          userId={user?.id || ''}
+          isTrialActive={isTrialActive}
+          trialDaysLeft={trialDaysLeft}
+        />
+      </Modal>
+    );
+  }
+
   return (
     <Modal
       visible={visible}
@@ -338,7 +357,7 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
         style={[styles.screen, { paddingTop: insets.top }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* ─── Header ─────────────────────────────────── */}
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             onPress={onClose}
@@ -362,7 +381,7 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
           </TouchableOpacity>
         </View>
 
-        {/* ─── Messages ────────────────────────────────── */}
+        {/* Messages */}
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -375,7 +394,7 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
           onContentSizeChange={scrollToBottom}
         />
 
-        {/* ─── Input Bar ───────────────────────────────── */}
+        {/* Input Bar */}
         <View style={[styles.inputBar, { paddingBottom: insets.bottom + 8 }]}>
           <View style={[styles.inputRow, { borderColor: primary + '30' }]}>
             <TextInput
@@ -386,7 +405,7 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
               onChangeText={setInputText}
               multiline
               maxLength={500}
-              editable={canSend && (subscriptionStatus?.isSubscribed || subscriptionStatus?.isTrialActive)}
+              editable={canSend && canAccessPremium}
               returnKeyType="send"
               blurOnSubmit={false}
               onSubmitEditing={sendMessage}
@@ -395,11 +414,10 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
               style={[
                 styles.sendBtn,
                 { backgroundColor: primary },
-                (!inputText.trim() || !canSend || (!subscriptionStatus?.isSubscribed && !subscriptionStatus?.isTrialActive))
-                  && styles.sendBtnDim,
+                (!inputText.trim() || !canSend || !canAccessPremium) && styles.sendBtnDim,
               ]}
               onPress={sendMessage}
-              disabled={!inputText.trim() || !canSend || (!subscriptionStatus?.isSubscribed && !subscriptionStatus?.isTrialActive)}
+              disabled={!inputText.trim() || !canSend || !canAccessPremium}
             >
               <Ionicons name="arrow-up" size={18} color="#fff" />
             </TouchableOpacity>
@@ -407,18 +425,6 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
           <Text style={styles.disclaimer}>Sankalp AI can make mistakes. Verify important info.</Text>
         </View>
       </KeyboardAvoidingView>
-
-      {/* ─── Premium Access Overlay ─────────────────────── */}
-      <PremiumAccessOverlay
-        visible={showPremiumOverlay}
-        featureName="AI Assistant"
-        trialDaysLeft={subscriptionStatus?.trialDaysLeft || 0}
-        onUpgradePress={() => {
-          console.log('Upgrade pressed from AI Modal');
-        }}
-        onClose={() => setShowPremiumOverlay(false)}
-        theme={theme}
-      />
     </Modal>
   );
 };
@@ -428,8 +434,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5FA',
   },
-
-  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -470,8 +474,6 @@ const styles = StyleSheet.create({
     color: '#111827',
     letterSpacing: -0.3,
   },
-
-  // Messages
   list: {
     paddingHorizontal: 14,
     paddingTop: 16,
@@ -531,8 +533,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'right',
   },
-
-  // Suggestions
   suggestionsWrap: {
     paddingTop: 10,
     paddingBottom: 4,
@@ -561,8 +561,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-
-  // Input
   inputBar: {
     backgroundColor: '#fff',
     borderTopWidth: 1,
@@ -606,5 +604,45 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 7,
     fontWeight: '500',
+  },
+  upgradeContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  lockIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  upgradeTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#111827',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  upgradeSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  upgradeButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  upgradeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  maybeLaterText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
