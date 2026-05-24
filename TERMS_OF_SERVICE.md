@@ -40,7 +40,6 @@ Sankalp is designed to help you manage your business operations, including billi
 
 ## 7. Payment and Billing
 
-- **Free Trial**: Users may receive a free trial period as specified in the App. At the end of the trial period, charges will apply if you continue to use premium features.
 - **Subscription**: Subscription charges are billed automatically on the date specified during signup and every month thereafter.
 - **Cancellation**: You may cancel your subscription at any time through your account settings. Cancellation will take effect at the end of your current billing cycle.
 - **Refunds**: All sales are final. Refunds are provided only as required by applicable law.

@@ -12,6 +12,7 @@ import {
   StyleSheet,
   StatusBar,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -90,8 +91,6 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
 
   const { 
     canAccessPremium, 
-    isTrialActive, 
-    trialDaysLeft, 
     isLoading: accessLoading,
     refreshAccess 
   } = useSubscriptionAccess(user?.id);
@@ -103,6 +102,8 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
 
   const primary = theme?.colors?.primary ?? '#6366F1';
   const primaryLight = theme?.colors?.primaryLight ?? '#EEF2FF';
+  const showLoadingScreen = visible && accessLoading;
+  const showLockedScreen = visible && !accessLoading && !canAccessPremium;
 
   // Animated loading dots
   useEffect(() => {
@@ -153,9 +154,7 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
         {
           id: trialEndId,
           role: 'assistant',
-          content: isTrialActive
-            ? `🔒 Your 3-day free trial ends in ${trialDaysLeft} day${trialDaysLeft !== 1 ? 's' : ''}.\n\nUpgrade to Sankalp Pro to continue getting AI business insights! 📈`
-            : '🔒 Your 3-day free trial has ended.\n\nUpgrade to Sankalp Pro to continue getting AI business insights. Your assistant is ready to help you grow! 📈',
+          content: '🔒 Sankalp Pro is required to use AI Assistant.\n\nSubscribe to Sankalp Pro to continue getting AI business insights and recommendations. 📈',
           timestamp: new Date(),
         },
       ]);
@@ -300,31 +299,55 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
 
   const canSend = !isLoading && !typingMessageId;
 
+  const renderShell = (children: React.ReactNode) => (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
+      statusBarTranslucent={false}
+    >
+      {children}
+    </Modal>
+  );
+
   // Show upgrade screen if no access
-  if (!accessLoading && !canAccessPremium && visible) {
-    return (
-      <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-        <View style={[styles.screen, { justifyContent: 'center', alignItems: 'center', paddingTop: insets.top }]}>
-          <View style={styles.upgradeContainer}>
-            <View style={[styles.lockIconContainer, { backgroundColor: primaryLight }]}>
-              <Ionicons name="lock-closed" size={48} color={primary} />
-            </View>
-            <Text style={styles.upgradeTitle}>AI Assistant Locked</Text>
-            <Text style={styles.upgradeSubtitle}>
-              {isTrialActive 
-                ? `Your free trial ends in ${trialDaysLeft} day${trialDaysLeft !== 1 ? 's' : ''}. Subscribe to continue using AI Assistant.`
-                : 'Subscribe to Sankalp Pro to unlock AI-powered business insights and recommendations.'}
-            </Text>
-            <TouchableOpacity 
-              style={[styles.upgradeButton, { backgroundColor: primary }]}
-              onPress={() => setShowSubscriptionModal(true)}
-            >
-              <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onClose} style={{ marginTop: 20 }}>
-              <Text style={[styles.maybeLaterText, { color: primary }]}>Maybe Later</Text>
-            </TouchableOpacity>
+  if (showLoadingScreen) {
+    return renderShell(
+      <View style={[styles.screen, { justifyContent: 'center', alignItems: 'center', paddingTop: insets.top }]}>
+        <View style={styles.upgradeContainer}>
+          <View style={[styles.lockIconContainer, { backgroundColor: primaryLight }]}>
+            <ActivityIndicator size="large" color={primary} />
           </View>
+          <Text style={styles.upgradeTitle}>Checking access</Text>
+          <Text style={styles.upgradeSubtitle}>
+            Verifying your Sankalp Pro subscription before opening AI Assistant.
+          </Text>
+        </View>
+      </View>,
+    );
+  }
+
+  if (showLockedScreen) {
+    return renderShell(
+      <View style={[styles.screen, { justifyContent: 'center', alignItems: 'center', paddingTop: insets.top }]}>
+        <View style={styles.upgradeContainer}>
+          <View style={[styles.lockIconContainer, { backgroundColor: primaryLight }]}>
+            <Ionicons name="lock-closed" size={48} color={primary} />
+          </View>
+          <Text style={styles.upgradeTitle}>AI Assistant Locked</Text>
+          <Text style={styles.upgradeSubtitle}>
+            Subscribe to Sankalp Pro to unlock AI-powered business insights and recommendations.
+          </Text>
+          <TouchableOpacity 
+            style={[styles.upgradeButton, { backgroundColor: primary }]}
+            onPress={() => setShowSubscriptionModal(true)}
+          >
+            <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onClose} style={{ marginTop: 20 }}>
+            <Text style={[styles.maybeLaterText, { color: primary }]}>Maybe Later</Text>
+          </TouchableOpacity>
         </View>
 
         <SubscriptionModal
@@ -336,10 +359,8 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
             onClose();
           }}
           userId={user?.id || ''}
-          isTrialActive={isTrialActive}
-          trialDaysLeft={trialDaysLeft}
         />
-      </Modal>
+      </View>,
     );
   }
 

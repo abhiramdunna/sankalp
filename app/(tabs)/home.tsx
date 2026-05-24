@@ -8,7 +8,7 @@ import { db as DatabaseService } from '@/lib/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { LinearGradient } from 'expo-linear-gradient';
-import { SubscriptionModal } from '@/components/SubscriptionModal';
+import { checkEntitlement, getCustomerInfo, presentPaywall, ENTITLEMENT_ID } from '@/lib/revenuecat';
 
 import { useRouter, useFocusEffect } from 'expo-router';
 import { CommonActions, useNavigation } from '@react-navigation/native';
@@ -980,11 +980,11 @@ const BillDetailModal = memo(({
 
 const ProfileModal = memo(({
   visible, bizName, bizLocation, bizCategory, bizState, userEmail, subStatus, isSubscribed, isTrialActive,
-  nextDue, pendingCount, pendingTotal, onClose, onEditProfile, onLogout, onUpgrade, onPendingPayments, onChooseTheme, onDeleteAccount, theme,
+  pendingCount, pendingTotal, onClose, onEditProfile, onLogout, onUpgrade, onPendingPayments, onChooseTheme, onDeleteAccount, theme,
 }: {
   visible: boolean; bizName: string; bizLocation: string; bizCategory: string; bizState: string; userEmail: string;
   subStatus: { label: string; color: string; bg: string; icon: any };
-  isSubscribed: boolean; isTrialActive: boolean; nextDue: string;
+  isSubscribed: boolean; isTrialActive: boolean;
   pendingCount: number; pendingTotal: number;
   onClose: () => void; onEditProfile: () => void; onLogout: () => void;
   onUpgrade: () => void; onPendingPayments: () => void; onChooseTheme: () => void; onDeleteAccount: () => void;
@@ -992,6 +992,7 @@ const ProfileModal = memo(({
 }) => {
   const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const shineAnim = useRef(new Animated.Value(-120)).current;
   
 
   useEffect(() => {
@@ -1002,10 +1003,30 @@ const ProfileModal = memo(({
         tension: 65,
         friction: 11,
       }).start();
+
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(shineAnim, {
+            toValue: 220,
+            duration: 1400,
+            useNativeDriver: true,
+          }),
+          Animated.delay(1800),
+          Animated.timing(shineAnim, {
+            toValue: -120,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+      loop.start();
+      return () => loop.stop();
     } else {
       slideAnim.setValue(SCREEN_HEIGHT);
+      shineAnim.setValue(-120);
     }
-  }, [visible]);
+  }, [visible, slideAnim, shineAnim]);
 
   return (
     <Modal animationType="none" transparent={true} visible={visible} onRequestClose={onClose} statusBarTranslucent>
@@ -1027,24 +1048,49 @@ const ProfileModal = memo(({
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 20, fontWeight: '900', color: '#fff' }}>{bizName || 'Your Business'}</Text>
-              {(bizLocation || bizState) ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
-                  <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.75)" />
-                  <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>
-                    {[bizLocation, bizState].filter(Boolean).join(', ')}
-                  </Text>
-                </View>
-              ) : null}
-              {bizCategory ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
-                  <Ionicons name="storefront-outline" size={11} color="rgba(255,255,255,0.75)" />
-                  <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: '600' }}>{bizCategory}</Text>
-                </View>
-              ) : null}
-              <View style={[styles.subBadgeNew, { backgroundColor: 'rgba(255,255,255,0.2)', marginTop: 6 }]}>
+              <TouchableOpacity
+                onPress={onUpgrade}
+                activeOpacity={0.85}
+                style={[
+                  styles.subBadgeNew,
+                  {
+                    backgroundColor: isSubscribed ? 'rgba(16,185,129,0.22)' : 'rgba(255,255,255,0.18)',
+                    borderColor: isSubscribed ? 'rgba(167,243,208,0.65)' : 'rgba(255,255,255,0.28)',
+                    borderWidth: 1,
+                    marginTop: 6,
+                    paddingHorizontal: 12,
+                    paddingVertical: 7,
+                    minHeight: 30,
+                    shadowColor: '#000',
+                    shadowOpacity: 0.18,
+                    shadowRadius: 8,
+                    shadowOffset: { width: 0, height: 3 },
+                    elevation: 3,
+                    overflow: 'hidden',
+                  },
+                ]}
+              >
+                {isSubscribed && (
+                  <Animated.View
+                    pointerEvents="none"
+                    style={{
+                      position: 'absolute',
+                      top: -10,
+                      bottom: -10,
+                      width: 42,
+                      left: 0,
+                      opacity: 0.55,
+                      transform: [{ translateX: shineAnim }, { rotate: '22deg' }],
+                      backgroundColor: 'rgba(255,255,255,0.7)',
+                    }}
+                  />
+                )}
                 <Ionicons name={subStatus.icon} size={11} color="#fff" />
-                <Text style={[styles.subBadgeText, { color: '#fff' }]}>{subStatus.label}</Text>
-              </View>
+                <Text style={[styles.subBadgeText, { color: '#fff', fontSize: 12, fontWeight: '800' }]}>
+                  {isSubscribed ? 'Sankalp Pro' : 'Sankalp Upgrade'}
+                </Text>
+                <Ionicons name="sparkles" size={10} color="rgba(255,255,255,0.9)" style={{ marginLeft: 2 }} />
+              </TouchableOpacity>
             </View>
             <TouchableOpacity onPress={onEditProfile} style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
               <Ionicons name="pencil" size={16} color="#fff" />
@@ -1054,25 +1100,6 @@ const ProfileModal = memo(({
 
         {/* Body */}
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
-          {/* Sankalp Pro Section */}
-          <TouchableOpacity style={[styles.menuItem, { backgroundColor: isSubscribed ? '#DCFCE7' : '#FEF3C7', borderWidth: 1, borderColor: isSubscribed ? '#86EFAC' : '#FDE68A', marginBottom: 16 }]} onPress={onUpgrade} activeOpacity={0.7}>
-            <View style={[styles.menuItemIcon, { backgroundColor: isSubscribed ? '#ECFDF5' : '#FFF9E6' }]}>
-              <Ionicons name={isSubscribed ? "checkmark-circle" : "sparkles"} size={20} color={isSubscribed ? "#10B981" : "#F59E0B"} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.menuItemTitle, { color: isSubscribed ? '#166534' : '#92400E' }]}>Sankalp Pro</Text>
-              {isSubscribed ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={[styles.menuItemSub, { color: '#15803D' }]}>Next billing: </Text>
-                  <Text style={[styles.menuItemSub, { color: '#10B981', fontWeight: '700', textDecorationLine: 'underline' }]}>{nextDue}</Text>
-                </View>
-              ) : (
-                <Text style={[styles.menuItemSub, { color: '#B45309' }]}>Tap to activate</Text>
-              )}
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={isSubscribed ? "#16A34A" : "#D97706"} style={{ marginLeft: 4 }} />
-          </TouchableOpacity>
-
           {/* Business Info Card */}
           <View style={{ backgroundColor: '#F9FAFB', borderRadius: 16, borderWidth: 1.5, borderColor: '#F3F4F6', padding: 14, marginBottom: 16 }}>
             <Text style={{ fontSize: 10, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 }}>Business Details</Text>
@@ -2194,6 +2221,28 @@ export default function HomeScreen() {
   const setUser = useAuthStore((state) => state.setUser);
   const setSession = useAuthStore((state) => state.setSession);
   const { theme } = useThemeStore();
+  const aiShineAnim = useRef(new Animated.Value(-120)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(aiShineAnim, {
+          toValue: 220,
+          duration: 1400,
+          useNativeDriver: true,
+        }),
+        Animated.delay(1800),
+        Animated.timing(aiShineAnim, {
+          toValue: -120,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [aiShineAnim]);
 
   const [bizName, setBizName] = useState('');
   const [bizLocation, setBizLocation] = useState('');
@@ -2206,14 +2255,12 @@ export default function HomeScreen() {
   const [salesLog, setSalesLog] = useState<SaleLog[]>([]);
 const [todaysBills, setTodaysBills] = useState<SaleLog[]>([]);
 const [currentDateTime, setCurrentDateTime] = useState('');
-  const [nextDue, setNextDue] = useState('');
   const [profileVisible, setProfileVisible] = useState(false);
   const [themePickerVisible, setThemePickerVisible] = useState(false);
   const [deleteAccountModalVisible, setDeleteAccountModalVisible] = useState(false);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
   const [deleteReason, setDeleteReason] = useState('');
   const [products, setProducts] = useState<{ name: string; price: number }[]>([]);
-  const [trialStart, setTrialStart] = useState<Date | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [subscriptionDate, setSubscriptionDate] = useState<Date | null>(null);
   const [activeSessions, setActiveSessions] = useState<Session[]>([]);
@@ -2425,33 +2472,29 @@ const getBillNumberForDate = useCallback((billDate: string, currentBillId: numbe
 
 const loadData = useCallback(async () => {
   try {
-    const storedTrialStart = await AsyncStorage.getItem('trialStart');
-    // Match the key used in SubscriptionModal.tsx
     const storedSubscribed = await AsyncStorage.getItem(`isSubscribed_${user?.id}`);
     const storedSubDate = await AsyncStorage.getItem(`subscriptionDate_${user?.id}`);
-
-    if (storedTrialStart) {
-      setTrialStart(new Date(storedTrialStart));
-    }
 
     if (storedSubscribed === 'true') {
       console.log('✅ Subscription restored from AsyncStorage');
       setIsSubscribed(true);
     } else if (user?.id) {
-      // If not in AsyncStorage, check Supabase for active subscription
       try {
         const { data, error } = await supabase
           .from('subscriptions')
           .select('*')
           .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
           .maybeSingle();
 
         if (data && !error) {
           const expiration = data.expiration_date ? new Date(data.expiration_date) : null;
-          if (expiration && expiration > new Date()) {
+          const isActive = data.status === 'active' || (expiration !== null && expiration > new Date());
+
+          if (isActive) {
             console.log('✅ Subscription found in Supabase, restoring...');
             setIsSubscribed(true);
-            // Update AsyncStorage for next time
             await AsyncStorage.setItem(`isSubscribed_${user.id}`, 'true');
             await AsyncStorage.setItem(`subscriptionDate_${user.id}`, data.purchase_date);
           }
@@ -2463,12 +2506,6 @@ const loadData = useCallback(async () => {
 
     if (storedSubDate) {
       setSubscriptionDate(new Date(storedSubDate));
-    }
-
-    if (!storedTrialStart) {
-      const now = new Date();
-      await AsyncStorage.setItem('trialStart', now.toISOString());
-      setTrialStart(now);
     }
 
     const storedProducts = await DatabaseService.loadProducts();
@@ -2493,10 +2530,9 @@ const loadData = useCallback(async () => {
 
       const todayStr = `${now.getDate()} ${months[now.getMonth()]}`;
 
-      // Filter today's bills
       const todaysFilteredBills = parsed.filter((bill: SaleLog) => bill.date === todayStr);
-      
-      setSalesLog(parsed); // Store ALL bills
+
+      setSalesLog(parsed);
       setTodaysBills(todaysFilteredBills);
 
       setTodayTotal(
@@ -2508,7 +2544,6 @@ const loadData = useCallback(async () => {
     }
 
     setActiveSessions([...RAM_SESSIONS]);
-
   } catch (e) {
     console.error('loadData error:', e);
   }
@@ -2523,35 +2558,15 @@ const loadData = useCallback(async () => {
     );
   }, []);
 
-  const calculateRenewalDate = useCallback(() => {
-    const now = new Date();
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    // Calculate 30 days from subscription date for renewal date
-    if (subscriptionDate) {
-      const renewalDate = new Date(subscriptionDate);
-      renewalDate.setDate(renewalDate.getDate() + 30);
-      setNextDue(`${renewalDate.getDate()} ${months[renewalDate.getMonth()]}`);
-    } else {
-      // Fallback: if no subscription date, show first of next month
-      const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      setNextDue(`${nextMonth.getDate()} ${months[nextMonth.getMonth()]}`);
-    }
-  }, [subscriptionDate]);
-
-  const getTrialDaysLeft = useCallback((): number => {
-    if (!trialStart) return 7;
-    const msPerDay = 1000 * 60 * 60 * 24;
-    const elapsed = Math.floor((Date.now() - trialStart.getTime()) / msPerDay);
-    return Math.max(0, 3 - elapsed);
-  }, [trialStart]);
-
-  const isTrialActive = useCallback((): boolean => getTrialDaysLeft() > 0, [getTrialDaysLeft]);
+  const isTrialActive = useCallback((): boolean => false, []);
 
   const getSubscriptionStatus = useCallback(() => {
-    if (isSubscribed) return { label: 'Sankalp Pro', color: '#16A34A', bg: '#DCFCE7', icon: 'checkmark-circle' as const };
-    if (isTrialActive()) return { label: 'Sankalp', color: '#D97706', bg: '#FEF3C7', icon: 'sparkles' as const };
-    return { label: 'Trial Expired', color: '#DC2626', bg: '#FEE2E2', icon: 'close-circle' as const };
-  }, [isSubscribed, isTrialActive, getTrialDaysLeft]);
+    if (isSubscribed) {
+      return { label: 'Sankalp Pro', color: '#16A34A', bg: '#DCFCE7', icon: 'checkmark-circle' as const };
+    }
+
+    return { label: 'Sankalp', color: '#DC2626', bg: '#FEE2E2', icon: 'sparkles' as const };
+  }, [isSubscribed]);
 
   // Handle logout
   const handleLogout = useCallback(async () => {
@@ -2595,7 +2610,6 @@ useEffect(() => {
     loadData();
     loadBusinessDetails();
     updateDateTime();
-    calculateRenewalDate();
     const interval = setInterval(updateDateTime, 30000);
 
     // Load pending payments summary
@@ -2610,11 +2624,6 @@ useEffect(() => {
 
     return () => clearInterval(interval);
   }, [loadData, loadBusinessDetails, updateDateTime, user?.id]);
-
-  // Update renewal date when subscription changes
-  useEffect(() => {
-    calculateRenewalDate();
-  }, [calculateRenewalDate]);
 
   // Delay showing incomplete profile warning to let the page load naturally
   // Check if profile details are present after 5 seconds
@@ -2786,8 +2795,57 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
 }, [salesLog, billsDateFilter, billsSearchQuery]);
 
   const filteredTotal = useMemo(() => filteredBills.reduce((s, b) => s + b.total, 0), [filteredBills]);
-  
-  const [subscriptionModalVisible, setSubscriptionModalVisible] = useState(false);
+
+  const handleProfileUpgrade = useCallback(async () => {
+    if (isSubscribed) {
+      Alert.alert('Already Subscribed', 'You already have an active Sankalp Pro subscription!');
+      return;
+    }
+
+    try {
+      const purchased = await presentPaywall();
+      if (!purchased) return;
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const hasPro = await checkEntitlement(ENTITLEMENT_ID);
+      if (!hasPro) {
+        throw new Error('Purchase verification failed. Please contact support.');
+      }
+
+      const now = new Date();
+      const customerInfo = await getCustomerInfo();
+      const entitlement = customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
+
+      setIsSubscribed(true);
+      setSubscriptionDate(now);
+      await AsyncStorage.setItem(`isSubscribed_${user?.id}`, 'true');
+      await AsyncStorage.setItem(`subscriptionDate_${user?.id}`, now.toISOString());
+
+      if (customerInfo && entitlement && user?.id) {
+        const { error } = await supabase
+          .from('subscriptions')
+          .upsert({
+            user_id: user.id,
+            product_id: entitlement.productIdentifier || 'unknown',
+            purchase_token: customerInfo.originalAppUserId || 'revenuecat_user',
+            purchase_date: entitlement.latestPurchaseDate || now.toISOString(),
+            expiration_date: entitlement.expirationDate || null,
+            auto_renewing: entitlement.willRenew || true,
+            updated_at: now.toISOString(),
+          });
+
+        if (error) {
+          console.error('Error saving subscription to Supabase:', error);
+        }
+      }
+
+      showSuccess('Thank you for subscribing to Sankalp Pro! 🎉');
+    } catch (error: any) {
+      console.warn('RevenueCat error:', error);
+      Alert.alert('Purchase Error', error?.message || 'Failed to complete purchase. Please try again.');
+    }
+  }, [isSubscribed, showSuccess, user?.id]);
 
 
   return (
@@ -2803,14 +2861,13 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
         subStatus={subStatus}
         isSubscribed={isSubscribed}
         isTrialActive={isTrialActive()}
-        nextDue={nextDue}
         pendingCount={pendingCount}
         pendingTotal={pendingTotal}
         theme={theme}
         onClose={() => setProfileVisible(false)}
         onEditProfile={() => switchFromProfile(openEditProfile)}
         onLogout={handleLogout}
-        onUpgrade={() => switchFromProfile(() => setSubscriptionModalVisible(true))}
+        onUpgrade={() => switchFromProfile(handleProfileUpgrade)}
         onPendingPayments={() => switchFromProfile(() => setPendingPaymentsVisible(true))}
         onChooseTheme={() => switchFromProfile(() => setThemePickerVisible(true))}
         onDeleteAccount={() => switchFromProfile(() => setDeleteAccountModalVisible(true))}
@@ -2946,25 +3003,6 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
         }}
         theme={theme}
       />
-      
-        <SubscriptionModal
-            visible={subscriptionModalVisible}
-            onClose={() => setSubscriptionModalVisible(false)}
-            onSuccess={async () => {
-              // Handle successful subscription
-              const now = new Date();
-              setIsSubscribed(true);
-              setSubscriptionDate(now);
-              // Use user-specific keys to match loadData
-              await AsyncStorage.setItem(`isSubscribed_${user?.id}`, 'true');
-              await AsyncStorage.setItem(`subscriptionDate_${user?.id}`, now.toISOString());
-              setSubscriptionModalVisible(false);
-              showSuccess('Thank you for subscribing to Sankalp Pro! 🎉');
-            }}
-            userId={user?.id || ''}
-            isTrialActive={isTrialActive()}
-            trialDaysLeft={getTrialDaysLeft()}
-          />
 
           {/* Sankalp AI Modal */}
           <SankalpAIModal 
@@ -3052,7 +3090,8 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
     <View style={styles.headerRightButtons}>
       {/* Sankalp AI Button */}
       <TouchableOpacity 
-        style={[styles.aiHeaderBtn, { shadowColor: theme.colors.primary }]} 
+        activeOpacity={0.85}
+        style={[styles.aiHeaderBtn, { shadowColor: theme.colors.primary, overflow: 'hidden' }]} 
         onPress={() => setAiModalVisible(true)}
       >
         <LinearGradient
@@ -3061,13 +3100,27 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
           end={{ x: 1, y: 1 }}
           style={styles.aiGradient}
         >
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: -10,
+              bottom: -10,
+              width: 42,
+              opacity: 0.5,
+              transform: [{ translateX: aiShineAnim }, { rotate: '22deg' }],
+              backgroundColor: 'rgba(255,255,255,0.7)',
+            }}
+          />
           <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
           <Text style={styles.aiBtnText}>AI</Text>
+          <Ionicons name="sparkles" size={10} color="rgba(255,255,255,0.9)" style={{ marginLeft: 2 }} />
         </LinearGradient>
       </TouchableOpacity>
       
       {/* Profile Button */}
       <TouchableOpacity 
+        activeOpacity={0.85}
         style={styles.profileBtn} 
         onPress={() => setProfileVisible(true)}
       >

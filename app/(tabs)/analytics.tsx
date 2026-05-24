@@ -3,7 +3,7 @@ import { useAuthStore, useThemeStore } from '@/lib/store';
 import { AppTheme } from '@/constants/theme';
 import { db as DatabaseService } from '@/lib/database';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
-import { PremiumAccessOverlay } from '@/components/PremiumAccessOverlay';  // ← ADD THIS
+import { PremiumAccessOverlay } from '@/components/PremiumAccessOverlay';
 import { useSubscriptionAccess } from '@/hooks/useSubscriptionAccess';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -564,8 +564,6 @@ const { user } = useAuthStore();
   const { 
   canAccessPremium, 
   isSubscribed, 
-  isTrialActive, 
-  trialDaysLeft, 
   isLoading: subscriptionLoading,
   refreshAccess 
 } = useSubscriptionAccess(user?.id);
@@ -1392,28 +1390,25 @@ return { data, labels };
         />
       )}
 
-      {/* ── Premium Access Overlay (Trial Expired) ── */}
+      {/* ── Premium Access Overlay ── */}
       <PremiumAccessOverlay
-  visible={!canAccessPremium && !subscriptionLoading && !isTrialActive}
-  featureName="Analytics"
-  trialDaysLeft={trialDaysLeft}
-  onUpgradePress={() => setShowSubscriptionModal(true)}
-  onClose={() => {}}
-  theme={theme}
-/>
+        visible={!canAccessPremium && !subscriptionLoading}
+        featureName="Analytics"
+        onUpgradePress={() => setShowSubscriptionModal(true)}
+        onClose={() => {}}
+        theme={theme}
+      />
 
       {/* ── Subscription Modal ── */}
       <SubscriptionModal
-  visible={showSubscriptionModal}
-  onClose={() => setShowSubscriptionModal(false)}
-  onSuccess={() => {
-    refreshAccess();
-    setShowSubscriptionModal(false);
-  }}
-  userId={user?.id || ''}
-  isTrialActive={isTrialActive}
-  trialDaysLeft={trialDaysLeft}
-/>
+        visible={showSubscriptionModal}
+        onClose={() => setShowSubscriptionModal(false)}
+        onSuccess={() => {
+          refreshAccess();
+          setShowSubscriptionModal(false);
+        }}
+        userId={user?.id || ''}
+      />
 
     </View>
   );

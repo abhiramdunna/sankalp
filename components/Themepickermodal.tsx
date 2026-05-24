@@ -23,14 +23,14 @@ interface ThemePickerModalProps {
 
 export default function ThemePickerModal({ visible, onClose }: ThemePickerModalProps) {
   const insets = useSafeAreaInsets();
-  const { themeId, setTheme, resetTheme, theme } = useThemeStore();
+  const { themeId, setTheme, theme } = useThemeStore();
 
   const handleSelect = (id: ThemeId) => {
     setTheme(id);
   };
 
   const handleReset = () => {
-    resetTheme();
+    setTheme(DEFAULT_THEME_ID);
   };
 
   if (!visible) return null;

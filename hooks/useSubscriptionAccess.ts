@@ -1,11 +1,9 @@
 // hooks/useSubscriptionAccess.ts
-import { useEffect, useState } from 'react';
-import { checkEntitlement } from '@/lib/revenuecat';
+import { useEffect, useRef, useState } from 'react';
+import { checkEntitlement, getDatabaseSubscriptionStatus, syncActiveSubscriptionToDatabase } from '@/lib/revenuecat';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '@/lib/supabase';
 
-const ENTITLEMENT_ID = 'Sankalp pro'; // Match your entitlement ID
-const TRIAL_DAYS = 3;
+const ENTITLEMENT_ID = 'Sankalp Pro'; // Must match RevenueCat exactly!
 
 interface SubscriptionAccess {
   canAccessPremium: boolean;
@@ -19,37 +17,11 @@ interface SubscriptionAccess {
 export function useSubscriptionAccess(userId: string | undefined): SubscriptionAccess {
   const [canAccessPremium, setCanAccessPremium] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const [isTrialActive, setIsTrialActive] = useState(false);
+  const [isTrialActive] = useState(false);
   const [trialDaysLeft, setTrialDaysLeft] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-
-  const checkTrialStatus = async (): Promise<{ isActive: boolean; daysLeft: number }> => {
-    if (!userId) return { isActive: false, daysLeft: 0 };
-    
-    try {
-      let trialStart = await AsyncStorage.getItem(`trialStart_${userId}`);
-      
-      if (!trialStart) {
-        // Start trial now
-        trialStart = new Date().toISOString();
-        await AsyncStorage.setItem(`trialStart_${userId}`, trialStart);
-        return { isActive: true, daysLeft: TRIAL_DAYS };
-      }
-      
-      const startDate = new Date(trialStart);
-      const now = new Date();
-      const elapsedDays = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-      const remaining = Math.max(0, TRIAL_DAYS - elapsedDays);
-      
-      return { 
-        isActive: remaining > 0, 
-        daysLeft: remaining 
-      };
-    } catch (error) {
-      console.error('Error checking trial:', error);
-      return { isActive: false, daysLeft: 0 };
-    }
-  };
+  const isCheckingRef = useRef(false);
+  const hasLoggedErrorRef = useRef(false);
 
   const refreshAccess = async () => {
     if (!userId) {
@@ -57,33 +29,48 @@ export function useSubscriptionAccess(userId: string | undefined): SubscriptionA
       return;
     }
 
+    if (isCheckingRef.current) {
+      return;
+    }
+
+    isCheckingRef.current = true;
+    hasLoggedErrorRef.current = false;
+
     setIsLoading(true);
     try {
-      // Check RevenueCat subscription
+      console.log('🔄 Checking subscription access for user:', userId);
+      
+      // Trust RevenueCat first, then fall back to the database copy.
       const hasSubscription = await checkEntitlement(ENTITLEMENT_ID);
       
       if (hasSubscription) {
-        // User has active subscription
+        console.log('✅ Active subscription found via RevenueCat');
         setIsSubscribed(true);
-        setIsTrialActive(false);
         setCanAccessPremium(true);
         setTrialDaysLeft(0);
         
         // Update local storage
         await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
+        await AsyncStorage.setItem(`subscriptionDate_${userId}`, new Date().toISOString());
+        await syncActiveSubscriptionToDatabase(userId);
       } else {
-        // No subscription, check trial
-        setIsSubscribed(false);
-        const trial = await checkTrialStatus();
-        
-        setIsTrialActive(trial.isActive);
-        setTrialDaysLeft(trial.daysLeft);
-        setCanAccessPremium(trial.isActive);
+        const hasDatabaseSubscription = await getDatabaseSubscriptionStatus(userId);
+        console.log(`📊 Database subscription status: ${hasDatabaseSubscription ? 'active' : 'inactive'}`);
+
+        setIsSubscribed(hasDatabaseSubscription);
+        setCanAccessPremium(hasDatabaseSubscription);
+        setTrialDaysLeft(0);
       }
     } catch (error) {
-      console.error('Error checking access:', error);
+      if (!hasLoggedErrorRef.current) {
+        console.error('Error checking access:', error);
+        hasLoggedErrorRef.current = true;
+      }
       setCanAccessPremium(false);
+      setIsSubscribed(false);
+      setTrialDaysLeft(0);
     } finally {
+      isCheckingRef.current = false;
       setIsLoading(false);
     }
   };

@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Modal,
   View,
   Text,
   TouchableOpacity,
@@ -17,7 +16,6 @@ interface PremiumAccessOverlayProps {
   onUpgradePress: () => void;
   onClose: () => void;
   theme: AppTheme;
-  trialDaysLeft?: number;
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -28,130 +26,91 @@ export const PremiumAccessOverlay: React.FC<PremiumAccessOverlayProps> = ({
   onUpgradePress,
   onClose,
   theme,
-  trialDaysLeft,
 }) => {
   if (!visible) return null;
 
-  const isPremiumRunning = featureName === 'Analytics' && trialDaysLeft !== undefined && trialDaysLeft === -1;
-
   return (
-    <Modal
-      transparent
-      visible={visible}
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <View style={styles.container}>
-        {/* Semi-transparent backdrop */}
-        <View style={styles.backdrop} />
+    <View pointerEvents="box-none" style={styles.container}>
+      {/* Semi-transparent backdrop */}
+      <View style={styles.backdrop} />
 
-        {/* Content Card */}
-        <View style={styles.contentContainer}>
-          <LinearGradient
-            colors={[theme.colors.primary + '15', theme.colors.primary + '05']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.card}
+      {/* Content Card */}
+      <View style={styles.contentContainer}>
+        <LinearGradient
+          colors={[theme.colors.primary + '15', theme.colors.primary + '05']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.card}
+        >
+          {/* Icon */}
+          <View
+            style={[
+              styles.iconBox,
+              { backgroundColor: theme.colors.primary + '20' },
+            ]}
           >
-            {/* Icon */}
-            <View
-              style={[
-                styles.iconBox,
-                { backgroundColor: theme.colors.primary + '20' },
-              ]}
+            <Ionicons
+              name="lock-closed"
+              size={40}
+              color={theme.colors.primary}
+            />
+          </View>
+
+          {/* Title */}
+          <Text style={[styles.title, { color: theme.colors.textPrimary }]}>Activate Sankalp Pro</Text>
+
+          {/* Description */}
+          <Text style={[styles.description, { color: theme.colors.textSecondary }]}>
+            Unlock full access to {featureName} with Sankalp Pro subscription.{"\n\n"}
+            Get premium features, advanced analytics, and priority support.
+          </Text>
+
+          {/* CTA Buttons */}
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={[styles.closeButton, { borderColor: theme.colors.primary }]}
+              onPress={onClose}
             >
-              <Ionicons
-                name="lock-closed"
-                size={40}
-                color={theme.colors.primary}
-              />
-            </View>
+              <Text style={[styles.closeButtonText, { color: theme.colors.primary }]}>
+                Not Now
+              </Text>
+            </TouchableOpacity>
 
-            {/* Title */}
-            <Text style={[styles.title, { color: theme.colors.textPrimary }]}> 
-              {isPremiumRunning
-                ? `${featureName} Running in Background`
-                : `Activate Sankalp Pro`}
-            </Text>
+            <TouchableOpacity
+              style={[
+                styles.upgradeButton,
+                { backgroundColor: theme.colors.primary },
+              ]}
+              onPress={onUpgradePress}
+            >
+              <Ionicons name="star" size={18} color="#fff" />
+              <Text style={styles.upgradeButtonText}>
+                Upgrade Now
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-            {/* Description */}
-            <Text style={[styles.description, { color: theme.colors.textSecondary }]}>
-              {isPremiumRunning
-                ? `Your ${featureName.toLowerCase()} data is being collected. Upgrade to Sankalp Pro to view detailed insights.`
-                : `Unlock full access to ${featureName} with Sankalp Pro subscription.\n\nGet premium features, advanced analytics, and priority support.`}
-            </Text>
-
-            {/* Trial Days Left (if applicable) */}
-            {trialDaysLeft !== undefined && trialDaysLeft > 0 && (
-              <View
-                style={[
-                  styles.trialBadge,
-                  { backgroundColor: theme.colors.primary + '20' },
-                ]}
-              >
-                <Ionicons
-                  name="gift-outline"
-                  size={16}
-                  color={theme.colors.primary}
-                />
-                <Text
-                  style={[
-                    styles.trialText,
-                    { color: theme.colors.primary },
-                  ]}
-                >
-                  {trialDaysLeft} day{trialDaysLeft !== 1 ? 's' : ''} of free trial remaining
-                </Text>
-              </View>
-            )}
-
-            {/* CTA Buttons */}
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={[styles.closeButton, { borderColor: theme.colors.primary }]}
-                onPress={onClose}
-              >
-                <Text style={[styles.closeButtonText, { color: theme.colors.primary }]}>
-                  Not Now
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.upgradeButton,
-                  { backgroundColor: theme.colors.primary },
-                ]}
-                onPress={onUpgradePress}
-              >
-                <Ionicons name="star" size={18} color="#fff" />
-                <Text style={styles.upgradeButtonText}>
-                  Upgrade Now
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Benefits List */}
-            <View style={styles.benefitsContainer}>
-              <BenefitItem
-                icon="analytics-outline"
-                text="Advanced Analytics"
-                color={theme.colors.primary}
-              />
-              <BenefitItem
-                icon="chatbubble-outline"
-                text="AI Assistant Access"
-                color={theme.colors.primary}
-              />
-              <BenefitItem
-                icon="stats-chart-outline"
-                text="Detailed Reports"
-                color={theme.colors.primary}
-              />
-            </View>
-          </LinearGradient>
-        </View>
+          {/* Benefits List */}
+          <View style={styles.benefitsContainer}>
+            <BenefitItem
+              icon="analytics-outline"
+              text="Advanced Analytics"
+              color={theme.colors.primary}
+            />
+            <BenefitItem
+              icon="chatbubble-outline"
+              text="AI Assistant Access"
+              color={theme.colors.primary}
+            />
+            <BenefitItem
+              icon="stats-chart-outline"
+              text="Detailed Reports"
+              color={theme.colors.primary}
+            />
+          </View>
+        </LinearGradient>
       </View>
-    </Modal>
+    </View>
   );
 };
 

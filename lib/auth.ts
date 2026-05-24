@@ -4,6 +4,7 @@ import {
   isSuccessResponse,
 } from '@react-native-google-signin/google-signin';
 import { supabase } from './supabase';
+import Purchases from 'react-native-purchases';
 
 export type AuthMode = 'signup' | 'login';
 
@@ -88,19 +89,35 @@ async function getProfileCompleteness(
 }
 
 /**
+ * Login the user into RevenueCat using their Supabase userId.
+ * This replaces the anonymous $RCAnonymousID with the real user ID
+ * so purchases are correctly tied to the account.
+ * Errors are caught silently — a RevenueCat login failure should
+ * never block the app login flow.
+ */
+async function loginRevenueCat(userId: string): Promise<void> {
+  try {
+    const { customerInfo, created } = await Purchases.logIn(userId);
+    console.log('💰 RevenueCat login success | new customer:', created);
+  } catch (e) {
+    console.warn('⚠️ RevenueCat logIn failed (non-blocking):', e);
+  }
+}
+
+/**
  * LOGIN flow:
  *   1. Suppress SIGNED_IN event so _layout.tsx won't react yet
  *   2. Authenticate with Supabase (needs session to query profiles via RLS)
  *   3. Check profiles table
  *      → No profile row → signOut + throw NO_ACCOUNT_FOUND  (stays on login)
- *      → Profile exists → unsuppress + manually update store → go home
+ *      → Profile exists → login RevenueCat + unsuppress → go home
  *
  * SIGNUP flow:
  *   1. Suppress SIGNED_IN event
  *   2. Authenticate with Supabase
  *   3. Check profiles
  *      → Complete profile exists → signOut + throw ACCOUNT_EXISTS  (stays on login)
- *      → New/incomplete → upsert profile row + unsuppress → go to complete-profile
+ *      → New/incomplete → upsert profile row + login RevenueCat + unsuppress → go to complete-profile
  */
 export async function signInWithGoogle(mode: AuthMode): Promise<AuthResult> {
   const { idToken, userInfo } = await getGoogleCredential();
@@ -124,6 +141,8 @@ export async function signInWithGoogle(mode: AuthMode): Promise<AuthResult> {
         await supabase.auth.signOut();
         throw new Error('NO_ACCOUNT_FOUND');
       }
+      // Link real userId to RevenueCat (replaces anonymous ID)
+      await loginRevenueCat(userId);
       // Valid login — unsuppress so _layout.tsx can now handle the session
       setSuppressAuthEvent(false);
       return { user, session, isNewUser: false, hasCompleteProfile: isComplete };
@@ -150,6 +169,9 @@ export async function signInWithGoogle(mode: AuthMode): Promise<AuthResult> {
       throw new Error(`Profile save error: ${upsertError.message}`);
     }
     console.log('✅ Profile upserted successfully:', upsertData);
+
+    // Link real userId to RevenueCat for new signup too
+    await loginRevenueCat(userId);
 
     // Unsuppress so _layout.tsx reacts to the session and routes to complete-profile
     setSuppressAuthEvent(false);
