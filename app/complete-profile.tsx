@@ -100,6 +100,13 @@ export default function CompleteProfile() {
 
   const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
   const [stateSuggestions, setStateSuggestions] = useState<string[]>([]);
+  const [showError, setShowError] = useState(false);
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
+
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const successScaleAnim = useRef(new Animated.Value(0)).current;
+  const successFadeAnim = useRef(new Animated.Value(0)).current;
+  const checkScaleAnim = useRef(new Animated.Value(0)).current;
 
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -187,8 +194,24 @@ export default function CompleteProfile() {
     }
   };
 
+  const shakeField = () => {
+    setShowError(true);
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 8, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -8, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 60, useNativeDriver: true }),
+    ]).start();
+    setTimeout(() => setShowError(false), 2500);
+  };
+
   const handleNext = () => {
-    if (!canAdvance()) return;
+    if (!canAdvance()) {
+      shakeField();
+      return;
+    }
+    setShowError(false);
     if (currentStepIndex < STEPS.length - 1) {
       animateTransition('forward', () => setCurrentStepIndex(i => i + 1));
     } else {
@@ -224,7 +247,19 @@ export default function CompleteProfile() {
         return;
       }
       if (isNewSignup) {
-        setShowFeatureShowcase(true);
+        setShowSuccessAnimation(true);
+        // Run success animation then show feature showcase
+        Animated.parallel([
+          Animated.spring(successScaleAnim, { toValue: 1, tension: 60, friction: 6, useNativeDriver: true }),
+          Animated.timing(successFadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+        ]).start(() => {
+          Animated.spring(checkScaleAnim, { toValue: 1, tension: 80, friction: 5, useNativeDriver: true }).start(() => {
+            setTimeout(() => {
+              setShowSuccessAnimation(false);
+              setShowFeatureShowcase(true);
+            }, 1800);
+          });
+        });
       } else {
         updateProfileStatus(true);
         router.replace('/(tabs)/home');
@@ -271,7 +306,57 @@ export default function CompleteProfile() {
     );
   }
 
-  // ── Feature Showcase ────────────────────────────────────────────────────────
+  // ── Success Animation ───────────────────────────────────────────────────────
+  if (showSuccessAnimation) {
+    return (
+      <LinearGradient
+        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.container}
+      >
+        <SafeAreaView style={[styles.safeArea, { alignItems: 'center', justifyContent: 'center' }]}>
+          <Animated.View style={{
+            opacity: successFadeAnim,
+            transform: [{ scale: successScaleAnim }],
+            alignItems: 'center',
+          }}>
+            {/* Glow circle */}
+            <View style={{
+              width: 140,
+              height: 140,
+              borderRadius: 70,
+              backgroundColor: 'rgba(255,255,255,0.15)',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 32,
+            }}>
+              <View style={{
+                width: 100,
+                height: 100,
+                borderRadius: 50,
+                backgroundColor: 'rgba(255,255,255,0.9)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Animated.View style={{ transform: [{ scale: checkScaleAnim }] }}>
+                  <Ionicons name="checkmark" size={52} color={theme.colors.primary} />
+                </Animated.View>
+              </View>
+            </View>
+            <Text style={{ fontSize: 28, fontWeight: '900', color: '#fff', letterSpacing: -0.5, marginBottom: 10 }}>
+              Profile Complete!
+            </Text>
+            <Text style={{ fontSize: 16, color: 'rgba(255,255,255,0.75)', textAlign: 'center', paddingHorizontal: 40 }}>
+              You're all set. Let's explore what Sankalp can do for you.
+            </Text>
+          </Animated.View>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
+
+
   if (showFeatureShowcase) {
     return (
       <Animated.View style={[{ flex: 1 }, { opacity: showcaseFadeAnim }]}>
@@ -354,7 +439,7 @@ export default function CompleteProfile() {
               <Animated.View
                 style={[
                   styles.inputArea,
-                  { opacity: fadeAnim, transform: [{ translateX: slideAnim }] },
+                  { opacity: fadeAnim, transform: [{ translateX: slideAnim }, { translateX: shakeAnim }] },
                 ]}
               >
                 <View style={styles.inputRow}>
@@ -363,7 +448,7 @@ export default function CompleteProfile() {
                     placeholder={meta.placeholder}
                     placeholderTextColor={`${theme.colors.primary}70`}
                     value={getCurrentValue()}
-                    onChangeText={handleChange}
+                    onChangeText={(text) => { handleChange(text); if (showError) setShowError(false); }}
                     autoFocus
                     returnKeyType={isLastStep ? 'done' : 'next'}
                     onSubmitEditing={handleNext}
@@ -383,17 +468,26 @@ export default function CompleteProfile() {
                 </View>
 
                 {/* Animated underline */}
-                <View style={styles.underlineTrack}>
+                <View style={[styles.underlineTrack, showError && { backgroundColor: '#FEE2E2' }]}>
                   <Animated.View
   style={[
     styles.underlineFill,
     {
       width: underlineWidth,
-      backgroundColor: theme.colors.primary,
+      backgroundColor: showError ? '#EF4444' : theme.colors.primary,
     },
   ]}
 />
                 </View>
+
+                {/* Error message */}
+                {showError && (
+                  <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 6, fontWeight: '600' }}>
+                    Please enter {currentStep === 'business_name' ? 'your business name' :
+                      currentStep === 'business_category' ? 'your business type' :
+                      currentStep === 'city' ? 'your city' : 'your state'} to continue
+                  </Text>
+                )}
 
                 {/* Suggestions */}
                 {suggestions.length > 0 && (

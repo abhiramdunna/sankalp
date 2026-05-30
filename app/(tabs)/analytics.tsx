@@ -39,6 +39,7 @@ interface SaleLog {
   items: BillItem[];
   customerName: string;
   phone: string;
+  paymentMode?: 'cash' | 'upi';
 }
 
 // ─────────────────────────────────────────────
@@ -567,6 +568,7 @@ const { user } = useAuthStore();
   isLoading: subscriptionLoading,
   refreshAccess 
 } = useSubscriptionAccess(user?.id);
+  const isPremiumLocked = !canAccessPremium && !subscriptionLoading;
   
   useFocusEffect(
     useCallback(() => {
@@ -820,15 +822,34 @@ return { data, labels };
     const totalBills = filteredSales.length;
     const avgBill = totalBills > 0 ? Math.round(totalRevenue / totalBills) : 0;
 
-    const byDate: Record<string, number> = {};
+    // Cash vs UPI split
+    let cashTotal = 0;
+    let upiTotal = 0;
+    let cashBills = 0;
+    let upiBills = 0;
     filteredSales.forEach(bill => {
-      const date = bill.date || 'Unknown';
-      byDate[date] = (byDate[date] || 0) + bill.total;
+      if (bill.paymentMode === 'upi') {
+        upiTotal += bill.total;
+        upiBills++;
+      } else {
+        cashTotal += bill.total;
+        cashBills++;
+      }
     });
 
-    const dateEntries = Object.entries(byDate).sort((a, b) => b[1] - a[1]);
-    const bestDay = dateEntries[0]?.[0] || 'N/A';
-    const bestDayAmount = dateEntries[0]?.[1] || 0;
+    // Best day — use parseBillDate so sorting is unambiguous across months
+    const byDate: Record<string, { amount: number; label: string }> = {};
+    filteredSales.forEach(bill => {
+      if (!bill.date) return;
+      const parsed = parseBillDate(bill.date);
+      const key = parsed ? parsed.toISOString().split('T')[0] : bill.date;
+      if (!byDate[key]) byDate[key] = { amount: 0, label: bill.date };
+      byDate[key].amount += bill.total;
+    });
+
+    const dateEntries = Object.entries(byDate).sort((a, b) => b[1].amount - a[1].amount);
+    const bestDay = dateEntries[0]?.[1].label || 'N/A';
+    const bestDayAmount = dateEntries[0]?.[1].amount || 0;
 
     const pendingBills = 0;
     const avgBillChange = 0;
@@ -866,6 +887,10 @@ return { data, labels };
       bestDayAmount,
       topProduct,
       topProducts,
+      cashTotal,
+      upiTotal,
+      cashBills,
+      upiBills,
     };
   }, [filteredSales, currentWeekSales, availableProducts]);
 
@@ -931,9 +956,25 @@ return { data, labels };
                       {bill.date} • {bill.time}
                     </Text>
                   </View>
-                  <Text style={{ fontSize: 15, fontWeight: '800', color: theme.colors.primary }}>
-                    ₹{bill.total.toLocaleString('en-IN')}
-                  </Text>
+                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: theme.colors.primary }}>
+                      ₹{bill.total.toLocaleString('en-IN')}
+                    </Text>
+                    <View style={{
+                      backgroundColor: bill.paymentMode === 'upi' ? '#EEF2FF' : '#F0FDF4',
+                      paddingHorizontal: 8,
+                      paddingVertical: 2,
+                      borderRadius: 4,
+                    }}>
+                      <Text style={{
+                        fontSize: 10,
+                        fontWeight: '700',
+                        color: bill.paymentMode === 'upi' ? '#6366F1' : '#22C55E',
+                      }}>
+                        {bill.paymentMode === 'upi' ? 'UPI' : 'CASH'}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                   {bill.items.slice(0, 3).map((item, i) => (
@@ -958,12 +999,32 @@ return { data, labels };
 
         {filteredSales.length > 0 && (
           <View style={{ borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingHorizontal: 16, paddingVertical: 16 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ fontSize: 14, fontWeight: '600', color: '#6B7280' }}>Total</Text>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: theme.colors.primary }}>
-                ₹{filteredSales.reduce((sum, bill) => sum + bill.total, 0).toLocaleString('en-IN')}
-              </Text>
-            </View>
+            {(() => {
+              const cashAmt = filteredSales.filter(b => !b.paymentMode || b.paymentMode === 'cash').reduce((s, b) => s + b.total, 0);
+              const upiAmt = filteredSales.filter(b => b.paymentMode === 'upi').reduce((s, b) => s + b.total, 0);
+              return (
+                <>
+                  {cashAmt > 0 && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: '#22C55E' }}>Cash</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#22C55E' }}>₹{cashAmt.toLocaleString('en-IN')}</Text>
+                    </View>
+                  )}
+                  {upiAmt > 0 && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: '#6366F1' }}>UPI</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#6366F1' }}>₹{upiAmt.toLocaleString('en-IN')}</Text>
+                    </View>
+                  )}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: (cashAmt > 0 || upiAmt > 0) ? 0.5 : 0, borderTopColor: '#E5E7EB', paddingTop: (cashAmt > 0 || upiAmt > 0) ? 6 : 0, marginTop: (cashAmt > 0 || upiAmt > 0) ? 4 : 0 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: '#6B7280' }}>Total</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: theme.colors.primary }}>
+                      ₹{filteredSales.reduce((sum, bill) => sum + bill.total, 0).toLocaleString('en-IN')}
+                    </Text>
+                  </View>
+                </>
+              );
+            })()}
           </View>
         )}
       </View>
@@ -1028,14 +1089,16 @@ return { data, labels };
             <Text style={styles.headerTitle}>Analytics</Text>
           </View>
         </View>
+      </LinearGradient>
 
-        {/* Unified Date Filter Chip */}
+      {/* Date Filter Bar */}
+      <View style={styles.filterBarWrap}>
         <TouchableOpacity
           style={styles.unifiedFilterChip}
           onPress={() => setShowDateMenu(!showDateMenu)}
           activeOpacity={0.7}
         >
-          <Ionicons name="calendar-outline" size={16} color="#fff" />
+          <Ionicons name="calendar-outline" size={16} color={theme.colors.primary} />
           <Text style={styles.filterLabelBold}>{filterLabel}</Text>
           <Text style={styles.filterSeparator}>•</Text>
           <Text style={styles.dateRangeLight}>
@@ -1044,7 +1107,7 @@ return { data, labels };
           <Ionicons
             name="chevron-down"
             size={16}
-            color="#fff"
+            color={theme.colors.primary}
             style={{ marginLeft: 'auto' }}
           />
         </TouchableOpacity>
@@ -1068,16 +1131,17 @@ return { data, labels };
           }}
           onClose={() => setShowDateMenu(false)}
         />
-      </LinearGradient>
+      </View>
 
       {/* ══════════════════════════════════════
           SCROLL BODY
       ══════════════════════════════════════ */}
-      <ScrollView
-        style={[styles.scrollView, { backgroundColor: theme.colors.background }]}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 36 }}
-      >
+      <View style={styles.analyticsContentWrap} pointerEvents={isPremiumLocked ? 'none' : 'auto'}>
+        <ScrollView
+          style={[styles.scrollView, { backgroundColor: theme.colors.background }]}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 36 }}
+        >
 
         {/* ── Monthly Collection Card ── */}
         <LinearGradient
@@ -1143,6 +1207,66 @@ return { data, labels };
           </View>
 
         </View>
+
+        {/* ── Payment Mode Breakdown: Cash vs UPI ── */}
+        {analytics.totalBills > 0 && (
+          <View style={[styles.metricRow, { marginTop: 0 }]}>
+            <View style={[styles.metricCard, { flex: 1 }]}>
+              <View style={styles.metricCardHeader}>
+                <View style={[styles.metricIconBox, { backgroundColor: '#FFF7ED' }]}>
+                  <Ionicons name="wallet-outline" size={20} color="#F97316" />
+                </View>
+                <Text style={styles.metricLabel}>PAYMENT MODE</Text>
+              </View>
+
+              {/* Progress bar */}
+              {(() => {
+                const total = analytics.cashTotal + analytics.upiTotal;
+                const cashPct = total > 0 ? (analytics.cashTotal / total) * 100 : 0;
+                const upiPct = total > 0 ? (analytics.upiTotal / total) * 100 : 0;
+                return (
+                  <>
+                    {/* Segmented bar */}
+                    <View style={{ flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', marginTop: 10, marginBottom: 12 }}>
+                      <View style={{ flex: cashPct, backgroundColor: '#22C55E' }} />
+                      <View style={{ flex: upiPct, backgroundColor: '#6366F1' }} />
+                    </View>
+
+                    {/* Cash row */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#22C55E' }} />
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#374151' }}>Cash</Text>
+                        <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '500' }}>({analytics.cashBills} bill{analytics.cashBills !== 1 ? 's' : ''})</Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: '#22C55E' }}>
+                          ₹{analytics.cashTotal.toLocaleString('en-IN')}
+                        </Text>
+                        <Text style={{ fontSize: 10, color: '#9CA3AF', fontWeight: '600' }}>{cashPct.toFixed(0)}%</Text>
+                      </View>
+                    </View>
+
+                    {/* UPI row */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#6366F1' }} />
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#374151' }}>UPI</Text>
+                        <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '500' }}>({analytics.upiBills} bill{analytics.upiBills !== 1 ? 's' : ''})</Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: '#6366F1' }}>
+                          ₹{analytics.upiTotal.toLocaleString('en-IN')}
+                        </Text>
+                        <Text style={{ fontSize: 10, color: '#9CA3AF', fontWeight: '600' }}>{upiPct.toFixed(0)}%</Text>
+                      </View>
+                    </View>
+                  </>
+                );
+              })()}
+            </View>
+          </View>
+        )}
 
         {/* ── Metric Cards — Row 2: Top Product (full width) ── */}
         <View style={[styles.metricRow, { marginTop: 0 }]}>
@@ -1367,7 +1491,17 @@ return { data, labels };
           </View>
         )}
 
-      </ScrollView>
+        </ScrollView>
+
+        {/* ── Premium Access Overlay ── */}
+        <PremiumAccessOverlay
+          visible={isPremiumLocked}
+          featureName="Analytics"
+          onUpgradePress={() => setShowSubscriptionModal(true)}
+          onClose={() => {}}
+          theme={theme}
+        />
+      </View>
 
       {/* ── Transactions Modal ── */}
       <TransactionsModal />
@@ -1389,15 +1523,6 @@ return { data, labels };
           onCancel={() => setShowCustomCalendar(false)}
         />
       )}
-
-      {/* ── Premium Access Overlay ── */}
-      <PremiumAccessOverlay
-        visible={!canAccessPremium && !subscriptionLoading}
-        featureName="Analytics"
-        onUpgradePress={() => setShowSubscriptionModal(true)}
-        onClose={() => {}}
-        theme={theme}
-      />
 
       {/* ── Subscription Modal ── */}
       <SubscriptionModal
@@ -1428,16 +1553,16 @@ const makeStyles = (theme: AppTheme) => StyleSheet.create({
   header: {
     backgroundColor: theme.colors.primary,
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingBottom: 12,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 14,
+    marginBottom: 4,
   },
   headerTitle: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '900',
     color: '#fff',
     letterSpacing: -0.5,
@@ -1462,31 +1587,41 @@ const makeStyles = (theme: AppTheme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginHorizontal: 16,
-    marginBottom: 12,
+    width: '100%',
     paddingHorizontal: 14,
     paddingVertical: 9,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: '#fff',
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: '#E5E7EB',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
   filterLabelBold: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#fff',
+    color: '#111827',
     letterSpacing: 0.2,
   },
   filterSeparator: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
+    color: '#9CA3AF',
     marginHorizontal: 2,
   },
   dateRangeLight: {
     fontSize: 13,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.75)',
+    color: '#6B7280',
     letterSpacing: 0.1,
+  },
+
+  filterBarWrap: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 12,
   },
 
   // ── Filter section (legacy) ──
@@ -1563,6 +1698,11 @@ const makeStyles = (theme: AppTheme) => StyleSheet.create({
   // ── Scroll ──
   scrollView: {
     flex: 1,
+  },
+
+  analyticsContentWrap: {
+    flex: 1,
+    position: 'relative',
   },
 
   // ── Collection Card ──

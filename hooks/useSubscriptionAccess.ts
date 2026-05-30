@@ -35,30 +35,37 @@ export function useSubscriptionAccess(userId: string | undefined): SubscriptionA
 
     isCheckingRef.current = true;
     hasLoggedErrorRef.current = false;
-
     setIsLoading(true);
+
     try {
       console.log('🔄 Checking subscription access for user:', userId);
-      
-      // Trust RevenueCat first, then fall back to the database copy.
+
+      // Always hit RevenueCat servers fresh (cache is invalidated in checkEntitlement)
       const hasSubscription = await checkEntitlement(ENTITLEMENT_ID);
-      
+
       if (hasSubscription) {
         console.log('✅ Active subscription found via RevenueCat');
         setIsSubscribed(true);
         setCanAccessPremium(true);
         setTrialDaysLeft(0);
-        
-        // Update local storage
         await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
         await AsyncStorage.setItem(`subscriptionDate_${userId}`, new Date().toISOString());
         await syncActiveSubscriptionToDatabase(userId);
       } else {
+        // RevenueCat says no — also check Supabase DB as fallback
         const hasDatabaseSubscription = await getDatabaseSubscriptionStatus(userId);
         console.log(`📊 Database subscription status: ${hasDatabaseSubscription ? 'active' : 'inactive'}`);
 
-        setIsSubscribed(hasDatabaseSubscription);
-        setCanAccessPremium(hasDatabaseSubscription);
+        if (hasDatabaseSubscription) {
+          setIsSubscribed(true);
+          setCanAccessPremium(true);
+        } else {
+          // Truly expired/inactive — clear any stale local cache
+          setIsSubscribed(false);
+          setCanAccessPremium(false);
+          await AsyncStorage.removeItem(`isSubscribed_${userId}`);
+          await AsyncStorage.removeItem(`subscriptionDate_${userId}`);
+        }
         setTrialDaysLeft(0);
       }
     } catch (error) {
@@ -66,8 +73,12 @@ export function useSubscriptionAccess(userId: string | undefined): SubscriptionA
         console.error('Error checking access:', error);
         hasLoggedErrorRef.current = true;
       }
-      setCanAccessPremium(false);
-      setIsSubscribed(false);
+      // On network error: fall back to AsyncStorage so offline users aren't locked out
+      const cached = await AsyncStorage.getItem(`isSubscribed_${userId}`);
+      const hasCached = cached === 'true';
+      console.log(`⚠️ Network error — using cached value: ${hasCached}`);
+      setCanAccessPremium(hasCached);
+      setIsSubscribed(hasCached);
       setTrialDaysLeft(0);
     } finally {
       isCheckingRef.current = false;

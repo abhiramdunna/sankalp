@@ -30,7 +30,11 @@ export function initRevenueCat() {
 
 export async function checkEntitlement(entitlementId: string): Promise<boolean> {
   try {
-    const customerInfo = await Purchases.getCustomerInfo();
+    // Force a fresh fetch from RevenueCat servers (not cached).
+    // This ensures expiry/cancellation is reflected immediately on app open.
+    const customerInfo = await Purchases.invalidateCustomerInfoCache().then(
+      () => Purchases.getCustomerInfo()
+    );
     const hasActive = !!customerInfo?.entitlements?.active?.[entitlementId];
     console.log(`🔍 Checking entitlement ${entitlementId}: ${hasActive}`);
     return hasActive;
@@ -154,11 +158,11 @@ export async function purchasePackage(): Promise<boolean> {
   try {
     const offerings = await getOfferings();
     const pkg = offerings?.current?.availablePackages?.find(
-      p => p.product.identifier === '30_days_plan'
+      p => p.product.identifier === '3_months_plan:quarterly'
     );
     
     if (!pkg) {
-      console.error('30_days_plan package not found');
+      console.error('3_months_plan:quarterly package not found');
       return false;
     }
     

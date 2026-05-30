@@ -2,12 +2,11 @@ import React from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
-  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppTheme } from '@/constants/theme';
 
 interface PremiumAccessOverlayProps {
@@ -18,8 +17,6 @@ interface PremiumAccessOverlayProps {
   theme: AppTheme;
 }
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-
 export const PremiumAccessOverlay: React.FC<PremiumAccessOverlayProps> = ({
   visible,
   featureName,
@@ -27,12 +24,14 @@ export const PremiumAccessOverlay: React.FC<PremiumAccessOverlayProps> = ({
   onClose,
   theme,
 }) => {
+  const insets = useSafeAreaInsets();
+
   if (!visible) return null;
 
   return (
-    <View pointerEvents="box-none" style={styles.container}>
+    <View pointerEvents="auto" style={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
       {/* Semi-transparent backdrop */}
-      <View style={styles.backdrop} />
+      <View pointerEvents="none" style={styles.backdrop} />
 
       {/* Content Card */}
       <View style={styles.contentContainer}>
@@ -64,31 +63,6 @@ export const PremiumAccessOverlay: React.FC<PremiumAccessOverlayProps> = ({
             Unlock full access to {featureName} with Sankalp Pro subscription.{"\n\n"}
             Get premium features, advanced analytics, and priority support.
           </Text>
-
-          {/* CTA Buttons */}
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={[styles.closeButton, { borderColor: theme.colors.primary }]}
-              onPress={onClose}
-            >
-              <Text style={[styles.closeButtonText, { color: theme.colors.primary }]}>
-                Not Now
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.upgradeButton,
-                { backgroundColor: theme.colors.primary },
-              ]}
-              onPress={onUpgradePress}
-            >
-              <Ionicons name="star" size={18} color="#fff" />
-              <Text style={styles.upgradeButtonText}>
-                Upgrade Now
-              </Text>
-            </TouchableOpacity>
-          </View>
 
           {/* Benefits List */}
           <View style={styles.benefitsContainer}>
@@ -129,9 +103,11 @@ const BenefitItem: React.FC<{
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    justifyContent: 'center',
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-start',
     alignItems: 'center',
+    zIndex: 9999,
+    elevation: 9999,
   },
   backdrop: {
     position: 'absolute',
@@ -145,6 +121,7 @@ const styles = StyleSheet.create({
     width: '85%',
     maxWidth: 350,
     zIndex: 10,
+    elevation: 10,
   },
   card: {
     borderRadius: 20,
@@ -168,7 +145,7 @@ const styles = StyleSheet.create({
   description: {
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: 18,
     textAlign: 'center',
   },
   trialBadge: {
@@ -184,41 +161,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  buttonContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-    width: '100%',
-  },
-  closeButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  upgradeButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  upgradeButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#fff',
-  },
   benefitsContainer: {
     gap: 8,
-    paddingTop: 12,
+    paddingTop: 14,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0, 0, 0, 0.05)',
   },

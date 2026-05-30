@@ -1048,49 +1048,12 @@ const ProfileModal = memo(({
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 20, fontWeight: '900', color: '#fff' }}>{bizName || 'Your Business'}</Text>
-              <TouchableOpacity
-                onPress={onUpgrade}
-                activeOpacity={0.85}
-                style={[
-                  styles.subBadgeNew,
-                  {
-                    backgroundColor: isSubscribed ? 'rgba(16,185,129,0.22)' : 'rgba(255,255,255,0.18)',
-                    borderColor: isSubscribed ? 'rgba(167,243,208,0.65)' : 'rgba(255,255,255,0.28)',
-                    borderWidth: 1,
-                    marginTop: 6,
-                    paddingHorizontal: 12,
-                    paddingVertical: 7,
-                    minHeight: 30,
-                    shadowColor: '#000',
-                    shadowOpacity: 0.18,
-                    shadowRadius: 8,
-                    shadowOffset: { width: 0, height: 3 },
-                    elevation: 3,
-                    overflow: 'hidden',
-                  },
-                ]}
-              >
-                {isSubscribed && (
-                  <Animated.View
-                    pointerEvents="none"
-                    style={{
-                      position: 'absolute',
-                      top: -10,
-                      bottom: -10,
-                      width: 42,
-                      left: 0,
-                      opacity: 0.55,
-                      transform: [{ translateX: shineAnim }, { rotate: '22deg' }],
-                      backgroundColor: 'rgba(255,255,255,0.7)',
-                    }}
-                  />
-                )}
-                <Ionicons name={subStatus.icon} size={11} color="#fff" />
-                <Text style={[styles.subBadgeText, { color: '#fff', fontSize: 12, fontWeight: '800' }]}>
-                  {isSubscribed ? 'Sankalp Pro' : 'Sankalp Upgrade'}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5 }}>
+                <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: isSubscribed ? '#34D399' : 'rgba(255,255,255,0.5)' }} />
+                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>
+                  {isSubscribed ? 'Pro Member' : 'Free Plan'}
                 </Text>
-                <Ionicons name="sparkles" size={10} color="rgba(255,255,255,0.9)" style={{ marginLeft: 2 }} />
-              </TouchableOpacity>
+              </View>
             </View>
             <TouchableOpacity onPress={onEditProfile} style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
               <Ionicons name="pencil" size={16} color="#fff" />
@@ -1100,6 +1063,168 @@ const ProfileModal = memo(({
 
         {/* Body */}
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
+        {/* ── Subscription Card ── */}
+          {isSubscribed ? (
+            // PRO card — gold shimmer, status display
+            <View style={{
+              borderRadius: 20,
+              marginBottom: 16,
+              overflow: 'hidden',
+              elevation: 4,
+              shadowColor: '#F59E0B',
+              shadowOpacity: 0.3,
+              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 4 },
+            }}>
+              <LinearGradient
+                colors={['#1C1917', '#292524', '#1C1917']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ padding: 18 }}
+              >
+                {/* Shine sweep */}
+                <Animated.View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    top: 0, bottom: 0,
+                    width: 80,
+                    opacity: 0.12,
+                    transform: [{ translateX: shineAnim }, { rotate: '20deg' }],
+                    backgroundColor: '#FDE68A',
+                  }}
+                />
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <View style={{
+                      width: 44, height: 44, borderRadius: 14,
+                      backgroundColor: 'rgba(251,191,36,0.15)',
+                      borderWidth: 1, borderColor: 'rgba(251,191,36,0.3)',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Ionicons name="star" size={22} color="#FBBF24" />
+                    </View>
+                    <View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={{ fontSize: 16, fontWeight: '900', color: '#FDE68A', letterSpacing: 0.3 }}>Sankalp Pro</Text>
+                        <View style={{ backgroundColor: '#FBBF24', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 }}>
+                          <Text style={{ fontSize: 9, fontWeight: '900', color: '#1C1917', letterSpacing: 0.5 }}>ACTIVE</Text>
+                        </View>
+                      </View>
+                      <Text style={{ fontSize: 12, color: 'rgba(253,230,138,0.6)', fontWeight: '500', marginTop: 2 }}>
+                        All features unlocked
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{
+                    width: 34, height: 34, borderRadius: 10,
+                    backgroundColor: 'rgba(251,191,36,0.12)',
+                    borderWidth: 1, borderColor: 'rgba(251,191,36,0.2)',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Ionicons name="checkmark" size={18} color="#FBBF24" />
+                  </View>
+                </View>
+                {/* Divider */}
+                <View style={{ height: 1, backgroundColor: 'rgba(251,191,36,0.12)', marginVertical: 14 }} />
+                {/* Feature pills */}
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {['AI Assistant', 'Analytics', 'Reports'].map(f => (
+                    <View key={f} style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 4,
+                      backgroundColor: 'rgba(251,191,36,0.1)',
+                      borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5,
+                      borderWidth: 1, borderColor: 'rgba(251,191,36,0.18)',
+                    }}>
+                      <Ionicons name="checkmark-circle" size={11} color="#FBBF24" />
+                      <Text style={{ fontSize: 11, color: '#FDE68A', fontWeight: '700' }}>{f}</Text>
+                    </View>
+                  ))}
+                </View>
+              </LinearGradient>
+            </View>
+          ) : (
+            // FREE → Upgrade CTA card
+            <TouchableOpacity
+              onPress={onUpgrade}
+              activeOpacity={0.88}
+              style={{
+                borderRadius: 20,
+                marginBottom: 16,
+                overflow: 'hidden',
+                elevation: 5,
+                shadowColor: theme.colors.primary,
+                shadowOpacity: 0.35,
+                shadowRadius: 14,
+                shadowOffset: { width: 0, height: 5 },
+              }}
+            >
+              <LinearGradient
+                colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ padding: 18 }}
+              >
+                {/* Shine */}
+                <Animated.View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    top: 0, bottom: 0, width: 70,
+                    opacity: 0.18,
+                    transform: [{ translateX: shineAnim }, { rotate: '20deg' }],
+                    backgroundColor: '#fff',
+                  }}
+                />
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <View style={{
+                      width: 44, height: 44, borderRadius: 14,
+                      backgroundColor: 'rgba(255,255,255,0.2)',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Ionicons name="rocket-outline" size={22} color="#fff" />
+                    </View>
+                    <View>
+                      <Text style={{ fontSize: 16, fontWeight: '900', color: '#fff', letterSpacing: 0.2 }}>
+                        Upgrade to Pro
+                      </Text>
+                      <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontWeight: '500', marginTop: 2 }}>
+                        Unlock AI, Analytics & more
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 4,
+                    backgroundColor: '#fff',
+                    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+                  }}>
+                    <Text style={{ fontSize: 13, fontWeight: '900', color: theme.colors.primary }}>₹95</Text>
+                    <Text style={{ fontSize: 10, fontWeight: '600', color: theme.colors.primary, opacity: 0.7 }}>/3mo</Text>
+                  </View>
+                </View>
+                {/* Divider */}
+                <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginVertical: 14 }} />
+                {/* Feature row */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {['AI Chat', 'Analytics', 'Reports'].map(f => (
+                      <View key={f} style={{
+                        flexDirection: 'row', alignItems: 'center', gap: 3,
+                        backgroundColor: 'rgba(255,255,255,0.15)',
+                        borderRadius: 7, paddingHorizontal: 8, paddingVertical: 4,
+                      }}>
+                        <Ionicons name="lock-open-outline" size={10} color="rgba(255,255,255,0.9)" />
+                        <Text style={{ fontSize: 11, color: '#fff', fontWeight: '700' }}>{f}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.8)" />
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
+
           {/* Business Info Card */}
           <View style={{ backgroundColor: '#F9FAFB', borderRadius: 16, borderWidth: 1.5, borderColor: '#F3F4F6', padding: 14, marginBottom: 16 }}>
             <Text style={{ fontSize: 10, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 }}>Business Details</Text>
@@ -2387,7 +2512,7 @@ const getBillNumberForDate = useCallback((billDate: string, currentBillId: numbe
         console.log('📋 Loading business details for user:', user.id);
         const { data, error } = await supabase
           .from('profiles')
-          .select('business_name, city, business_category, state, trial_started_at')
+          .select('business_name, city, business_category, state')
           .eq('id', user.id)
           .maybeSingle();
 

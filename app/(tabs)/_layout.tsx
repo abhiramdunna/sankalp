@@ -1,7 +1,7 @@
 // app/(tabs)/_layout.tsx
 import { Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '@/lib/store';
 import { useEffect } from 'react';
@@ -9,6 +9,7 @@ import { Platform } from 'react-native';
 
 export default function RootLayout() {
   const { theme } = useThemeStore();
+  const insets = useSafeAreaInsets();
   useEffect(() => {
   if (Platform.OS !== 'android') return;
 
@@ -47,7 +48,7 @@ export default function RootLayout() {
 }, []);
 
   return (
-    <SafeAreaProvider>
+    <>
       <StatusBar style="dark" />
       <Tabs
         screenOptions={({ route }) => ({
@@ -66,8 +67,8 @@ export default function RootLayout() {
             backgroundColor: theme.colors.tabBar,
             borderTopWidth: 0.5,
             borderTopColor: theme.colors.tabBarBorder,
-            height: 78,
-            paddingBottom: 8,
+            height: 78 + insets.bottom,
+            paddingBottom: 8 + insets.bottom,
             paddingTop: 8,
           },
           tabBarLabelStyle: {
@@ -118,6 +119,6 @@ export default function RootLayout() {
           }}
         />
       </Tabs>
-    </SafeAreaProvider>
+    </>
   );
 }
