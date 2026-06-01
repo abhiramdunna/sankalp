@@ -5,6 +5,7 @@ import {
 } from '@react-native-google-signin/google-signin';
 import { supabase } from './supabase';
 import Purchases from 'react-native-purchases';
+import { logoutRevenueCat } from './revenuecat';
 
 export type AuthMode = 'signup' | 'login';
 
@@ -89,14 +90,23 @@ async function getProfileCompleteness(
 }
 
 /**
- * Login the user into RevenueCat using their Supabase userId.
- * This replaces the anonymous $RCAnonymousID with the real user ID
- * so purchases are correctly tied to the account.
- * Errors are caught silently — a RevenueCat login failure should
- * never block the app login flow.
+ * FIX: Always logout RevenueCat BEFORE logging in the new user.
+ *
+ * When a user switches Google accounts on the same device, the device
+ * still has the previous account's RevenueCat session active. If we call
+ * Purchases.logIn(newUserId) without logging out first, RevenueCat
+ * transfers the device-level purchase to the new account, making the
+ * paywall say "already active" even though the new user never purchased.
+ *
+ * logoutRevenueCat() resets the SDK to anonymous mode, then
+ * Purchases.logIn(userId) starts a clean session for the new user.
  */
 async function loginRevenueCat(userId: string): Promise<void> {
   try {
+    // Step 1 — clear any previous user session from this device
+    await logoutRevenueCat();
+
+    // Step 2 — login with the real userId for this account
     const { customerInfo, created } = await Purchases.logIn(userId);
     console.log('💰 RevenueCat login success | new customer:', created);
   } catch (e) {
@@ -110,14 +120,14 @@ async function loginRevenueCat(userId: string): Promise<void> {
  *   2. Authenticate with Supabase (needs session to query profiles via RLS)
  *   3. Check profiles table
  *      → No profile row → signOut + throw NO_ACCOUNT_FOUND  (stays on login)
- *      → Profile exists → login RevenueCat + unsuppress → go home
+ *      → Profile exists → logout+login RevenueCat + unsuppress → go home
  *
  * SIGNUP flow:
  *   1. Suppress SIGNED_IN event
  *   2. Authenticate with Supabase
  *   3. Check profiles
  *      → Complete profile exists → signOut + throw ACCOUNT_EXISTS  (stays on login)
- *      → New/incomplete → upsert profile row + login RevenueCat + unsuppress → go to complete-profile
+ *      → New/incomplete → upsert profile row + logout+login RevenueCat + unsuppress → go to complete-profile
  */
 export async function signInWithGoogle(mode: AuthMode): Promise<AuthResult> {
   const { idToken, userInfo } = await getGoogleCredential();
@@ -141,7 +151,7 @@ export async function signInWithGoogle(mode: AuthMode): Promise<AuthResult> {
         await supabase.auth.signOut();
         throw new Error('NO_ACCOUNT_FOUND');
       }
-      // Link real userId to RevenueCat (replaces anonymous ID)
+      // Logout previous RC session then login with this account's userId
       await loginRevenueCat(userId);
       // Valid login — unsuppress so _layout.tsx can now handle the session
       setSuppressAuthEvent(false);
@@ -170,7 +180,7 @@ export async function signInWithGoogle(mode: AuthMode): Promise<AuthResult> {
     }
     console.log('✅ Profile upserted successfully:', upsertData);
 
-    // Link real userId to RevenueCat for new signup too
+    // Logout previous RC session then login with this account's userId
     await loginRevenueCat(userId);
 
     // Unsuppress so _layout.tsx reacts to the session and routes to complete-profile

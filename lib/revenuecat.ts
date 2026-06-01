@@ -44,10 +44,36 @@ export async function checkEntitlement(entitlementId: string): Promise<boolean> 
   }
 }
 
+/**
+ * FIX 1: Added logoutRevenueCat()
+ *
+ * This MUST be called before logging in a new user with Purchases.logIn().
+ * Without this, RevenueCat keeps the previous user's session on the device,
+ * so when a second Google account tries to subscribe, RevenueCat sees the
+ * device-level purchase from the first account and says "already active".
+ *
+ * Call this:
+ *   - On app logout (alongside supabase.auth.signOut())
+ *   - In signInWithGoogle() BEFORE loginRevenueCat(userId) — handled in auth.ts
+ */
+export async function logoutRevenueCat(): Promise<void> {
+  try {
+    // Purchases.logOut() resets to anonymous ID, clearing the previous
+    // user's entitlements from the SDK session on this device.
+    await Purchases.logOut();
+    console.log('💰 RevenueCat logged out — session reset to anonymous');
+  } catch (e) {
+    // logOut() throws if the SDK is already anonymous (no user logged in).
+    // This is safe to ignore — we just want to guarantee a clean state.
+    console.warn('⚠️ RevenueCat logOut failed (non-blocking):', e);
+  }
+}
+
 export async function getDatabaseSubscriptionStatus(userId: string): Promise<boolean> {
   if (!userId) return false;
 
   try {
+    // Mark any rows that have passed their expiration date as inactive
     await supabase
       .from('subscriptions')
       .update({ status: 'inactive' })
@@ -83,6 +109,19 @@ export async function getDatabaseSubscriptionStatus(userId: string): Promise<boo
   }
 }
 
+/**
+ * FIX 2: Replaced insert() with update-or-insert pattern.
+ *
+ * Previously, every call to this function inserted a NEW row, causing
+ * duplicate rows piling up in the subscriptions table for the same user.
+ *
+ * Now:
+ *   - If a row already exists for this user → UPDATE it in place
+ *   - If no row exists yet → INSERT the first row
+ *
+ * This keeps exactly ONE subscription row per user at all times,
+ * making the table clean and easy to read.
+ */
 export async function syncActiveSubscriptionToDatabase(userId: string): Promise<boolean> {
   if (!userId) return false;
 
@@ -92,28 +131,6 @@ export async function syncActiveSubscriptionToDatabase(userId: string): Promise<
 
     if (!customerInfo || !entitlement) {
       return false;
-    }
-
-    const { data: latestRow, error: latestRowError } = await supabase
-      .from('subscriptions')
-      .select('id, status, expiration_date, purchase_token, product_id')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (latestRowError) {
-      console.warn('Failed to inspect latest subscription row:', latestRowError);
-    }
-
-    if (
-      latestRow?.status === 'active' &&
-      latestRow?.expiration_date &&
-      new Date(latestRow.expiration_date) > new Date() &&
-      latestRow?.product_id === (entitlement.productIdentifier || 'unknown')
-    ) {
-      console.log('✅ Latest subscription row already active; skipping duplicate insert');
-      return true;
     }
 
     const now = new Date().toISOString();
@@ -128,15 +145,45 @@ export async function syncActiveSubscriptionToDatabase(userId: string): Promise<
       updated_at: now,
     };
 
-    const { error } = await supabase.from('subscriptions').insert(payload);
+    // Check if any row already exists for this user
+    const { data: existingRow, error: fetchError } = await supabase
+      .from('subscriptions')
+      .select('id')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (!error) {
-      console.log('✅ Subscription inserted into Supabase with status=active');
-      return true;
+    if (fetchError) {
+      console.warn('Failed to check existing subscription row:', fetchError);
     }
 
-    console.error('Error saving subscription to Supabase:', error);
-    return false;
+    if (existingRow?.id) {
+      // ── Row exists → UPDATE it in place (no duplicate rows) ──────────────
+      const { error } = await supabase
+        .from('subscriptions')
+        .update(payload)
+        .eq('id', existingRow.id);
+
+      if (!error) {
+        console.log('✅ Subscription row updated in Supabase');
+        return true;
+      }
+
+      console.error('Error updating subscription in Supabase:', error);
+      return false;
+    } else {
+      // ── No row yet → INSERT the first one ────────────────────────────────
+      const { error } = await supabase.from('subscriptions').insert(payload);
+
+      if (!error) {
+        console.log('✅ Subscription row inserted into Supabase');
+        return true;
+      }
+
+      console.error('Error inserting subscription in Supabase:', error);
+      return false;
+    }
   } catch (e) {
     console.warn('Failed to sync subscription to database:', e);
     return false;
@@ -160,12 +207,12 @@ export async function purchasePackage(): Promise<boolean> {
     const pkg = offerings?.current?.availablePackages?.find(
       p => p.product.identifier === '3_months_plan:quarterly'
     );
-    
+
     if (!pkg) {
       console.error('3_months_plan:quarterly package not found');
       return false;
     }
-    
+
     const { customerInfo } = await Purchases.purchasePackage(pkg);
     return !!customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
   } catch (e: any) {
@@ -174,6 +221,20 @@ export async function purchasePackage(): Promise<boolean> {
   }
 }
 
+/**
+ * FIX 3: Handle ITEM_ALREADY_OWNED inside presentPaywall.
+ *
+ * When a user tries to purchase a product that is already owned by the
+ * Google Play account on the device (e.g. they subscribed on account A,
+ * then switched app login to account B), Google Play throws ITEM_ALREADY_OWNED.
+ *
+ * This is NOT a real error — the purchase exists. We just need to restore it
+ * so RevenueCat links it to the current logged-in user.
+ *
+ * restorePurchases() tells Google Play "acknowledge this existing purchase"
+ * and RevenueCat will grant the entitlement to whoever is currently
+ * logged in via Purchases.logIn(userId).
+ */
 export async function presentPaywall(): Promise<boolean> {
   try {
     const result = await RevenueCatUI.presentPaywall();
@@ -184,7 +245,27 @@ export async function presentPaywall(): Promise<boolean> {
       default:
         return false;
     }
-  } catch (e) {
+  } catch (e: any) {
+    // ITEM_ALREADY_OWNED means Google Play has this purchase on the device.
+    // Auto-restore it instead of showing a confusing error to the user.
+    const isAlreadyOwned =
+      e?.code === 'ProductAlreadyPurchasedError' ||
+      e?.message?.includes('already active') ||
+      e?.message?.includes('already owned') ||
+      e?.underlyingErrorMessage?.includes('ITEM_ALREADY_OWNED');
+
+    if (isAlreadyOwned) {
+      console.log('🔄 ITEM_ALREADY_OWNED detected — auto-restoring purchase...');
+      try {
+        const restored = await restorePurchases();
+        console.log('✅ Auto-restore result:', restored);
+        return restored;
+      } catch (restoreError) {
+        console.warn('RevenueCat: auto-restore failed', restoreError);
+        return false;
+      }
+    }
+
     console.warn('RevenueCat: paywall error', e);
     return false;
   }

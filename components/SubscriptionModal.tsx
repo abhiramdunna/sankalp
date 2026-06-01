@@ -9,7 +9,14 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { checkEntitlement, getDatabaseSubscriptionStatus, presentPaywall, syncActiveSubscriptionToDatabase, ENTITLEMENT_ID } from '@/lib/revenuecat';
+import {
+  checkEntitlement,
+  getDatabaseSubscriptionStatus,
+  presentPaywall,
+  restorePurchases,
+  syncActiveSubscriptionToDatabase,
+  ENTITLEMENT_ID,
+} from '@/lib/revenuecat';
 
 interface SubscriptionModalProps {
   visible: boolean;
@@ -40,6 +47,18 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
       onClose();
     };
 
+    /**
+     * Helper: save subscription to local cache + database,
+     * then call onSuccess(). Used in both the normal purchase
+     * path and the silent-restore path.
+     */
+    const handleSubscriptionGranted = async () => {
+      await syncActiveSubscriptionToDatabase(userId);
+      await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
+      await AsyncStorage.setItem(`subscriptionDate_${userId}`, new Date().toISOString());
+      onSuccess();
+    };
+
     const start = async () => {
       if (!userId) {
         Alert.alert('Sign in required', 'Please sign in to manage your subscription.');
@@ -51,8 +70,11 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
       setOpeningPaywall(true);
 
       try {
+        // ── Step 1: Check if already subscribed ───────────────────────────
         const hasRevenueCatAccess = await checkEntitlement(ENTITLEMENT_ID);
-        const hasDatabaseAccess = hasRevenueCatAccess ? false : await getDatabaseSubscriptionStatus(userId);
+        const hasDatabaseAccess = hasRevenueCatAccess
+          ? false
+          : await getDatabaseSubscriptionStatus(userId);
         const hasAccess = hasRevenueCatAccess || hasDatabaseAccess;
 
         if (cancelled) return;
@@ -62,19 +84,39 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
           return;
         }
 
+        // ── Step 2: Open the paywall ───────────────────────────────────────
+        // presentPaywall() internally handles ITEM_ALREADY_OWNED by calling
+        // restorePurchases() and returning true if the restore succeeds.
         const purchased = await presentPaywall();
 
         if (cancelled) return;
 
         if (purchased) {
-          await syncActiveSubscriptionToDatabase(userId);
-          await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
-          await AsyncStorage.setItem(`subscriptionDate_${userId}`, new Date().toISOString());
-          onSuccess();
+          // Normal purchase OR silent auto-restore both land here.
+          await handleSubscriptionGranted();
+          return;
         }
+
+        // ── Step 3: Safety net — paywall returned false ────────────────────
+        // This covers an edge case where the paywall UI dismissed (user
+        // closed it) but the entitlement was silently granted in the
+        // background (e.g. RevenueCat processed the restore after the UI
+        // closed). Re-check once more before giving up.
+        if (cancelled) return;
+
+        const accessAfterPaywall = await checkEntitlement(ENTITLEMENT_ID);
+        if (accessAfterPaywall) {
+          console.log('✅ Entitlement found after paywall close — granting access');
+          await handleSubscriptionGranted();
+        }
+        // If still no access, user simply cancelled → do nothing, just close.
+
       } catch (error: any) {
         if (!cancelled) {
-          Alert.alert('Subscription Error', error?.message || 'Unable to open the paywall. Please try again.');
+          Alert.alert(
+            'Subscription Error',
+            error?.message || 'Unable to open the paywall. Please try again.'
+          );
         }
       } finally {
         if (!cancelled) {
@@ -99,10 +141,10 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <ActivityIndicator size="large" color="#6366F1" />
-          <Text style={styles.title}>{openingPaywall ? 'Opening subscription' : 'Checking access'}</Text>
-          <Text style={styles.subtitle}>
-            loading...
+          <Text style={styles.title}>
+            {openingPaywall ? 'Opening subscription' : 'Checking access'}
           </Text>
+          <Text style={styles.subtitle}>loading...</Text>
         </View>
       </View>
     </Modal>
