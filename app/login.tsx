@@ -113,7 +113,7 @@ export default function Login() {
       setIsLoading(false);
     } catch (err) {
       const msg = getErrorMessage(err);
-      console.error('❌ Auth error:', msg);
+      
 
       setIsNewSignup(false);
       setIsLoading(false);
@@ -216,7 +216,7 @@ export default function Login() {
                 Sankalp
               </Text>
                 </View>
-                <Text style={styles.subtitle}>Your business, your way</Text>
+                <Text style={styles.subtitle}>Your Business Partner</Text>
               </Animated.View>
 
               {/* ── Card ── */}
@@ -292,7 +292,7 @@ export default function Login() {
     { color: theme.colors.primary },
   ]}
 >
-  Privacy policy
+  Privacy Policy
 </Text>
                     </TouchableOpacity>
                   </View>
@@ -303,7 +303,7 @@ export default function Login() {
             <View style={styles.loadingCard}>
               <Text style={[styles.g, { fontSize: 20 }]}>G</Text>
               <Text style={styles.loadingTitle}>{loadingTitle}</Text>
-              <Text style={styles.loadingSub}>Please wait a moment</Text>
+              <Text style={styles.loadingSub}>Securing your account...</Text>
               <ActivityIndicator
           size="large"
           color={theme.colors.primary}
@@ -477,12 +477,12 @@ const styles = StyleSheet.create({
   },
   dividerLine: { flex: 1, height: 1, backgroundColor: '#EDE9FE' },
   dividerText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#A78BFA',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    letterSpacing: 0.5,
-  },
+  color: '#A78BFA',
+  fontSize: 15,
+  lineHeight: 24,
+  fontWeight: '600',
+  letterSpacing: 0.2,
+},
   terms: {
     marginTop: 18,
     color: '#C4B5FD',

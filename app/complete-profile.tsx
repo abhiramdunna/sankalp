@@ -56,8 +56,8 @@ const INDIAN_CITIES = [
   'Kurnool', 'Bokaro Steel City', 'South Dumdum', 'Bellary', 'Patiala',
 ];
 
-type Step = 'business_name' | 'business_category' | 'city' | 'state';
-const STEPS: Step[] = ['business_name', 'business_category', 'city', 'state'];
+type Step = 'business_name' | 'business_category' | 'city' | 'state' | 'phone';
+const STEPS: Step[] = ['business_name', 'business_category', 'city', 'state', 'phone'];
 
 const STEP_META: Record<Step, { question: string; placeholder: string; hint: string }> = {
   business_name: {
@@ -80,6 +80,11 @@ const STEP_META: Record<Step, { question: string; placeholder: string; hint: str
     placeholder: "e.g. Andhra Pradesh",
     hint: "Start typing to see suggestions",
   },
+  phone: {
+    question: "Your business\nphone number?",
+    placeholder: "e.g. 9876543210",
+    hint: "Used to send SMS bills to customers",
+  },
 };
 
 export default function CompleteProfile() {
@@ -91,6 +96,7 @@ export default function CompleteProfile() {
   const [businessCategory, setBusinessCategory] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
+  const [phone, setPhone] = useState('');
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -191,6 +197,7 @@ export default function CompleteProfile() {
       case 'business_category': return businessCategory.trim().length >= 2;
       case 'city': return city.trim().length >= 2;
       case 'state': return state.trim().length >= 2;
+      case 'phone': return /^[6-9]\d{9}$/.test(phone.trim());
     }
   };
 
@@ -240,6 +247,7 @@ export default function CompleteProfile() {
         business_category: businessCategory.trim(),
         city: city.trim(),
         state: state.trim(),
+        phone: phone.trim(),
       });
       if (error) {
         Alert.alert('Error', error.message || 'Failed to save profile');
@@ -277,6 +285,7 @@ export default function CompleteProfile() {
       case 'business_category': return businessCategory;
       case 'city': return city;
       case 'state': return state;
+      case 'phone': return phone;
     }
   };
 
@@ -286,6 +295,7 @@ export default function CompleteProfile() {
       case 'business_category': setBusinessCategory(text); break;
       case 'city': handleCityChange(text); break;
       case 'state': handleStateChange(text); break;
+      case 'phone': setPhone(text.replace(/\D/g, '').slice(0, 10)); break;
     }
   };
 
@@ -454,7 +464,9 @@ export default function CompleteProfile() {
                     onSubmitEditing={handleNext}
                     onFocus={handleFocus}
                     onBlur={handleBlur}
-                    autoCapitalize="words"
+                    autoCapitalize={currentStep === 'phone' ? 'none' : 'words'}
+                    keyboardType={currentStep === 'phone' ? 'phone-pad' : 'default'}
+                    maxLength={currentStep === 'phone' ? 10 : currentStep === 'business_name' ? 20 : currentStep === 'business_category' ? 30 : undefined}
                   />
                   {getCurrentValue().length > 0 && (
                     <TouchableOpacity onPress={() => handleChange('')} style={styles.clearBtn}>
@@ -483,9 +495,11 @@ export default function CompleteProfile() {
                 {/* Error message */}
                 {showError && (
                   <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 6, fontWeight: '600' }}>
-                    Please enter {currentStep === 'business_name' ? 'your business name' :
-                      currentStep === 'business_category' ? 'your business type' :
-                      currentStep === 'city' ? 'your city' : 'your state'} to continue
+                    {currentStep === 'phone'
+                      ? 'Enter a valid 10-digit Indian mobile number'
+                      : `Please enter ${currentStep === 'business_name' ? 'your business name' :
+                        currentStep === 'business_category' ? 'your business type' :
+                        currentStep === 'city' ? 'your city' : 'your state'} to continue`}
                   </Text>
                 )}
 
@@ -522,6 +536,7 @@ export default function CompleteProfile() {
                     { step: 0, label: 'Business', value: businessName },
                     { step: 1, label: 'Category', value: businessCategory },
                     { step: 2, label: 'City', value: city },
+                    { step: 3, label: 'State', value: state },
                   ].filter(a => a.step < currentStepIndex && a.value).map(a => (
                     <View key={a.step} style={[
   styles.prevChip,

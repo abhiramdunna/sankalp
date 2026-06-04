@@ -47,9 +47,9 @@ function useProtectedRoute(user: any, isReady: boolean) {
       return;
     }
 
-    if (isNewSignup && !user.hasCompleteProfile) {
+    if (!user.hasCompleteProfile) {
       if (!onCompleteProfile) {
-        console.log('➡️ New signup, incomplete profile → /complete-profile');
+        console.log('➡️ Incomplete profile → /complete-profile');
         router.replace('/complete-profile');
       }
     } else {
@@ -94,7 +94,7 @@ export default function RootLayout() {
           // Fetch profile to check completion status
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
-            .select('business_name, city')
+            .select('business_name, business_category, city, state, phone')
             .eq('id', session.user.id)
             .maybeSingle();
 
@@ -102,7 +102,13 @@ export default function RootLayout() {
             console.log('⚠️ Could not fetch profile:', profileError);
           }
 
-          const hasComplete = !!(profile?.business_name && profile?.city);
+          const hasComplete = !!(
+            profile?.business_name &&
+            profile?.business_category &&
+            profile?.city &&
+            profile?.state &&
+            profile?.phone
+          );
           console.log('📋 Profile status:', { exists: !!profile, isComplete: hasComplete });
 
           setUser({
@@ -134,7 +140,7 @@ export default function RootLayout() {
 
               const { data: profile } = await supabase
                 .from('profiles')
-                .select('business_name, city')
+                .select('business_name, business_category, city, state, phone')
                 .eq('id', newSession.user.id)
                 .maybeSingle();
 
@@ -142,7 +148,13 @@ export default function RootLayout() {
                 id: newSession.user.id,
                 email: newSession.user.email || '',
                 user_metadata: newSession.user.user_metadata,
-                hasCompleteProfile: !!(profile?.business_name && profile?.city),
+                hasCompleteProfile: !!(
+                  profile?.business_name &&
+                  profile?.business_category &&
+                  profile?.city &&
+                  profile?.state &&
+                  profile?.phone
+                ),
               });
               setSession({
                 access_token: newSession.access_token,

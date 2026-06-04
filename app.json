@@ -2,7 +2,7 @@
   "expo": {
     "name": "Sankalp",
     "slug": "sankalp",
-    "version": "1.0.9",
+    "version": "1.0.11",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "sankalpapp",
@@ -33,10 +33,8 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
+          "backgroundColor": "#4F46E5"
+          
         }
       ],
       "expo-web-browser",

@@ -78,14 +78,20 @@ async function getProfileCompleteness(
 ): Promise<{ exists: boolean; isComplete: boolean }> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, business_name, city')
+    .select('id, business_name, business_category, city, state, phone')
     .eq('id', userId)
     .maybeSingle();
 
   if (error || !data) return { exists: false, isComplete: false };
   return {
     exists: true,
-    isComplete: !!(data.business_name && data.city),
+    isComplete: !!(
+      data.business_name &&
+      data.business_category &&
+      data.city &&
+      data.state &&
+      data.phone
+    ),
   };
 }
 
@@ -145,7 +151,7 @@ export async function signInWithGoogle(mode: AuthMode): Promise<AuthResult> {
 
     // ── LOGIN ──────────────────────────────────────────────────────────────
     if (mode === 'login') {
-      if (!profileExists || !isComplete) {
+      if (!profileExists) {
         // Unsuppress BEFORE signing out so _layout.tsx can process SIGNED_OUT event
         setSuppressAuthEvent(false);
         await supabase.auth.signOut();

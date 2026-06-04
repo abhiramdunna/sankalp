@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { LinearGradient } from 'expo-linear-gradient';
 import { checkEntitlement, getCustomerInfo, presentPaywall, ENTITLEMENT_ID } from '@/lib/revenuecat';
+import { sendBillSMS } from '@/lib/sms';
 
 import { useRouter, useFocusEffect } from 'expo-router';
 import { CommonActions, useNavigation } from '@react-navigation/native';
@@ -833,6 +834,7 @@ const BillDetailModal = memo(({
   billNumber,
   onClose,
   onDelete,
+  onSendSMS,
   theme,
 }: {
   visible: boolean;
@@ -840,6 +842,7 @@ const BillDetailModal = memo(({
   billNumber: number;
   onClose: () => void;
   onDelete?: (bill: SaleLog) => void;
+  onSendSMS?: (bill: SaleLog) => void;
   theme: AppTheme;
 }) => {
   if (!visible || !bill) return null;
@@ -960,6 +963,14 @@ const BillDetailModal = memo(({
                 <Ionicons name="trash-outline" size={18} color="#DC2626" />
               </TouchableOpacity>
             )}
+            {onSendSMS && bill.phone ? (
+              <TouchableOpacity
+                onPress={() => onSendSMS(bill)}
+                style={{ width: 48, height: 48, borderRadius: 14, borderWidth: 1.5, borderColor: '#DBEAFE', backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Ionicons name="chatbubble-ellipses-outline" size={18} color="#2563EB" />
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               style={{ flex: 1, height: 48, borderRadius: 14, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, elevation: 3 }}
               onPress={onClose}
@@ -979,15 +990,17 @@ const BillDetailModal = memo(({
 
 
 const ProfileModal = memo(({
-  visible, bizName, bizLocation, bizCategory, bizState, userEmail, subStatus, isSubscribed, isTrialActive,
-  pendingCount, pendingTotal, onClose, onEditProfile, onLogout, onUpgrade, onPendingPayments, onChooseTheme, onDeleteAccount, theme,
+  visible, bizName, bizLocation, bizCategory, bizState, bizPhone, userEmail, subStatus, isSubscribed, isTrialActive,
+  pendingCount, pendingTotal, smsEnabled, onClose, onEditProfile, onLogout, onUpgrade, onPendingPayments, onChooseTheme, onDeleteAccount, onToggleSMS, theme,
 }: {
-  visible: boolean; bizName: string; bizLocation: string; bizCategory: string; bizState: string; userEmail: string;
+  visible: boolean; bizName: string; bizLocation: string; bizCategory: string; bizState: string; bizPhone: string; userEmail: string;
   subStatus: { label: string; color: string; bg: string; icon: any };
   isSubscribed: boolean; isTrialActive: boolean;
   pendingCount: number; pendingTotal: number;
+  smsEnabled: boolean;
   onClose: () => void; onEditProfile: () => void; onLogout: () => void;
   onUpgrade: () => void; onPendingPayments: () => void; onChooseTheme: () => void; onDeleteAccount: () => void;
+  onToggleSMS: () => void;
   theme: AppTheme;
 }) => {
   const insets = useSafeAreaInsets();
@@ -1257,6 +1270,15 @@ const ProfileModal = memo(({
                 </View>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ width: 32, height: 32, borderRadius: 9, backgroundColor: '#F0FDF4', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="call-outline" size={15} color="#16A34A" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.4 }}>Phone</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#111', marginTop: 1 }}>{bizPhone || '—'}</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <View style={{ width: 32, height: 32, borderRadius: 9, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
                   <Ionicons name="mail-outline" size={15} color="#7C3AED" />
                 </View>
@@ -1269,6 +1291,38 @@ const ProfileModal = memo(({
           </View>
 
           {/* Menu Items */}
+
+          {/* SMS Notifications toggle */}
+          <TouchableOpacity style={styles.menuItem} onPress={onToggleSMS} activeOpacity={0.7}>
+            <View style={[styles.menuItemIcon, { backgroundColor: smsEnabled ? '#ECFDF5' : '#F3F4F6' }]}>
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color={smsEnabled ? '#10B981' : '#9CA3AF'} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.menuItemTitle}>SMS Bill Notifications</Text>
+              <Text style={styles.menuItemSub}>
+                {smsEnabled ? 'Sending bill SMS to customers' : 'SMS bills are paused'}
+              </Text>
+            </View>
+            {/* Toggle switch */}
+            <View style={{
+              width: 46, height: 26, borderRadius: 13,
+              backgroundColor: smsEnabled ? '#10B981' : '#D1D5DB',
+              justifyContent: 'center',
+              paddingHorizontal: 3,
+            }}>
+              <View style={{
+                width: 20, height: 20, borderRadius: 10,
+                backgroundColor: '#fff',
+                alignSelf: smsEnabled ? 'flex-end' : 'flex-start',
+                elevation: 2,
+                shadowColor: '#000',
+                shadowOpacity: 0.15,
+                shadowRadius: 2,
+                shadowOffset: { width: 0, height: 1 },
+              }} />
+            </View>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.menuItem} onPress={onPendingPayments}>
             <View style={[styles.menuItemIcon, { backgroundColor: '#FFF7ED' }]}>
               <Ionicons name="time-outline" size={20} color="#F59E0B" />
@@ -1935,11 +1989,13 @@ const EditProfileModal = memo(({
   editingBizLocation,
   editingBizCategory,
   editingBizState,
+  editingBizPhone,
   isSavingProfile,
   onChangeName,
   onChangeLocation,
   onChangeCategory,
   onChangeState,
+  onChangePhone,
   onSave,
   onClose,
 }: {
@@ -1948,11 +2004,13 @@ const EditProfileModal = memo(({
   editingBizLocation: string;
   editingBizCategory: string;
   editingBizState: string;
+  editingBizPhone: string;
   isSavingProfile: boolean;
   onChangeName: (v: string) => void;
   onChangeLocation: (v: string) => void;
   onChangeCategory: (v: string) => void;
   onChangeState: (v: string) => void;
+  onChangePhone: (v: string) => void;
   onSave: () => void;
   onClose: () => void;
 }) => (
@@ -1991,6 +2049,7 @@ const EditProfileModal = memo(({
                       placeholderTextColor="#999"
                       autoCorrect={false}
                       blurOnSubmit={false}
+                      maxLength={20}
                     />
                   </View>
                 </View>
@@ -2024,6 +2083,23 @@ const EditProfileModal = memo(({
                       onChangeText={onChangeLocation}
                       placeholderTextColor="#999"
                       autoCorrect={false}
+                      blurOnSubmit={false}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Phone Number</Text>
+                  <View style={styles.formInputBox}>
+                    <Ionicons name="call-outline" size={18} color="#999" style={{ marginRight: 8 }} />
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="Enter business phone number"
+                      value={editingBizPhone}
+                      onChangeText={onChangePhone}
+                      placeholderTextColor="#999"
+                      autoCorrect={false}
+                      keyboardType="phone-pad"
                       blurOnSubmit={false}
                     />
                   </View>
@@ -2408,6 +2484,7 @@ const [currentDateTime, setCurrentDateTime] = useState('');
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingTotal, setPendingTotal] = useState(0);
   const [aiModalVisible, setAiModalVisible] = useState(false);
+  const [smsEnabled, setSmsEnabled] = useState(true);
 
   // ── Modal transition helper ───────────────────────────────────────────────
   // Instead of setProfileVisible(false) + setTimeout + setOtherVisible(true),
@@ -2417,11 +2494,21 @@ const [currentDateTime, setCurrentDateTime] = useState('');
     setProfileVisible(false);
     open(); // runs in the same synchronous batch
   }, []);
+
+  const handleToggleSMS = useCallback(async () => {
+    const next = !smsEnabled;
+    setSmsEnabled(next);
+    await AsyncStorage.setItem('smsEnabled', next.toString());
+  }, [smsEnabled]);
+  
   const [bizCategory, setBizCategory] = useState('');
   const [editingBizCategory, setEditingBizCategory] = useState('');
   const [bizState, setBizState] = useState('');
   const [editingBizState, setEditingBizState] = useState('');
+  const [editingBizPhone, setEditingBizPhone] = useState('');
+  const [bizPhone, setBizPhone] = useState('');
   const [showIncompleteProfileWarning, setShowIncompleteProfileWarning] = useState(false);
+  
 
     // Get sequential bill number for the day (resets to 1 each day)
 const getBillNumberForDate = useCallback((billDate: string, currentBillId: number, allBillsForDate: SaleLog[]) => {
@@ -2507,42 +2594,47 @@ const getBillNumberForDate = useCallback((billDate: string, currentBillId: numbe
 
   // Load business details from Supabase
   const loadBusinessDetails = useCallback(async () => {
-    if (user?.id) {
-      try {
-        console.log('📋 Loading business details for user:', user.id);
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('business_name, city, business_category, state')
-          .eq('id', user.id)
-          .maybeSingle();
+    // PRODUCTION FIX: In production, the JS bundle loads instantly from the APK,
+    // so useEffect fires before Zustand finishes rehydrating user from AsyncStorage.
+    // This guard makes the function a no-op when user.id isn't ready yet.
+    // The useEffect dependency on user?.id will re-trigger this once rehydration completes.
+    if (!user?.id) return;
 
-        if (error) {
-          console.error('❌ Error loading business details:', error);
-          return;
-        }
+    try {
+      console.log('📋 Loading business details for user:', user.id);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('business_name, city, business_category, state, phone')
+        .eq('id', user.id)
+        .maybeSingle();
 
-        if (data) {
-          console.log('✅ Business details loaded:', data);
-          setBizName(data.business_name || '');
-          setBizLocation(data.city || '');
-          setBizCategory(data.business_category || '');
-          setBizState(data.state || '');
-        } else {
-          console.log('⚠️ No profile found, creating one...');
-          const { error: insertError } = await supabase
-            .from('profiles')
-            .insert({
-              id: user.id,
-              email: user.email,
-            });
-          
-          if (insertError) {
-            console.error('❌ Failed to create profile:', insertError);
-          }
-        }
-      } catch (err) {
-        console.error('Error in loadBusinessDetails:', err);
+      if (error) {
+        console.error('❌ Error loading business details:', error);
+        return;
       }
+
+      if (data) {
+        console.log('✅ Business details loaded:', data);
+        setBizName(data.business_name || '');
+        setBizLocation(data.city || '');
+        setBizCategory(data.business_category || '');
+        setBizState(data.state || '');
+        setBizPhone(data.phone || '');
+      } else {
+        console.log('⚠️ No profile found, creating one...');
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            email: user.email,
+          });
+
+        if (insertError) {
+          console.error('❌ Failed to create profile:', insertError);
+        }
+      }
+    } catch (err) {
+      console.error('Error in loadBusinessDetails:', err);
     }
   }, [user?.id, user?.email]);
 
@@ -2552,6 +2644,7 @@ const getBillNumberForDate = useCallback((billDate: string, currentBillId: numbe
     setEditingBizLocation(bizLocation);
     setEditingBizCategory(bizCategory);
     setEditingBizState(bizState);
+    setEditingBizPhone(bizPhone);
     setEditProfileModalVisible(true);
   };
 
@@ -2572,6 +2665,7 @@ const getBillNumberForDate = useCallback((billDate: string, currentBillId: numbe
           city: editingBizLocation.trim(),
           business_category: editingBizCategory.trim(),
           state: editingBizState.trim(),
+          phone: editingBizPhone.trim(),
         });
 
       if (error) {
@@ -2586,6 +2680,7 @@ const getBillNumberForDate = useCallback((billDate: string, currentBillId: numbe
       setBizLocation(editingBizLocation.trim());
       setBizCategory(editingBizCategory.trim());
       setBizState(editingBizState.trim());
+      setBizPhone(editingBizPhone.trim());
       setEditProfileModalVisible(false);
       setIsSavingProfile(false);
     } catch (err) {
@@ -2597,6 +2692,11 @@ const getBillNumberForDate = useCallback((billDate: string, currentBillId: numbe
 
 const loadData = useCallback(async () => {
   try {
+    const storedSmsEnabled = await AsyncStorage.getItem('smsEnabled');
+    if (storedSmsEnabled !== null) {
+      setSmsEnabled(storedSmsEnabled === 'true');
+    }
+
     const storedSubscribed = await AsyncStorage.getItem(`isSubscribed_${user?.id}`);
     const storedSubDate = await AsyncStorage.getItem(`subscriptionDate_${user?.id}`);
 
@@ -2730,25 +2830,31 @@ useEffect(() => {
   }
 }, [viewAllBillsVisible]);
 
-  // Initialize data on mount
+  // Start the clock on mount — runs once, no user dependency needed
   useEffect(() => {
-    loadData();
-    loadBusinessDetails();
     updateDateTime();
     const interval = setInterval(updateDateTime, 30000);
-
-    // Load pending payments summary
-    if (user?.id) {
-      supabase.from('pending_payments').select('amount').eq('user_id', user.id).then(({ data }) => {
-        if (data) {
-          setPendingCount(data.length);
-          setPendingTotal(data.reduce((s: number, r: any) => s + Number(r.amount), 0));
-        }
-      });
-    }
-
     return () => clearInterval(interval);
-  }, [loadData, loadBusinessDetails, updateDateTime, user?.id]);
+  }, [updateDateTime]);
+
+  // PRODUCTION FIX: Gate all data fetching on user?.id.
+  // In production the APK bundle loads instantly, so this effect fires with
+  // user.id = null on the first render (Zustand hasn't finished reading
+  // AsyncStorage yet). Depending on user?.id means React re-runs this
+  // effect a second time once rehydration completes and user.id is available.
+  useEffect(() => {
+    if (!user?.id) return;
+
+    loadData();
+    loadBusinessDetails();
+
+    supabase.from('pending_payments').select('amount').eq('user_id', user.id).then(({ data }) => {
+      if (data) {
+        setPendingCount(data.length);
+        setPendingTotal(data.reduce((s: number, r: any) => s + Number(r.amount), 0));
+      }
+    });
+  }, [user?.id]);
 
   // Delay showing incomplete profile warning to let the page load naturally
   // Check if profile details are present after 5 seconds
@@ -2862,11 +2968,54 @@ useEffect(() => {
     setEditingSession(null);
     setReviewData({ customerName: '', customerPhone: '', items: [], total: 0, sessionId: null });
     showSuccess(`Bill saved! ₹${newBill.total}`);
+
+    if (newBill.phone?.trim()) {
+      if (smsEnabled) {
+      sendBillSMS({
+        customerName: newBill.customerName || 'Walk-in Customer',
+        phone: newBill.phone,
+        items: newBill.items,
+        total: newBill.total,
+        businessName: bizName || 'Sankalp',
+        date: newBill.date,
+        paymentMode: newBill.paymentMode,
+      }).then(result => {
+        if (result.success) {
+          console.log('✅ Bill SMS sent successfully');
+        } else {
+          console.warn('⚠️ Bill SMS failed:', result.error);
+        }
+      });
+      }
+    }
   } catch (error) {
     console.error('Failed to save bill:', error);
     showError('Failed to save bill. Please try again.');
   }
-}, [reviewData, salesLog, showSuccess, showError]);
+}, [reviewData, salesLog, bizName, smsEnabled, showSuccess, showError]);
+
+  const handleSendBillSMS = useCallback(async (bill: SaleLog) => {
+    if (!bill.phone || !bill.phone.trim()) {
+      showError('Customer phone number is missing');
+      return;
+    }
+
+    const result = await sendBillSMS({
+      customerName: bill.customerName || 'Walk-in Customer',
+      phone: bill.phone,
+      items: bill.items,
+      total: bill.total,
+      businessName: bizName || 'Sankalp',
+      date: bill.date,
+      paymentMode: bill.paymentMode,
+    });
+
+    if (result.success) {
+      showSuccess('SMS opened successfully');
+    } else {
+      showError(result.error || 'Unable to open SMS');
+    }
+  }, [bizName, showError, showSuccess]);
 
 const handleQuickEntrySave = useCallback(async (name: string, phone: string, amount: number, note: string, paymentMode: 'cash' | 'upi') => {
   const now = new Date();
@@ -2894,7 +3043,27 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
   setTodayTotal(prev => prev + amount);
   setQuickEntryVisible(false);
   showSuccess(`₹${amount} saved!`);
-}, [salesLog, showSuccess]);
+
+  if (newBill.phone?.trim()) {
+    if (smsEnabled) {
+    sendBillSMS({
+      customerName: newBill.customerName || 'Walk-in Customer',
+      phone: newBill.phone,
+      items: newBill.items,
+      total: newBill.total,
+      businessName: bizName || 'Sankalp',
+      date: newBill.date,
+      paymentMode: newBill.paymentMode,
+    }).then(result => {
+      if (result.success) {
+        console.log('✅ Quick bill SMS sent successfully');
+      } else {
+        console.warn('⚠️ Quick bill SMS failed:', result.error);
+      }
+    });
+    }
+  }
+}, [salesLog, showSuccess, bizName, smsEnabled]);
 
   const CARD_COLORS = useRef([
     { bg: '#EEF2FF', border: '#2563EB', badgeBg: '#2563EB', amtColor: '#2563EB' },
@@ -2982,12 +3151,14 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
         bizLocation={bizLocation}
         bizCategory={bizCategory}
         bizState={bizState}
+        bizPhone={bizPhone}
         userEmail={user?.email || ''}
         subStatus={subStatus}
         isSubscribed={isSubscribed}
         isTrialActive={isTrialActive()}
         pendingCount={pendingCount}
         pendingTotal={pendingTotal}
+        smsEnabled={smsEnabled}
         theme={theme}
         onClose={() => setProfileVisible(false)}
         onEditProfile={() => switchFromProfile(openEditProfile)}
@@ -2996,6 +3167,7 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
         onPendingPayments={() => switchFromProfile(() => setPendingPaymentsVisible(true))}
         onChooseTheme={() => switchFromProfile(() => setThemePickerVisible(true))}
         onDeleteAccount={() => switchFromProfile(() => setDeleteAccountModalVisible(true))}
+        onToggleSMS={handleToggleSMS}
       />
       <ThemePickerModal
         visible={themePickerVisible}
@@ -3099,11 +3271,13 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
         editingBizLocation={editingBizLocation}
         editingBizCategory={editingBizCategory}
         editingBizState={editingBizState}
+        editingBizPhone={editingBizPhone}
         isSavingProfile={isSavingProfile}
         onChangeName={setEditingBizName}
         onChangeLocation={setEditingBizLocation}
         onChangeCategory={setEditingBizCategory}
         onChangeState={setEditingBizState}
+        onChangePhone={setEditingBizPhone}
         onSave={saveProfileChanges}
         onClose={() => setEditProfileModalVisible(false)}
       />
@@ -3113,6 +3287,7 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
         billNumber={selectedBillNumber}
         onClose={() => setBillDetailVisible(false)}
         onDelete={handleDeleteBill}
+        onSendSMS={handleSendBillSMS}
         theme={theme}
       />
       <PendingPaymentsModal
@@ -3209,7 +3384,7 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
 >
   <View style={styles.headerTop}>
     <View>
-      <Text style={styles.shopName}>{bizName || 'Sankalp'}</Text>
+      <Text style={[styles.shopName, { fontSize: (bizName?.length ?? 0) >= 16 ? 16 : 22 }]}>{bizName || 'Sankalp'}</Text>
       <Text style={styles.shopDateTime}>{currentDateTime}</Text>
     </View>
     <View style={styles.headerRightButtons}>
@@ -3271,7 +3446,7 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
 </LinearGradient>
 
       {/* Incomplete Profile Warning Banner */}
-      {showIncompleteProfileWarning && (!bizName || !bizLocation || !bizCategory || !bizState) && (
+      {showIncompleteProfileWarning && (!bizName || !bizLocation || !bizCategory || !bizState || !bizPhone) && (
         <View style={[styles.incompleteProfileBanner, { backgroundColor: 'rgba(250, 204, 21, 0.1)' }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
             <View style={{ marginRight: 12 }}>
@@ -3284,7 +3459,7 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
           </View>
           <TouchableOpacity 
             style={[styles.incompleteProfileBtn, { backgroundColor: '#D97706' }]}
-            onPress={() => setEditProfileModalVisible(true)}
+            onPress={openEditProfile}
           >
             <Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>Edit</Text>
             <Ionicons name="arrow-forward-outline" size={12} color="#fff" style={{ marginLeft: 4 }} />
