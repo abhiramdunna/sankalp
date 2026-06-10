@@ -92,7 +92,8 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
   const { 
     canAccessPremium, 
     isLoading: accessLoading,
-    refreshAccess 
+    refreshAccess,
+    forceGrantAccess,
   } = useSubscriptionAccess(user?.id);
 
   // Animated dots for loading indicator
@@ -299,71 +300,11 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
 
   const canSend = !isLoading && !typingMessageId;
 
-  const renderShell = (children: React.ReactNode) => (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="fullScreen"
-      onRequestClose={onClose}
-      statusBarTranslucent={false}
-    >
-      {children}
-    </Modal>
-  );
-
-  // Show upgrade screen if no access
-  if (showLoadingScreen) {
-    return renderShell(
-      <View style={[styles.screen, { justifyContent: 'center', alignItems: 'center', paddingTop: insets.top }]}>
-        <View style={styles.upgradeContainer}>
-          <View style={[styles.lockIconContainer, { backgroundColor: primaryLight }]}>
-            <ActivityIndicator size="large" color={primary} />
-          </View>
-          <Text style={styles.upgradeTitle}>Checking access</Text>
-          <Text style={styles.upgradeSubtitle}>
-            Verifying your Sankalp Pro subscription before opening AI Assistant.
-          </Text>
-        </View>
-      </View>,
-    );
-  }
-
-  if (showLockedScreen) {
-    return renderShell(
-      <View style={[styles.screen, { justifyContent: 'center', alignItems: 'center', paddingTop: insets.top }]}>
-        <View style={styles.upgradeContainer}>
-          <View style={[styles.lockIconContainer, { backgroundColor: primaryLight }]}>
-            <Ionicons name="lock-closed" size={48} color={primary} />
-          </View>
-          <Text style={styles.upgradeTitle}>AI Assistant Locked</Text>
-          <Text style={styles.upgradeSubtitle}>
-            Subscribe to Sankalp Pro to unlock AI-powered business insights and recommendations.
-          </Text>
-          <TouchableOpacity 
-            style={[styles.upgradeButton, { backgroundColor: primary }]}
-            onPress={() => setShowSubscriptionModal(true)}
-          >
-            <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onClose} style={{ marginTop: 20 }}>
-            <Text style={[styles.maybeLaterText, { color: primary }]}>Maybe Later</Text>
-          </TouchableOpacity>
-        </View>
-
-        <SubscriptionModal
-          visible={showSubscriptionModal}
-          onClose={() => setShowSubscriptionModal(false)}
-          onSuccess={() => {
-            refreshAccess();
-            setShowSubscriptionModal(false);
-            onClose();
-          }}
-          userId={user?.id || ''}
-        />
-      </View>,
-    );
-  }
-
+  // Single Modal shell — never unmounts between screen transitions.
+  // SubscriptionModal lives here at the top level so it is NEVER torn down
+  // when showLockedScreen flips to false (which happened before because the
+  // locked branch and the SubscriptionModal inside it were unmounted together
+  // the moment refreshAccess() resolved and canAccessPremium became true).
   return (
     <Modal
       visible={visible}
@@ -372,6 +313,68 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
       onRequestClose={onClose}
       statusBarTranslucent={false}
     >
+      {/* ── SubscriptionModal: always mounted at top level ─────────────────
+          onSuccess: close the paywall first, THEN refresh.
+          Refreshing first was the original bug — it flipped canAccessPremium,
+          which unmounted the locked branch (and this modal) before onSuccess
+          could finish, leaving the AI screen permanently locked.
+      ── */}
+      <SubscriptionModal
+        visible={showSubscriptionModal}
+        onClose={() => setShowSubscriptionModal(false)}
+        onSuccess={async () => {
+          // forceGrantAccess() sets canAccessPremium = true immediately
+          // (no RC round-trip) so the AI screen unlocks right away.
+          // refreshAccess() then re-verifies in the background.
+          await forceGrantAccess();
+          setShowSubscriptionModal(false);
+          refreshAccess().catch(() => {}); // background re-verify, non-blocking
+        }}
+        userId={user?.id || ''}
+      />
+
+      {/* ── Loading screen ─────────────────────────────────────────────── */}
+      {showLoadingScreen && (
+        <View style={[styles.screen, { justifyContent: 'center', alignItems: 'center', paddingTop: insets.top }]}>
+          <View style={styles.upgradeContainer}>
+            <View style={[styles.lockIconContainer, { backgroundColor: primaryLight }]}>
+              <ActivityIndicator size="large" color={primary} />
+            </View>
+            <Text style={styles.upgradeTitle}>Checking access</Text>
+            <Text style={styles.upgradeSubtitle}>
+              Verifying your Sankalp Pro subscription before opening AI Assistant.
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* ── Locked screen ──────────────────────────────────────────────── */}
+      {showLockedScreen && (
+        <View style={[styles.screen, { justifyContent: 'center', alignItems: 'center', paddingTop: insets.top }]}>
+          <View style={styles.upgradeContainer}>
+            <View style={[styles.lockIconContainer, { backgroundColor: primaryLight }]}>
+              <Ionicons name="lock-closed" size={48} color={primary} />
+            </View>
+            <Text style={styles.upgradeTitle}>AI Assistant Locked</Text>
+            <Text style={styles.upgradeSubtitle}>
+              Subscribe to Sankalp Pro to unlock AI-powered business insights and recommendations.
+            </Text>
+            <TouchableOpacity
+              style={[styles.upgradeButton, { backgroundColor: primary }]}
+              onPress={() => setShowSubscriptionModal(true)}
+            >
+              <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={{ marginTop: 20 }}>
+              <Text style={[styles.maybeLaterText, { color: primary }]}>Maybe Later</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* ── Main chat UI ───────────────────────────────────────────────── */}
+      {!showLoadingScreen && !showLockedScreen && (
+      <>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
       <KeyboardAvoidingView
@@ -446,6 +449,8 @@ export const SankalpAIModal: React.FC<SankalpAIModalProps> = ({ visible, onClose
           <Text style={styles.disclaimer}>Sankalp AI can make mistakes. Verify important info.</Text>
         </View>
       </KeyboardAvoidingView>
+      </>
+      )}
     </Modal>
   );
 };

@@ -4,39 +4,78 @@ import Purchases, { LOG_LEVEL } from 'react-native-purchases';
 import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { supabase } from '@/lib/supabase';
 
-// Make sure this matches your RevenueCat dashboard
-export const ENTITLEMENT_ID = 'Sankalp Pro'; // Consistent capitalization
+export const ENTITLEMENT_ID = 'Sankalp Pro';
 
-export function initRevenueCat() {
+// ── Ready gate ────────────────────────────────────────────────────────────────
+// Resolves to true once RC is configured, false if init failed.
+// Any caller that needs RC can await rcReady() instead of polling _revenueCatReady.
+let _rcReadyResolve: (value: boolean) => void;
+const _rcReadyPromise = new Promise<boolean>((resolve) => {
+  _rcReadyResolve = resolve;
+});
+
+export async function rcReady(): Promise<boolean> {
+  return _rcReadyPromise;
+}
+
+export async function initRevenueCat() {
   Purchases.setLogLevel(LOG_LEVEL.VERBOSE);
 
-  const iosApiKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY;
-  const androidApiKey = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY;
+  try {
+    console.log('💰 Initializing RevenueCat...');
 
-  if (Platform.OS === 'ios') {
-    if (!iosApiKey) {
-      console.warn('RevenueCat: EXPO_PUBLIC_REVENUECAT_IOS_KEY is not set');
+    const { data, error } = await supabase.functions.invoke('revenuecat', {
+      headers: { 'x-platform': Platform.OS },
+    });
+
+    if (error) {
+      console.error('❌ RevenueCat edge function error:', error);
+      _rcReadyResolve(false);
       return;
     }
-    Purchases.configure({ apiKey: iosApiKey });
-  } else {
-    if (!androidApiKey) {
-      console.warn('RevenueCat: EXPO_PUBLIC_REVENUECAT_ANDROID_KEY is not set');
+
+    if (data?.error === 'REVENUECAT_KEY_NOT_CONFIGURED') {
+      console.error('❌ RevenueCat key not configured in Supabase secrets');
+      _rcReadyResolve(false);
       return;
     }
-    Purchases.configure({ apiKey: androidApiKey });
+
+    if (!data?.key) {
+      console.error('❌ No API key returned from edge function');
+      _rcReadyResolve(false);
+      return;
+    }
+
+    Purchases.configure({ apiKey: data.key });
+    console.log('✅ RevenueCat initialized successfully');
+    _rcReadyResolve(true);
+  } catch (e: any) {
+    console.error('❌ RevenueCat init failed:', e?.message || e);
+    _rcReadyResolve(false);
   }
 }
 
+export function isRevenueCatReady(): boolean {
+  // Kept for backwards compat — prefer awaiting rcReady() for async checks
+  let resolved = false;
+  _rcReadyPromise.then((v) => { resolved = v; });
+  return resolved;
+}
+
 export async function checkEntitlement(entitlementId: string): Promise<boolean> {
+  // Wait for RC to be configured before querying it
+  const ready = await rcReady();
+  if (!ready) {
+    console.warn('RevenueCat not initialised — skipping entitlement check');
+    return false;
+  }
+
   try {
-    // Force a fresh fetch from RevenueCat servers (not cached).
-    // This ensures expiry/cancellation is reflected immediately on app open.
     const customerInfo = await Purchases.invalidateCustomerInfoCache().then(
       () => Purchases.getCustomerInfo()
     );
     const hasActive = !!customerInfo?.entitlements?.active?.[entitlementId];
-    console.log(`🔍 Checking entitlement ${entitlementId}: ${hasActive}`);
+    console.log(`🔍 Entitlement "${entitlementId}": ${hasActive}`);
     return hasActive;
   } catch (e) {
     console.warn('RevenueCat: failed to fetch customer info', e);
@@ -44,27 +83,16 @@ export async function checkEntitlement(entitlementId: string): Promise<boolean> 
   }
 }
 
-/**
- * FIX 1: Added logoutRevenueCat()
- *
- * This MUST be called before logging in a new user with Purchases.logIn().
- * Without this, RevenueCat keeps the previous user's session on the device,
- * so when a second Google account tries to subscribe, RevenueCat sees the
- * device-level purchase from the first account and says "already active".
- *
- * Call this:
- *   - On app logout (alongside supabase.auth.signOut())
- *   - In signInWithGoogle() BEFORE loginRevenueCat(userId) — handled in auth.ts
- */
 export async function logoutRevenueCat(): Promise<void> {
+  const ready = await rcReady();
+  if (!ready) {
+    console.warn('⚠️ RevenueCat not initialised — skipping logout');
+    return;
+  }
   try {
-    // Purchases.logOut() resets to anonymous ID, clearing the previous
-    // user's entitlements from the SDK session on this device.
     await Purchases.logOut();
     console.log('💰 RevenueCat logged out — session reset to anonymous');
   } catch (e) {
-    // logOut() throws if the SDK is already anonymous (no user logged in).
-    // This is safe to ignore — we just want to guarantee a clean state.
     console.warn('⚠️ RevenueCat logOut failed (non-blocking):', e);
   }
 }
@@ -73,7 +101,6 @@ export async function getDatabaseSubscriptionStatus(userId: string): Promise<boo
   if (!userId) return false;
 
   try {
-    // Mark any rows that have passed their expiration date as inactive
     await supabase
       .from('subscriptions')
       .update({ status: 'inactive' })
@@ -93,15 +120,9 @@ export async function getDatabaseSubscriptionStatus(userId: string): Promise<boo
       console.warn('Database subscription check failed:', error);
       return false;
     }
-
     if (!data) return false;
-
     if (data.status === 'active') return true;
-
-    if (data.expiration_date) {
-      return new Date(data.expiration_date) > new Date();
-    }
-
+    if (data.expiration_date) return new Date(data.expiration_date) > new Date();
     return false;
   } catch (e) {
     console.warn('Database subscription check failed:', e);
@@ -109,29 +130,17 @@ export async function getDatabaseSubscriptionStatus(userId: string): Promise<boo
   }
 }
 
-/**
- * FIX 2: Replaced insert() with update-or-insert pattern.
- *
- * Previously, every call to this function inserted a NEW row, causing
- * duplicate rows piling up in the subscriptions table for the same user.
- *
- * Now:
- *   - If a row already exists for this user → UPDATE it in place
- *   - If no row exists yet → INSERT the first row
- *
- * This keeps exactly ONE subscription row per user at all times,
- * making the table clean and easy to read.
- */
 export async function syncActiveSubscriptionToDatabase(userId: string): Promise<boolean> {
   if (!userId) return false;
+
+  const ready = await rcReady();
+  if (!ready) return false;
 
   try {
     const customerInfo = await Purchases.getCustomerInfo();
     const entitlement = customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
 
-    if (!customerInfo || !entitlement) {
-      return false;
-    }
+    if (!customerInfo || !entitlement) return false;
 
     const now = new Date().toISOString();
     const payload = {
@@ -145,7 +154,6 @@ export async function syncActiveSubscriptionToDatabase(userId: string): Promise<
       updated_at: now,
     };
 
-    // Check if any row already exists for this user
     const { data: existingRow, error: fetchError } = await supabase
       .from('subscriptions')
       .select('id')
@@ -154,33 +162,19 @@ export async function syncActiveSubscriptionToDatabase(userId: string): Promise<
       .limit(1)
       .maybeSingle();
 
-    if (fetchError) {
-      console.warn('Failed to check existing subscription row:', fetchError);
-    }
+    if (fetchError) console.warn('Failed to check existing subscription row:', fetchError);
 
     if (existingRow?.id) {
-      // ── Row exists → UPDATE it in place (no duplicate rows) ──────────────
       const { error } = await supabase
         .from('subscriptions')
         .update(payload)
         .eq('id', existingRow.id);
-
-      if (!error) {
-        console.log('✅ Subscription row updated in Supabase');
-        return true;
-      }
-
+      if (!error) { console.log('✅ Subscription row updated in Supabase'); return true; }
       console.error('Error updating subscription in Supabase:', error);
       return false;
     } else {
-      // ── No row yet → INSERT the first one ────────────────────────────────
       const { error } = await supabase.from('subscriptions').insert(payload);
-
-      if (!error) {
-        console.log('✅ Subscription row inserted into Supabase');
-        return true;
-      }
-
+      if (!error) { console.log('✅ Subscription row inserted into Supabase'); return true; }
       console.error('Error inserting subscription in Supabase:', error);
       return false;
     }
@@ -191,9 +185,11 @@ export async function syncActiveSubscriptionToDatabase(userId: string): Promise<
 }
 
 export async function getOfferings() {
+  const ready = await rcReady();
+  if (!ready) return null;
   try {
     const offerings = await Purchases.getOfferings();
-    console.log('📦 Offerings loaded:', offerings.current?.availablePackages?.map(p => p.product.identifier));
+    console.log('📦 Offerings:', offerings.current?.availablePackages?.map(p => p.product.identifier));
     return offerings;
   } catch (e) {
     console.warn('RevenueCat: failed to get offerings', e);
@@ -202,17 +198,14 @@ export async function getOfferings() {
 }
 
 export async function purchasePackage(): Promise<boolean> {
+  const ready = await rcReady();
+  if (!ready) return false;
   try {
     const offerings = await getOfferings();
     const pkg = offerings?.current?.availablePackages?.find(
       p => p.product.identifier === '3_months_plan:quarterly'
     );
-
-    if (!pkg) {
-      console.error('3_months_plan:quarterly package not found');
-      return false;
-    }
-
+    if (!pkg) { console.error('3_months_plan:quarterly package not found'); return false; }
     const { customerInfo } = await Purchases.purchasePackage(pkg);
     return !!customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
   } catch (e: any) {
@@ -221,21 +214,9 @@ export async function purchasePackage(): Promise<boolean> {
   }
 }
 
-/**
- * FIX 3: Handle ITEM_ALREADY_OWNED inside presentPaywall.
- *
- * When a user tries to purchase a product that is already owned by the
- * Google Play account on the device (e.g. they subscribed on account A,
- * then switched app login to account B), Google Play throws ITEM_ALREADY_OWNED.
- *
- * This is NOT a real error — the purchase exists. We just need to restore it
- * so RevenueCat links it to the current logged-in user.
- *
- * restorePurchases() tells Google Play "acknowledge this existing purchase"
- * and RevenueCat will grant the entitlement to whoever is currently
- * logged in via Purchases.logIn(userId).
- */
 export async function presentPaywall(): Promise<boolean> {
+  const ready = await rcReady();
+  if (!ready) return false;
   try {
     const result = await RevenueCatUI.presentPaywall();
     switch (result) {
@@ -246,8 +227,6 @@ export async function presentPaywall(): Promise<boolean> {
         return false;
     }
   } catch (e: any) {
-    // ITEM_ALREADY_OWNED means Google Play has this purchase on the device.
-    // Auto-restore it instead of showing a confusing error to the user.
     const isAlreadyOwned =
       e?.code === 'ProductAlreadyPurchasedError' ||
       e?.message?.includes('already active') ||
@@ -255,23 +234,22 @@ export async function presentPaywall(): Promise<boolean> {
       e?.underlyingErrorMessage?.includes('ITEM_ALREADY_OWNED');
 
     if (isAlreadyOwned) {
-      console.log('🔄 ITEM_ALREADY_OWNED detected — auto-restoring purchase...');
+      console.log('🔄 ITEM_ALREADY_OWNED — auto-restoring...');
       try {
-        const restored = await restorePurchases();
-        console.log('✅ Auto-restore result:', restored);
-        return restored;
+        return await restorePurchases();
       } catch (restoreError) {
         console.warn('RevenueCat: auto-restore failed', restoreError);
         return false;
       }
     }
-
     console.warn('RevenueCat: paywall error', e);
     return false;
   }
 }
 
 export async function getCustomerInfo() {
+  const ready = await rcReady();
+  if (!ready) return null;
   try {
     return await Purchases.getCustomerInfo();
   } catch (e) {
@@ -281,6 +259,8 @@ export async function getCustomerInfo() {
 }
 
 export async function restorePurchases(): Promise<boolean> {
+  const ready = await rcReady();
+  if (!ready) return false;
   try {
     const customerInfo = await Purchases.restorePurchases();
     return !!customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];

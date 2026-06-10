@@ -13,7 +13,6 @@ import {
   checkEntitlement,
   getDatabaseSubscriptionStatus,
   presentPaywall,
-  restorePurchases,
   syncActiveSubscriptionToDatabase,
   ENTITLEMENT_ID,
 } from '@/lib/revenuecat';
@@ -21,6 +20,11 @@ import {
 interface SubscriptionModalProps {
   visible: boolean;
   onClose: () => void;
+  /**
+   * Called immediately after a confirmed purchase/restore.
+   * The parent should call forceGrantAccess() first (instant unlock),
+   * then refreshAccess() in the background (to re-verify with RC/DB).
+   */
   onSuccess: () => void;
   userId: string;
 }
@@ -33,6 +37,16 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
 }) => {
   const [openingPaywall, setOpeningPaywall] = useState(false);
   const launchedRef = useRef(false);
+
+  // FIX: Always reset launchedRef when the modal becomes hidden.
+  // Without this, if the modal closes before the finally{} block runs
+  // (race condition on fast devices), launchedRef stays true and the
+  // paywall never launches on the next open.
+  useEffect(() => {
+    if (!visible) {
+      launchedRef.current = false;
+    }
+  }, [visible]);
 
   useEffect(() => {
     if (!visible || launchedRef.current) {
@@ -48,14 +62,24 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
     };
 
     /**
-     * Helper: save subscription to local cache + database,
-     * then call onSuccess(). Used in both the normal purchase
-     * path and the silent-restore path.
+     * Save subscription to local cache + DB, then call onSuccess().
+     *
+     * KEY CHANGE: onSuccess() is called BEFORE the modal closes via
+     * closeOnce(). This lets the parent immediately invoke
+     * forceGrantAccess() and update its state while this modal is still
+     * mounted — so it isn't racing against its own unmount.
+     *
+     * The order is:
+     *   1. Write AsyncStorage + DB  (fast, local)
+     *   2. onSuccess()              → parent calls forceGrantAccess()
+     *                                  → canAccessPremium = true instantly
+     *   3. closeOnce()              → modal hides
      */
     const handleSubscriptionGranted = async () => {
       await syncActiveSubscriptionToDatabase(userId);
       await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
       await AsyncStorage.setItem(`subscriptionDate_${userId}`, new Date().toISOString());
+      // Notify parent FIRST so it can unlock the screen immediately.
       onSuccess();
     };
 
@@ -80,7 +104,9 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
         if (cancelled) return;
 
         if (hasAccess) {
-          Alert.alert('Already Subscribed', 'You already have an active subscription!');
+          // Already subscribed — treat as success so the screen unlocks.
+          console.log('✅ Already subscribed — granting access');
+          await handleSubscriptionGranted();
           return;
         }
 
@@ -98,10 +124,8 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
         }
 
         // ── Step 3: Safety net — paywall returned false ────────────────────
-        // This covers an edge case where the paywall UI dismissed (user
-        // closed it) but the entitlement was silently granted in the
-        // background (e.g. RevenueCat processed the restore after the UI
-        // closed). Re-check once more before giving up.
+        // Re-check once: entitlement may have been granted in the background
+        // while the paywall UI was visible (e.g. silent restore after dismiss).
         if (cancelled) return;
 
         const accessAfterPaywall = await checkEntitlement(ENTITLEMENT_ID);

@@ -1,6 +1,7 @@
 // login.tsx
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import Svg, { Path } from 'react-native-svg';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -28,6 +29,19 @@ import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
+
+
+
+function GoogleIcon({ size = 22 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 48 48">
+      <Path fill="#EA4335" d="M24 9.5c3.14 0 5.95 1.08 8.17 2.85l6.09-6.09C34.46 3.05 29.5 1 24 1 14.82 1 7.07 6.48 3.64 14.22l7.1 5.52C12.3 13.56 17.68 9.5 24 9.5z"/>
+      <Path fill="#4285F4" d="M46.1 24.5c0-1.64-.15-3.22-.42-4.74H24v8.98h12.42c-.54 2.9-2.18 5.36-4.64 7.02l7.1 5.52C43.18 37.28 46.1 31.36 46.1 24.5z"/>
+      <Path fill="#FBBC05" d="M10.74 28.26A14.5 14.5 0 0 1 9.5 24c0-1.48.26-2.9.74-4.26l-7.1-5.52A23.94 23.94 0 0 0 0 24c0 3.86.92 7.5 2.54 10.72l7.1-5.52 1.1-.94z"/>
+      <Path fill="#34A853" d="M24 47c5.5 0 10.12-1.82 13.5-4.94l-7.1-5.52C28.6 38.3 26.42 39 24 39c-6.32 0-11.7-4.06-13.26-9.74l-7.1 5.52C7.07 42.52 14.82 48 24 48z"/>
+    </Svg>
+  );
+}
 
 function getErrorMessage(err: any): string {
   if (!err) return 'Unknown error occurred';
@@ -246,14 +260,14 @@ export default function Login() {
                   onPress={() => handleAuth('login')}
                   disabled={isLoading}
                 >
-                  <Text style={styles.g}>G</Text>
+                  <GoogleIcon size={22} />
                   <Text style={styles.googleBtnText}>Login with Google</Text>
                 </Pressable>
 
                 <View style={styles.dividerRow}>
                   <View style={styles.dividerLine} />
                   <Text style={styles.dividerText}>New to Sankalp?</Text>
-                  <View style={styles.dividerLine} />
+                  <View style={styles.dividerLine} /> 
                 </View>
 
                 <Pressable
@@ -261,7 +275,7 @@ export default function Login() {
                   onPress={() => handleAuth('signup')}
                   disabled={isLoading}
                 >
-                  <Text style={styles.g}>G</Text>
+                  <GoogleIcon size={22} />
                   <Text style={styles.googleBtnText}>Sign Up with Google</Text>
                 </Pressable>
 
@@ -301,7 +315,7 @@ export default function Login() {
             </>
           ) : (
             <View style={styles.loadingCard}>
-              <Text style={[styles.g, { fontSize: 20 }]}>G</Text>
+              <GoogleIcon size={28} />
               <Text style={styles.loadingTitle}>{loadingTitle}</Text>
               <Text style={styles.loadingSub}>Securing your account...</Text>
               <ActivityIndicator

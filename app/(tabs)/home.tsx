@@ -3,13 +3,15 @@
 
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { useSubscriptionAccess } from '@/hooks/useSubscriptionAccess';
 import { SankalpAIModal } from '@/components/SankalpAIModal';
+
 import { db as DatabaseService } from '@/lib/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { LinearGradient } from 'expo-linear-gradient';
-import { checkEntitlement, getCustomerInfo, presentPaywall, ENTITLEMENT_ID } from '@/lib/revenuecat';
-import { sendBillSMS } from '@/lib/sms';
+import { checkEntitlement, presentPaywall, syncActiveSubscriptionToDatabase, getDatabaseSubscriptionStatus, ENTITLEMENT_ID } from '@/lib/revenuecat';
+import { sendBillWhatsApp } from '@/lib/whatsapp';
 
 import { useRouter, useFocusEffect } from 'expo-router';
 import { CommonActions, useNavigation } from '@react-navigation/native';
@@ -229,12 +231,20 @@ const LiveBillingModal = memo(({
       warn('Add at least one item to save');
       return;
     }
+    if (customerPhone.trim().length > 0 && customerPhone.trim().length !== 10) {
+      warn('Phone number must be exactly 10 digits');
+      return;
+    }
     onSaveAndBack(customerName.trim() || 'Walk-in Customer', customerPhone.trim(), activeItems);
   }, [activeItems, customerName, customerPhone, onSaveAndBack, warn]);
 
   const handleComplete = useCallback(() => {
     if (activeItems.length === 0) {
       warn('Please add products to complete the bill');
+      return;
+    }
+    if (customerPhone.trim().length > 0 && customerPhone.trim().length !== 10) {
+      warn('Phone number must be exactly 10 digits');
       return;
     }
     onComplete(customerName.trim() || 'Walk-in Customer', customerPhone.trim(), activeItems);
@@ -309,12 +319,26 @@ const LiveBillingModal = memo(({
                   <Ionicons name="call-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
                   <TextInput
                     style={styles.lbInput}
-                    placeholder="Phone"
+                    placeholder="Phone (10 digits)"
                     value={customerPhone}
-                    onChangeText={setCustomerPhone}
+                    onChangeText={(text) => {
+                      const digits = text.replace(/\D/g, '').slice(0, 10);
+                      setCustomerPhone(digits);
+                    }}
                     keyboardType="phone-pad"
                     placeholderTextColor="#ccc"
+                    maxLength={10}
                   />
+                  {customerPhone.length > 0 && (
+                    <Text style={{
+                      fontSize: 11,
+                      fontWeight: '700',
+                      color: customerPhone.length === 10 ? '#10B981' : '#F97316',
+                      marginLeft: 4,
+                    }}>
+                      {customerPhone.length}/10
+                    </Text>
+                  )}
                 </View>
               </View>
 
@@ -739,6 +763,7 @@ const ReviewBillModal = memo(({
             </View>
           </View>
 
+
           {/* Action buttons */}
           <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingTop: 14, paddingBottom: insets.bottom + 16, gap: 10 }}>
             <TouchableOpacity
@@ -834,7 +859,7 @@ const BillDetailModal = memo(({
   billNumber,
   onClose,
   onDelete,
-  onSendSMS,
+  onSendWhatsApp,
   theme,
 }: {
   visible: boolean;
@@ -842,7 +867,7 @@ const BillDetailModal = memo(({
   billNumber: number;
   onClose: () => void;
   onDelete?: (bill: SaleLog) => void;
-  onSendSMS?: (bill: SaleLog) => void;
+  onSendWhatsApp?: (bill: SaleLog) => void;
   theme: AppTheme;
 }) => {
   if (!visible || !bill) return null;
@@ -963,12 +988,12 @@ const BillDetailModal = memo(({
                 <Ionicons name="trash-outline" size={18} color="#DC2626" />
               </TouchableOpacity>
             )}
-            {onSendSMS && bill.phone ? (
+            {onSendWhatsApp && bill.phone ? (
               <TouchableOpacity
-                onPress={() => onSendSMS(bill)}
-                style={{ width: 48, height: 48, borderRadius: 14, borderWidth: 1.5, borderColor: '#DBEAFE', backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' }}
+                onPress={() => onSendWhatsApp(bill)}
+                style={{ width: 48, height: 48, borderRadius: 14, borderWidth: 1.5, borderColor: '#BBF7D0', backgroundColor: '#F0FDF4', alignItems: 'center', justifyContent: 'center' }}
               >
-                <Ionicons name="chatbubble-ellipses-outline" size={18} color="#2563EB" />
+                <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity
@@ -991,21 +1016,22 @@ const BillDetailModal = memo(({
 
 const ProfileModal = memo(({
   visible, bizName, bizLocation, bizCategory, bizState, bizPhone, userEmail, subStatus, isSubscribed, isTrialActive,
-  pendingCount, pendingTotal, smsEnabled, onClose, onEditProfile, onLogout, onUpgrade, onPendingPayments, onChooseTheme, onDeleteAccount, onToggleSMS, theme,
+  pendingCount, pendingTotal, whatsappEnabled, onClose, onEditProfile, onLogout, onUpgrade, onPendingPayments, onChooseTheme, onDeleteAccount, onToggleWhatsApp, theme,
 }: {
   visible: boolean; bizName: string; bizLocation: string; bizCategory: string; bizState: string; bizPhone: string; userEmail: string;
   subStatus: { label: string; color: string; bg: string; icon: any };
   isSubscribed: boolean; isTrialActive: boolean;
   pendingCount: number; pendingTotal: number;
-  smsEnabled: boolean;
+  whatsappEnabled: boolean;
   onClose: () => void; onEditProfile: () => void; onLogout: () => void;
   onUpgrade: () => void; onPendingPayments: () => void; onChooseTheme: () => void; onDeleteAccount: () => void;
-  onToggleSMS: () => void;
+  onToggleWhatsApp: () => void;
   theme: AppTheme;
 }) => {
   const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const shineAnim = useRef(new Animated.Value(-120)).current;
+  const [waRulesVisible, setWaRulesVisible] = useState(false);
   
 
   useEffect(() => {
@@ -1292,36 +1318,124 @@ const ProfileModal = memo(({
 
           {/* Menu Items */}
 
-          {/* SMS Notifications toggle */}
-          <TouchableOpacity style={styles.menuItem} onPress={onToggleSMS} activeOpacity={0.7}>
-            <View style={[styles.menuItemIcon, { backgroundColor: smsEnabled ? '#ECFDF5' : '#F3F4F6' }]}>
-              <Ionicons name="chatbubble-ellipses-outline" size={20} color={smsEnabled ? '#10B981' : '#9CA3AF'} />
+          {/* WhatsApp Bill Notifications toggle */}
+          <View style={[styles.menuItem, { alignItems: 'center' }]}>
+            <View style={[styles.menuItemIcon, { backgroundColor: whatsappEnabled ? '#F0FDF4' : '#F3F4F6' }]}>
+              <Ionicons name="logo-whatsapp" size={20} color={whatsappEnabled ? '#25D366' : '#9CA3AF'} />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.menuItemTitle}>SMS Bill Notifications</Text>
+            <TouchableOpacity style={{ flex: 1 }} onPress={() => setWaRulesVisible(true)} activeOpacity={0.7}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={styles.menuItemTitle}>WhatsApp Bill Notifications</Text>
+                <Ionicons name="information-circle-outline" size={15} color="#9CA3AF" />
+              </View>
               <Text style={styles.menuItemSub}>
-                {smsEnabled ? 'Sending bill SMS to customers' : 'SMS bills are paused'}
+                {whatsappEnabled
+                  ? 'Tap the WhatsApp button on any bill to send'
+                  : 'WhatsApp bills are paused'}
               </Text>
-            </View>
+            </TouchableOpacity>
             {/* Toggle switch */}
-            <View style={{
-              width: 46, height: 26, borderRadius: 13,
-              backgroundColor: smsEnabled ? '#10B981' : '#D1D5DB',
-              justifyContent: 'center',
-              paddingHorizontal: 3,
-            }}>
+            <TouchableOpacity onPress={onToggleWhatsApp} activeOpacity={0.8}>
               <View style={{
-                width: 20, height: 20, borderRadius: 10,
-                backgroundColor: '#fff',
-                alignSelf: smsEnabled ? 'flex-end' : 'flex-start',
-                elevation: 2,
-                shadowColor: '#000',
-                shadowOpacity: 0.15,
-                shadowRadius: 2,
-                shadowOffset: { width: 0, height: 1 },
-              }} />
-            </View>
-          </TouchableOpacity>
+                width: 46, height: 26, borderRadius: 13,
+                backgroundColor: whatsappEnabled ? '#25D366' : '#D1D5DB',
+                justifyContent: 'center',
+                paddingHorizontal: 3,
+              }}>
+                <View style={{
+                  width: 20, height: 20, borderRadius: 10,
+                  backgroundColor: '#fff',
+                  alignSelf: whatsappEnabled ? 'flex-end' : 'flex-start',
+                  elevation: 2,
+                  shadowColor: '#000',
+                  shadowOpacity: 0.15,
+                  shadowRadius: 2,
+                  shadowOffset: { width: 0, height: 1 },
+                }} />
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {/* WhatsApp Info Modal */}
+          <Modal
+            visible={waRulesVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setWaRulesVisible(false)}
+          >
+            <TouchableWithoutFeedback onPress={() => setWaRulesVisible(false)}>
+              <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+                <TouchableWithoutFeedback>
+                  <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 380 }}>
+                    {/* Header */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 10 }}>
+                      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#F0FDF4', alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name="logo-whatsapp" size={22} color="#25D366" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 16, fontWeight: '900', color: '#111' }}>WhatsApp Bill Notifications</Text>
+                        <Text style={{ fontSize: 12, color: '#9CA3AF', fontWeight: '500', marginTop: 1 }}>How it works</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => setWaRulesVisible(false)} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name="close" size={18} color="#6B7280" />
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Status card */}
+                    <View style={{ backgroundColor: whatsappEnabled ? '#F0FDF4' : '#FFF7ED', borderRadius: 12, padding: 12, marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Ionicons name={whatsappEnabled ? 'checkmark-circle' : 'pause-circle'} size={20} color={whatsappEnabled ? '#25D366' : '#F59E0B'} />
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: whatsappEnabled ? '#14532D' : '#92400E', flex: 1 }}>
+                        {whatsappEnabled ? 'WhatsApp bill button is ON' : 'WhatsApp bills are paused'}
+                      </Text>
+                    </View>
+
+                    {/* How it works */}
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 10 }}>How It Works</Text>
+                    {[
+                      {
+                        icon: 'document-text-outline',
+                        color: '#2563EB',
+                        bg: '#EFF6FF',
+                        title: 'Open any saved bill',
+                        desc: 'Tap on a bill from your sales list to open the bill detail screen.',
+                      },
+                      {
+                        icon: 'logo-whatsapp',
+                        color: '#25D366',
+                        bg: '#F0FDF4',
+                        title: 'Tap the WhatsApp button',
+                        desc: 'The green WhatsApp button appears when the customer has a phone number.',
+                      },
+                      {
+                        icon: 'send-outline',
+                        color: '#7C3AED',
+                        bg: '#F5F3FF',
+                        title: 'Tap Send once in WhatsApp',
+                        desc: 'WhatsApp opens with the bill pre-filled. Tap Send and come back. Your inbox stays clean.',
+                      },
+                    ].map((rule, i) => (
+                      <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, gap: 10 }}>
+                        <View style={{ width: 32, height: 32, borderRadius: 9, backgroundColor: rule.bg, alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 }}>
+                          <Ionicons name={rule.icon as any} size={16} color={rule.color} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#111' }}>{rule.title}</Text>
+                          <Text style={{ fontSize: 12, color: '#6B7280', fontWeight: '500', marginTop: 2, lineHeight: 17 }}>{rule.desc}</Text>
+                        </View>
+                      </View>
+                    ))}
+
+                    <TouchableOpacity
+                      onPress={() => setWaRulesVisible(false)}
+                      style={{ marginTop: 8, backgroundColor: '#25D366', borderRadius: 12, paddingVertical: 13, alignItems: 'center' }}
+                    >
+                      <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>Got it</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
+            </TouchableWithoutFeedback>
+          </Modal>
 
           <TouchableOpacity style={styles.menuItem} onPress={onPendingPayments}>
             <View style={[styles.menuItemIcon, { backgroundColor: '#FFF7ED' }]}>
@@ -1553,8 +1667,8 @@ interface PendingPayment { id: string; name: string; phone: string; amount: numb
 interface PaidPayment { id: string; name: string; phone: string; amount: number; date: string; notes: string; place: string; paid_at: string; }
 
 const PendingPaymentsModal = memo(({
-  visible, userId, onClose, theme,
-}: { visible: boolean; userId: string; onClose: () => void; theme: AppTheme; }) => {
+  visible, userId, onClose, theme, businessName,
+}: { visible: boolean; userId: string; onClose: () => void; theme: AppTheme; businessName?: string; }) => {
   const insets = useSafeAreaInsets();
   const [payments, setPayments] = useState<PendingPayment[]>([]);
   const [paidPayments, setPaidPayments] = useState<PaidPayment[]>([]);
@@ -1671,6 +1785,36 @@ const PendingPaymentsModal = memo(({
     } catch (e) { toast('Something went wrong'); }
   };
 
+  const handleSendWhatsAppReminder = async (p: PendingPayment) => {
+    if (!p.phone || p.phone.trim() === '') {
+      toast('No phone number for this customer', 'error');
+      return;
+    }
+    const biz = businessName || 'Sankalp';
+    const noteText = p.notes ? `\n📝 Note: ${p.notes}` : '';
+    const placeText = p.place ? `\n📍 Place: ${p.place}` : '';
+    const message =
+      `🙏 *Payment Reminder from ${biz}*\n\n` +
+      `Hi ${p.name},\n\nThis is a gentle reminder that you have a pending amount of *₹${p.amount.toLocaleString('en-IN')}* due since ${p.date}.` +
+      placeText +
+      noteText +
+      `\n\nKindly clear the dues at your earliest convenience.\n\nThank you! 🙏\n— *${biz}*`;
+    const digits = p.phone.replace(/\D/g, '');
+    const waNum = digits.length === 10 ? `91${digits}` : digits;
+    const url = `https://wa.me/${waNum}?text=${encodeURIComponent(message)}`;
+    try {
+      const { Linking } = require('react-native');
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        toast('WhatsApp not installed', 'error');
+      }
+    } catch {
+      toast('Failed to open WhatsApp', 'error');
+    }
+  };
+
   const totalPending = payments.reduce((s, p) => s + p.amount, 0);
   const totalPaid = paidPayments.reduce((s, p) => s + p.amount, 0);
   
@@ -1680,8 +1824,8 @@ const PendingPaymentsModal = memo(({
   return (
     <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose} statusBarTranslucent>
       <Toast visible={showToast} message={toastMsg} type={toastType} onHide={() => setShowToast(false)} />
-      <View style={{ flex: 1, backgroundColor: '#F5F3FF' }}>
-        <LinearGradient colors={['#F59E0B', '#D97706']} style={[styles.ppHeader, { paddingTop: insets.top + 12 }]}>
+      <View style={{ flex: 1, backgroundColor: theme.colors.background || '#F9FAFB' }}>
+        <LinearGradient colors={[theme.colors.primary, theme.colors.gradientEnd]} style={[styles.ppHeader, { paddingTop: insets.top + 12 }]}>
           <TouchableOpacity onPress={onClose} style={styles.ppBackBtn}>
             <Ionicons name="arrow-back" size={22} color="#fff" />
           </TouchableOpacity>
@@ -1691,17 +1835,17 @@ const PendingPaymentsModal = memo(({
           </View>
           {activeTab === 'pending' && (
             <TouchableOpacity onPress={() => { resetForm(); setShowAdd(true); }} style={styles.ppAddBtn}>
-              <Ionicons name="add" size={22} color="#D97706" />
+              <Ionicons name="add" size={22} color={theme.colors.primary} />
             </TouchableOpacity>
           )}
         </LinearGradient>
 
         <View style={{ flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' }}>
           <TouchableOpacity
-            style={{ flex: 1, paddingVertical: 10, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: activeTab === 'pending' ? '#F59E0B' : 'transparent' }}
+            style={{ flex: 1, paddingVertical: 10, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: activeTab === 'pending' ? theme.colors.primary : 'transparent' }}
             onPress={() => setActiveTab('pending')}
           >
-            <Text style={{ fontSize: 13, fontWeight: '800', color: activeTab === 'pending' ? '#D97706' : '#9CA3AF' }}>Pending ({payments.length})</Text>
+            <Text style={{ fontSize: 13, fontWeight: '800', color: activeTab === 'pending' ? theme.colors.primary : '#9CA3AF' }}>Pending ({payments.length})</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={{ flex: 1, paddingVertical: 10, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: activeTab === 'paid' ? '#10B981' : 'transparent' }}
@@ -1719,8 +1863,8 @@ const PendingPaymentsModal = memo(({
           ) : activeTab === 'pending' ? (
             payments.length === 0 ? (
               <View style={{ alignItems: 'center', paddingVertical: 60 }}>
-                <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-                  <Ionicons name="time-outline" size={34} color="#F59E0B" />
+                <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: theme.colors.primaryLight || '#FEF3C7', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                  <Ionicons name="time-outline" size={34} color={theme.colors.primary} />
                 </View>
                 <Text style={{ fontSize: 16, fontWeight: '800', color: '#111', marginBottom: 6 }}>No Pending Payments</Text>
                 <Text style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center' }}>Tap + to add someone who owes you money</Text>
@@ -1728,8 +1872,8 @@ const PendingPaymentsModal = memo(({
             ) : payments.map(p => (
               <TouchableOpacity key={p.id} style={styles.ppCard} onPress={() => openDetail(p)} activeOpacity={0.75}>
                 <View style={styles.ppCardLeft}>
-                  <View style={styles.ppAvatar}>
-                    <Text style={styles.ppAvatarText}>{p.name.charAt(0).toUpperCase()}</Text>
+                  <View style={[styles.ppAvatar, { backgroundColor: theme.colors.primaryLight || '#FEF3C7' }]}>
+                    <Text style={[styles.ppAvatarText, { color: theme.colors.primary }]}>{p.name.charAt(0).toUpperCase()}</Text>
                   </View>
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
@@ -1749,8 +1893,18 @@ const PendingPaymentsModal = memo(({
                   {p.notes ? <Text style={styles.ppNotes} numberOfLines={1}>{p.notes}</Text> : null}
                   <Text style={styles.ppDate}>{p.date}</Text>
                 </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={styles.ppAmount}>₹{p.amount.toLocaleString('en-IN')}</Text>
+                <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                  <Text style={[styles.ppAmount, { color: theme.colors.primary }]}>₹{p.amount.toLocaleString('en-IN')}</Text>
+                  {p.phone ? (
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#DCFCE7', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4, gap: 3, marginBottom: 2 }}
+                      onPress={(e) => { e.stopPropagation(); handleSendWhatsAppReminder(p); }}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name="logo-whatsapp" size={12} color="#25D366" />
+                      <Text style={{ fontSize: 10, fontWeight: '800', color: '#16A34A' }}>Remind</Text>
+                    </TouchableOpacity>
+                  ) : null}
                   <View style={styles.ppDeleteBtn}>
                     <Ionicons name="checkmark-circle-outline" size={14} color="#10B981" />
                     <Text style={styles.ppDeleteText}>Mark Paid</Text>
@@ -1818,14 +1972,14 @@ const PendingPaymentsModal = memo(({
                   {detailPayment && (
                     <>
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-                        <View style={[styles.ppAvatar, { width: 52, height: 52, borderRadius: 26 }]}>
-                          <Text style={[styles.ppAvatarText, { fontSize: 20 }]}>{detailPayment.name.charAt(0).toUpperCase()}</Text>
+                        <View style={[styles.ppAvatar, { width: 52, height: 52, borderRadius: 26, backgroundColor: theme.colors.primaryLight || '#FEF3C7' }]}>
+                          <Text style={[styles.ppAvatarText, { fontSize: 20, color: theme.colors.primary }]}>{detailPayment.name.charAt(0).toUpperCase()}</Text>
                         </View>
                         <View style={{ marginLeft: 14, flex: 1 }}>
                           <Text style={{ fontSize: 18, fontWeight: '900', color: '#111' }}>{detailPayment.name}</Text>
                           <Text style={{ fontSize: 12, color: '#9CA3AF', fontWeight: '500', marginTop: 2 }}>Pending since {detailPayment.date}</Text>
                         </View>
-                        <Text style={{ fontSize: 22, fontWeight: '900', color: '#D97706' }}>₹{detailPayment.amount.toLocaleString('en-IN')}</Text>
+                        <Text style={{ fontSize: 22, fontWeight: '900', color: theme.colors.primary }}>₹{detailPayment.amount.toLocaleString('en-IN')}</Text>
                       </View>
 
                       {[
@@ -1835,8 +1989,8 @@ const PendingPaymentsModal = memo(({
                         { icon: 'calendar-outline', label: 'Date Added', value: detailPayment.date },
                       ].map(row => (
                         <View key={row.label} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
-                          <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                            <Ionicons name={row.icon as any} size={15} color="#D97706" />
+                          <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: theme.colors.primaryLight || '#FEF3C7', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                            <Ionicons name={row.icon as any} size={15} color={theme.colors.primary} />
                           </View>
                           <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 10, color: '#9CA3AF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>{row.label}</Text>
@@ -1845,7 +1999,18 @@ const PendingPaymentsModal = memo(({
                         </View>
                       ))}
 
-                      <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+                      {detailPayment.phone ? (
+                        <TouchableOpacity
+                          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#DCFCE7', borderRadius: 12, paddingVertical: 12, marginTop: 16, borderWidth: 1, borderColor: '#BBF7D0' }}
+                          onPress={() => handleSendWhatsAppReminder(detailPayment)}
+                          activeOpacity={0.75}
+                        >
+                          <Ionicons name="logo-whatsapp" size={18} color="#25D366" />
+                          <Text style={{ fontSize: 14, fontWeight: '800', color: '#16A34A' }}>Send WhatsApp Reminder</Text>
+                        </TouchableOpacity>
+                      ) : null}
+
+                      <View style={{ flexDirection: 'row', gap: 12, marginTop: 14 }}>
                         <TouchableOpacity
                           style={[styles.saveGoBackBtn, { flex: 1 }]}
                           onPress={() => setShowDetail(false)}
@@ -1875,7 +2040,7 @@ const PendingPaymentsModal = memo(({
             style={{ flex: 1, backgroundColor: '#fff' }}
           >
             <View style={{ flex: 1, backgroundColor: '#fff' }}>
-              <LinearGradient colors={['#F59E0B', '#D97706']} style={{ paddingTop: insets.top + 12, paddingBottom: 16, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' }}>
+              <LinearGradient colors={[theme.colors.primary, theme.colors.gradientEnd]} style={{ paddingTop: insets.top + 12, paddingBottom: 16, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' }}>
                 <TouchableOpacity onPress={() => { setShowAdd(false); resetForm(); }} style={styles.ppBackBtn}>
                   <Ionicons name="arrow-back" size={22} color="#fff" />
                 </TouchableOpacity>
@@ -1955,7 +2120,7 @@ const PendingPaymentsModal = memo(({
                 <TouchableOpacity style={[styles.saveGoBackBtn, { flex: 1 }]} onPress={() => { setShowAdd(false); resetForm(); }}>
                   <Text style={styles.saveGoBackText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.completeBillBtn, { flex: 1, backgroundColor: '#F59E0B' }]} onPress={handleAdd}>
+                <TouchableOpacity style={[styles.completeBillBtn, { flex: 1, backgroundColor: theme.colors.primary }]} onPress={handleAdd}>
                   <Text style={styles.completeBillText}>Add Payment</Text>
                 </TouchableOpacity>
               </View>
@@ -2462,8 +2627,8 @@ const [currentDateTime, setCurrentDateTime] = useState('');
   const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
   const [deleteReason, setDeleteReason] = useState('');
   const [products, setProducts] = useState<{ name: string; price: number }[]>([]);
-  const [isSubscribed, setIsSubscribed] = useState(false);
-  const [subscriptionDate, setSubscriptionDate] = useState<Date | null>(null);
+  
+  
   const [activeSessions, setActiveSessions] = useState<Session[]>([]);
   const [liveBillingVisible, setLiveBillingVisible] = useState(false);
   const [editingSession, setEditingSession] = useState<Session | null>(null);
@@ -2484,7 +2649,12 @@ const [currentDateTime, setCurrentDateTime] = useState('');
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingTotal, setPendingTotal] = useState(0);
   const [aiModalVisible, setAiModalVisible] = useState(false);
-  const [smsEnabled, setSmsEnabled] = useState(true);
+  const [whatsappEnabled, setWhatsappEnabled] = useState(true);
+  const { 
+  isSubscribed, 
+  refreshAccess,
+  forceGrantAccess 
+} = useSubscriptionAccess(user?.id);
 
   // ── Modal transition helper ───────────────────────────────────────────────
   // Instead of setProfileVisible(false) + setTimeout + setOtherVisible(true),
@@ -2495,11 +2665,13 @@ const [currentDateTime, setCurrentDateTime] = useState('');
     open(); // runs in the same synchronous batch
   }, []);
 
-  const handleToggleSMS = useCallback(async () => {
-    const next = !smsEnabled;
-    setSmsEnabled(next);
-    await AsyncStorage.setItem('smsEnabled', next.toString());
-  }, [smsEnabled]);
+  const handleToggleWhatsApp = useCallback(() => {
+    setWhatsappEnabled(prev => {
+      const next = !prev;
+      AsyncStorage.setItem('whatsappEnabled', next.toString());
+      return next;
+    });
+  }, []);
   
   const [bizCategory, setBizCategory] = useState('');
   const [editingBizCategory, setEditingBizCategory] = useState('');
@@ -2692,46 +2864,14 @@ const getBillNumberForDate = useCallback((billDate: string, currentBillId: numbe
 
 const loadData = useCallback(async () => {
   try {
-    const storedSmsEnabled = await AsyncStorage.getItem('smsEnabled');
-    if (storedSmsEnabled !== null) {
-      setSmsEnabled(storedSmsEnabled === 'true');
+    const storedWhatsappEnabled = await AsyncStorage.getItem('whatsappEnabled');
+    if (storedWhatsappEnabled !== null) {
+      setWhatsappEnabled(storedWhatsappEnabled === 'true');
     }
 
-    const storedSubscribed = await AsyncStorage.getItem(`isSubscribed_${user?.id}`);
-    const storedSubDate = await AsyncStorage.getItem(`subscriptionDate_${user?.id}`);
-
-    if (storedSubscribed === 'true') {
-      console.log('✅ Subscription restored from AsyncStorage');
-      setIsSubscribed(true);
-    } else if (user?.id) {
-      try {
-        const { data, error } = await supabase
-          .from('subscriptions')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (data && !error) {
-          const expiration = data.expiration_date ? new Date(data.expiration_date) : null;
-          const isActive = data.status === 'active' || (expiration !== null && expiration > new Date());
-
-          if (isActive) {
-            console.log('✅ Subscription found in Supabase, restoring...');
-            setIsSubscribed(true);
-            await AsyncStorage.setItem(`isSubscribed_${user.id}`, 'true');
-            await AsyncStorage.setItem(`subscriptionDate_${user.id}`, data.purchase_date);
-          }
-        }
-      } catch (err) {
-        console.error('Error checking subscription in Supabase:', err);
-      }
-    }
-
-    if (storedSubDate) {
-      setSubscriptionDate(new Date(storedSubDate));
-    }
+    // ── Subscription check: RevenueCat first, Supabase as fallback ─────────
+    // AsyncStorage is intentionally NOT used — it can be stale or cleared.
+    
 
     const storedProducts = await DatabaseService.loadProducts();
 
@@ -2909,6 +3049,10 @@ useEffect(() => {
   }, [showSuccess]);
 
   const handleSaveAndBack = useCallback((customerName: string, phone: string, items: BillItem[]) => {
+    if (phone.trim().length > 0 && phone.trim().length !== 10) {
+      showError('Phone number must be exactly 10 digits');
+      return;
+    }
     if (editingSession) {
       RAM_SESSIONS = RAM_SESSIONS.map(s =>
         s.id === editingSession.id ? { ...s, customerName, phone, items } : s
@@ -2920,14 +3064,18 @@ useEffect(() => {
     setLiveBillingVisible(false);
     setEditingSession(null);
     showSuccess('Order saved! Tap the card to continue.');
-  }, [editingSession, showSuccess]);
+  }, [editingSession, showSuccess, showError]);
 
   const handleComplete = useCallback((customerName: string, phone: string, items: BillItem[]) => {
+    if (phone.trim().length > 0 && phone.trim().length !== 10) {
+      showError('Phone number must be exactly 10 digits');
+      return;
+    }
     const total = items.reduce((s, i) => s + i.price * i.qty, 0);
     setReviewData({ customerName, customerPhone: phone, items, total, sessionId: editingSession?.id ?? null });
     setLiveBillingVisible(false);
     setBillReviewVisible(true);
-  }, [editingSession?.id]);
+  }, [editingSession?.id, showError]);
 
   const handleConfirmBill = useCallback(async (paymentMode: 'cash' | 'upi') => {
   const now = new Date();
@@ -2969,40 +3117,22 @@ useEffect(() => {
     setReviewData({ customerName: '', customerPhone: '', items: [], total: 0, sessionId: null });
     showSuccess(`Bill saved! ₹${newBill.total}`);
 
-    if (newBill.phone?.trim()) {
-      if (smsEnabled) {
-      sendBillSMS({
-        customerName: newBill.customerName || 'Walk-in Customer',
-        phone: newBill.phone,
-        items: newBill.items,
-        total: newBill.total,
-        businessName: bizName || 'Sankalp',
-        date: newBill.date,
-        paymentMode: newBill.paymentMode,
-      }).then(result => {
-        if (result.success) {
-          console.log('✅ Bill SMS sent successfully');
-        } else {
-          console.warn('⚠️ Bill SMS failed:', result.error);
-        }
-      });
-      }
-    }
   } catch (error) {
     console.error('Failed to save bill:', error);
     showError('Failed to save bill. Please try again.');
   }
-}, [reviewData, salesLog, bizName, smsEnabled, showSuccess, showError]);
+}, [reviewData, salesLog, bizName, showSuccess, showError]);
 
-  const handleSendBillSMS = useCallback(async (bill: SaleLog) => {
+  const handleSendBillWhatsApp = useCallback(async (bill: SaleLog) => {
     if (!bill.phone || !bill.phone.trim()) {
       showError('Customer phone number is missing');
       return;
     }
 
-    const result = await sendBillSMS({
+    const result = await sendBillWhatsApp({
       customerName: bill.customerName || 'Walk-in Customer',
       phone: bill.phone,
+      businessPhone: bizPhone,
       items: bill.items,
       total: bill.total,
       businessName: bizName || 'Sankalp',
@@ -3011,11 +3141,11 @@ useEffect(() => {
     });
 
     if (result.success) {
-      showSuccess('SMS opened successfully');
+      showSuccess('WhatsApp opened — tap Send to deliver the bill');
     } else {
-      showError(result.error || 'Unable to open SMS');
+      showError(result.error || 'Unable to open WhatsApp');
     }
-  }, [bizName, showError, showSuccess]);
+  }, [bizPhone, bizName, showError, showSuccess]);
 
 const handleQuickEntrySave = useCallback(async (name: string, phone: string, amount: number, note: string, paymentMode: 'cash' | 'upi') => {
   const now = new Date();
@@ -3043,27 +3173,7 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
   setTodayTotal(prev => prev + amount);
   setQuickEntryVisible(false);
   showSuccess(`₹${amount} saved!`);
-
-  if (newBill.phone?.trim()) {
-    if (smsEnabled) {
-    sendBillSMS({
-      customerName: newBill.customerName || 'Walk-in Customer',
-      phone: newBill.phone,
-      items: newBill.items,
-      total: newBill.total,
-      businessName: bizName || 'Sankalp',
-      date: newBill.date,
-      paymentMode: newBill.paymentMode,
-    }).then(result => {
-      if (result.success) {
-        console.log('✅ Quick bill SMS sent successfully');
-      } else {
-        console.warn('⚠️ Quick bill SMS failed:', result.error);
-      }
-    });
-    }
-  }
-}, [salesLog, showSuccess, bizName, smsEnabled]);
+}, [salesLog, showSuccess, bizName]);
 
   const CARD_COLORS = useRef([
     { bg: '#EEF2FF', border: '#2563EB', badgeBg: '#2563EB', amtColor: '#2563EB' },
@@ -3091,55 +3201,35 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
   const filteredTotal = useMemo(() => filteredBills.reduce((s, b) => s + b.total, 0), [filteredBills]);
 
   const handleProfileUpgrade = useCallback(async () => {
-    if (isSubscribed) {
-      Alert.alert('Already Subscribed', 'You already have an active Sankalp Pro subscription!');
-      return;
+  if (isSubscribed) {
+    Alert.alert('Already Subscribed', 'You already have an active Sankalp Pro subscription!');
+    return;
+  }
+
+  try {
+    const purchased = await presentPaywall();
+    if (!purchased) return;
+
+    // Small grace period for RevenueCat to propagate the entitlement
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const hasPro = await checkEntitlement(ENTITLEMENT_ID);
+    if (!hasPro) {
+      throw new Error('Purchase verification failed. Please contact support.');
     }
 
-    try {
-      const purchased = await presentPaywall();
-      if (!purchased) return;
+    // Force grant access immediately
+    await forceGrantAccess();
+    
+    // Refresh to ensure everything is synced
+    await refreshAccess();
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const hasPro = await checkEntitlement(ENTITLEMENT_ID);
-      if (!hasPro) {
-        throw new Error('Purchase verification failed. Please contact support.');
-      }
-
-      const now = new Date();
-      const customerInfo = await getCustomerInfo();
-      const entitlement = customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
-
-      setIsSubscribed(true);
-      setSubscriptionDate(now);
-      await AsyncStorage.setItem(`isSubscribed_${user?.id}`, 'true');
-      await AsyncStorage.setItem(`subscriptionDate_${user?.id}`, now.toISOString());
-
-      if (customerInfo && entitlement && user?.id) {
-        const { error } = await supabase
-          .from('subscriptions')
-          .upsert({
-            user_id: user.id,
-            product_id: entitlement.productIdentifier || 'unknown',
-            purchase_token: customerInfo.originalAppUserId || 'revenuecat_user',
-            purchase_date: entitlement.latestPurchaseDate || now.toISOString(),
-            expiration_date: entitlement.expirationDate || null,
-            auto_renewing: entitlement.willRenew || true,
-            updated_at: now.toISOString(),
-          });
-
-        if (error) {
-          console.error('Error saving subscription to Supabase:', error);
-        }
-      }
-
-      showSuccess('Thank you for subscribing to Sankalp Pro! 🎉');
-    } catch (error: any) {
-      console.warn('RevenueCat error:', error);
-      Alert.alert('Purchase Error', error?.message || 'Failed to complete purchase. Please try again.');
-    }
-  }, [isSubscribed, showSuccess, user?.id]);
+    showSuccess('Thank you for subscribing to Sankalp Pro! 🎉');
+  } catch (error: any) {
+    console.warn('RevenueCat error:', error);
+    Alert.alert('Purchase Error', error?.message || 'Failed to complete purchase. Please try again.');
+  }
+}, [isSubscribed, forceGrantAccess, refreshAccess, showSuccess]);
 
 
   return (
@@ -3158,7 +3248,7 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
         isTrialActive={isTrialActive()}
         pendingCount={pendingCount}
         pendingTotal={pendingTotal}
-        smsEnabled={smsEnabled}
+        whatsappEnabled={whatsappEnabled}
         theme={theme}
         onClose={() => setProfileVisible(false)}
         onEditProfile={() => switchFromProfile(openEditProfile)}
@@ -3167,7 +3257,7 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
         onPendingPayments={() => switchFromProfile(() => setPendingPaymentsVisible(true))}
         onChooseTheme={() => switchFromProfile(() => setThemePickerVisible(true))}
         onDeleteAccount={() => switchFromProfile(() => setDeleteAccountModalVisible(true))}
-        onToggleSMS={handleToggleSMS}
+        onToggleWhatsApp={handleToggleWhatsApp}
       />
       <ThemePickerModal
         visible={themePickerVisible}
@@ -3287,12 +3377,13 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
         billNumber={selectedBillNumber}
         onClose={() => setBillDetailVisible(false)}
         onDelete={handleDeleteBill}
-        onSendSMS={handleSendBillSMS}
+        onSendWhatsApp={handleSendBillWhatsApp}
         theme={theme}
       />
       <PendingPaymentsModal
         visible={pendingPaymentsVisible}
         userId={user?.id || ''}
+        businessName={bizName}
         onClose={() => {
           setPendingPaymentsVisible(false);
           if (user?.id) {

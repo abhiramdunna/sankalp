@@ -68,10 +68,7 @@ export default function RootLayout() {
   const [isSessionRestored, setIsSessionRestored] = useState(false);
   const initDone = useRef(false);
 
-  // ✅ MOVE THIS HERE - BEFORE any conditional returns
-  useEffect(() => {
-    initRevenueCat();
-  }, []);
+  // RevenueCat is initialized inside initializeApp() after session is confirmed
 
   useEffect(() => {
     if (initDone.current) return;
@@ -90,6 +87,9 @@ export default function RootLayout() {
           clearAuth();
         } else if (session?.user) {
           console.log('✅ Found existing session:', session.user.email);
+
+          // ✅ Init RevenueCat NOW — session is ready, edge function will have auth token
+          await initRevenueCat();
 
           // Fetch profile to check completion status
           const { data: profile, error: profileError } = await supabase
@@ -137,6 +137,9 @@ export default function RootLayout() {
               }
 
               console.log('✅ SIGNED_IN:', newSession.user.email);
+
+              // ✅ Init RevenueCat on fresh sign-in too
+              await initRevenueCat();
 
               const { data: profile } = await supabase
                 .from('profiles')

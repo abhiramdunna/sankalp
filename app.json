@@ -2,7 +2,7 @@
   "expo": {
     "name": "Sankalp",
     "slug": "sankalp",
-    "version": "1.0.11",
+    "version": "1.0.13",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "sankalpapp",

@@ -566,7 +566,8 @@ const { user } = useAuthStore();
   canAccessPremium, 
   isSubscribed, 
   isLoading: subscriptionLoading,
-  refreshAccess 
+  refreshAccess,
+  forceGrantAccess,
 } = useSubscriptionAccess(user?.id);
   const isPremiumLocked = !canAccessPremium && !subscriptionLoading;
   
@@ -1047,19 +1048,7 @@ return { data, labels };
     <Text style={styles.headerTitle}>Analytics</Text>
   </View>
   {/* 👇 ADD THIS DEBUG BUTTON */}
-  <TouchableOpacity 
-    onPress={() => {
-      console.log('=== ANALYTICS DEBUG ===');
-      console.log('Sales Log Count:', salesLog.length);
-      console.log('Filtered Sales:', filterSalesByDateRange(salesLog, startDate, endDate).length);
-      console.log('Date Range:', startDate.toDateString(), '-', endDate.toDateString());
-      console.log('Chart Data:', chartData);
-      console.log('Sample bill dates:', salesLog.slice(0, 5).map(b => b.date));
-    }}
-    style={{ padding: 8 }}
-  >
-    <Ionicons name="bug-outline" size={24} color="#fff" />
-  </TouchableOpacity>
+  
 </View>
         </LinearGradient>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -1528,9 +1517,13 @@ return { data, labels };
       <SubscriptionModal
         visible={showSubscriptionModal}
         onClose={() => setShowSubscriptionModal(false)}
-        onSuccess={() => {
-          refreshAccess();
+        onSuccess={async () => {
+          // forceGrantAccess() sets canAccessPremium = true immediately
+          // (no RC round-trip) so the Analytics screen unlocks right away.
+          // refreshAccess() then re-verifies in the background.
+          await forceGrantAccess();
           setShowSubscriptionModal(false);
+          refreshAccess().catch(() => {}); // background re-verify, non-blocking
         }}
         userId={user?.id || ''}
       />
