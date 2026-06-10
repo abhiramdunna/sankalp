@@ -240,7 +240,7 @@ const LiveBillingModal = memo(({
 
   const handleComplete = useCallback(() => {
     if (activeItems.length === 0) {
-      warn('Please add products to complete the bill');
+      warn('Add at least one item to complete the bill');
       return;
     }
     if (customerPhone.trim().length > 0 && customerPhone.trim().length !== 10) {
@@ -636,19 +636,46 @@ const QuickEntryModal = memo(({
 const ReviewBillModal = memo(({
   visible, onClose, onConfirm, customerName = '', customerPhone = '', items = [], total = 0, theme,
 }: {
-  visible: boolean; onClose: () => void; onConfirm: (paymentMode: 'cash' | 'upi') => void;
+  visible: boolean; onClose: () => void; onConfirm: (paymentMode: 'cash' | 'upi', extraCharges: number, extraChargeNote: string) => void;
   customerName?: string; customerPhone?: string; items?: BillItem[]; total?: number;
   theme: AppTheme;
 }) => {
   const insets = useSafeAreaInsets();
   const [paymentMode, setPaymentMode] = useState<'cash' | 'upi'>('cash');
+  const [showExtraCharges, setShowExtraCharges] = useState(false);
+  const [extraChargeAmount, setExtraChargeAmount] = useState('');
+  const [extraChargeNote, setExtraChargeNote] = useState('');
+  const [extraCharges, setExtraCharges] = useState<{ amount: number; note: string }[]>([]);
 
   useEffect(() => {
-    if (visible) setPaymentMode('cash');
+    if (visible) {
+      setPaymentMode('cash');
+      setExtraCharges([]);
+      setExtraChargeAmount('');
+      setExtraChargeNote('');
+      setShowExtraCharges(false);
+    }
   }, [visible]);
 
   const initials = (customerName || 'W').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
   const itemCount = items.reduce((s, i) => s + i.qty, 0);
+  
+  const subtotal = total;
+  const totalExtraCharges = extraCharges.reduce((sum, c) => sum + c.amount, 0);
+  const grandTotal = subtotal + totalExtraCharges;
+
+  const addExtraCharge = () => {
+    const amount = parseFloat(extraChargeAmount);
+    if (isNaN(amount) || amount <= 0) return;
+    setExtraCharges([...extraCharges, { amount, note: extraChargeNote.trim() || 'Extra Charge' }]);
+    setExtraChargeAmount('');
+    setExtraChargeNote('');
+    setShowExtraCharges(false);
+  };
+
+  const removeExtraCharge = (index: number) => {
+    setExtraCharges(extraCharges.filter((_, i) => i !== index));
+  };
 
   return (
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
@@ -694,14 +721,6 @@ const ReviewBillModal = memo(({
                 <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{itemCount} item{itemCount !== 1 ? 's' : ''}</Text>
               </View>
             </View>
-
-            {/* Total amount */}
-            <View style={{ marginTop: 16, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View>
-                <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }}>Total Amount</Text>
-                <Text style={{ fontSize: 28, fontWeight: '900', color: '#fff', letterSpacing: -1, marginTop: 2 }}>₹{total.toLocaleString('en-IN')}</Text>
-              </View>
-            </View>
           </LinearGradient>
 
           {/* Items list */}
@@ -724,12 +743,93 @@ const ReviewBillModal = memo(({
                 <Text style={{ fontSize: 14, fontWeight: '900', color: theme.colors.primary }}>₹{(item.price * item.qty).toLocaleString('en-IN')}</Text>
               </View>
             ))}
-            <View style={{ marginHorizontal: 14, marginTop: 6, marginBottom: 0, borderTopWidth: 1.5, borderTopColor: '#E5E7EB', borderStyle: 'dashed' }} />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10 }}>
-              <Text style={{ fontSize: 13, fontWeight: '800', color: '#6B7280' }}>Total</Text>
-              <Text style={{ fontSize: 16, fontWeight: '900', color: theme.colors.primary }}>₹{total.toLocaleString('en-IN')}</Text>
+
+            {/* Extra Charges Section */}
+            {extraCharges.length > 0 && (
+              <>
+                <View style={{ marginHorizontal: 14, marginTop: 8, borderTopWidth: 1, borderTopColor: '#E5E7EB', borderStyle: 'dashed' }} />
+                <View style={{ paddingHorizontal: 14, paddingTop: 8 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 6 }}>Extra Charges</Text>
+                  {extraCharges.map((charge, idx) => (
+                    <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <TouchableOpacity onPress={() => removeExtraCharge(idx)}>
+                          <Ionicons name="close-circle" size={16} color="#EF4444" />
+                        </TouchableOpacity>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: '#6B7280' }}>{charge.note}</Text>
+                      </View>
+                      <Text style={{ fontSize: 13, fontWeight: '800', color: theme.colors.primary }}>+ ₹{charge.amount.toLocaleString('en-IN')}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {/* Add Extra Charge Button */}
+            <TouchableOpacity
+              onPress={() => setShowExtraCharges(true)}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, marginTop: 4 }}
+            >
+              <Ionicons name="add-circle-outline" size={18} color={theme.colors.primary} />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.primary }}>Add Extra Charge</Text>
+            </TouchableOpacity>
+
+            <View style={{ marginHorizontal: 14, marginTop: 8, marginBottom: 4, borderTopWidth: 1.5, borderTopColor: '#E5E7EB', borderStyle: 'dashed' }} />
+            
+            {/* Subtotal */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 6 }}>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#6B7280' }}>Subtotal</Text>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#374151' }}>₹{subtotal.toLocaleString('en-IN')}</Text>
+            </View>
+            
+            {/* Grand Total */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#F8FAFC', borderTopWidth: 1, borderTopColor: '#E5E7EB' }}>
+              <Text style={{ fontSize: 14, fontWeight: '800', color: '#111' }}>Grand Total</Text>
+              <Text style={{ fontSize: 18, fontWeight: '900', color: theme.colors.primary }}>₹{grandTotal.toLocaleString('en-IN')}</Text>
             </View>
           </ScrollView>
+
+          {/* Extra Charges Modal */}
+          <Modal animationType="fade" transparent visible={showExtraCharges} onRequestClose={() => setShowExtraCharges(false)}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+              <View style={{ backgroundColor: '#fff', borderRadius: 20, width: '100%', maxWidth: 340, padding: 20 }}>
+                <Text style={{ fontSize: 18, fontWeight: '900', color: '#111', marginBottom: 4 }}>Add Extra Charge</Text>
+                <Text style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 20 }}>GST, delivery, service fee, etc.</Text>
+                
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#111', marginBottom: 6 }}>Charge Name</Text>
+                <TextInput
+                  style={{ borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, marginBottom: 16 }}
+                  placeholder="e.g., GST, Delivery, Service"
+                  value={extraChargeNote}
+                  onChangeText={setExtraChargeNote}
+                />
+                
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#111', marginBottom: 6 }}>Amount (₹)</Text>
+                <TextInput
+                  style={{ borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, marginBottom: 20 }}
+                  placeholder="0.00"
+                  value={extraChargeAmount}
+                  onChangeText={setExtraChargeAmount}
+                  keyboardType="decimal-pad"
+                />
+                
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <TouchableOpacity
+                    onPress={() => setShowExtraCharges(false)}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: '#E5E7EB', alignItems: 'center' }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#6B7280' }}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={addExtraCharge}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: theme.colors.primary, alignItems: 'center' }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>Add</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
 
           {/* Payment Mode */}
           <View style={{ paddingHorizontal: 16, paddingTop: 14 }}>
@@ -763,7 +863,6 @@ const ReviewBillModal = memo(({
             </View>
           </View>
 
-
           {/* Action buttons */}
           <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingTop: 14, paddingBottom: insets.bottom + 16, gap: 10 }}>
             <TouchableOpacity
@@ -774,7 +873,7 @@ const ReviewBillModal = memo(({
             </TouchableOpacity>
             <TouchableOpacity
               style={{ flex: 1, height: 52, borderRadius: 14, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, elevation: 4, shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}
-              onPress={() => onConfirm(paymentMode)}
+              onPress={() => onConfirm(paymentMode, totalExtraCharges, extraCharges.map(c => c.note).join(', '))}
             >
               <Ionicons name="checkmark-circle" size={22} color="#fff" />
               <Text style={{ color: '#fff', fontSize: 16, fontWeight: '900' }}>Confirm & Save</Text>
@@ -860,6 +959,8 @@ const BillDetailModal = memo(({
   onClose,
   onDelete,
   onSendWhatsApp,
+  isMarked,
+  onToggleMark,
   theme,
 }: {
   visible: boolean;
@@ -868,6 +969,8 @@ const BillDetailModal = memo(({
   onClose: () => void;
   onDelete?: (bill: SaleLog) => void;
   onSendWhatsApp?: (bill: SaleLog) => void;
+  isMarked?: boolean;
+  onToggleMark?: (billId: number) => void;
   theme: AppTheme;
 }) => {
   if (!visible || !bill) return null;
@@ -988,6 +1091,14 @@ const BillDetailModal = memo(({
                 <Ionicons name="trash-outline" size={18} color="#DC2626" />
               </TouchableOpacity>
             )}
+            {onToggleMark && (
+              <TouchableOpacity
+                onPress={() => onToggleMark(bill.id)}
+                style={{ width: 48, height: 48, borderRadius: 14, borderWidth: 1.5, borderColor: isMarked ? '#FCD34D' : '#E5E7EB', backgroundColor: isMarked ? '#FFFBEB' : '#F9FAFB', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Ionicons name={isMarked ? 'bookmark' : 'bookmark-outline'} size={20} color={isMarked ? '#F59E0B' : '#9CA3AF'} />
+              </TouchableOpacity>
+            )}
             {onSendWhatsApp && bill.phone ? (
               <TouchableOpacity
                 onPress={() => onSendWhatsApp(bill)}
@@ -1031,7 +1142,6 @@ const ProfileModal = memo(({
   const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const shineAnim = useRef(new Animated.Value(-120)).current;
-  const [waRulesVisible, setWaRulesVisible] = useState(false);
   
 
   useEffect(() => {
@@ -1317,125 +1427,6 @@ const ProfileModal = memo(({
           </View>
 
           {/* Menu Items */}
-
-          {/* WhatsApp Bill Notifications toggle */}
-          <View style={[styles.menuItem, { alignItems: 'center' }]}>
-            <View style={[styles.menuItemIcon, { backgroundColor: whatsappEnabled ? '#F0FDF4' : '#F3F4F6' }]}>
-              <Ionicons name="logo-whatsapp" size={20} color={whatsappEnabled ? '#25D366' : '#9CA3AF'} />
-            </View>
-            <TouchableOpacity style={{ flex: 1 }} onPress={() => setWaRulesVisible(true)} activeOpacity={0.7}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={styles.menuItemTitle}>WhatsApp Bill Notifications</Text>
-                <Ionicons name="information-circle-outline" size={15} color="#9CA3AF" />
-              </View>
-              <Text style={styles.menuItemSub}>
-                {whatsappEnabled
-                  ? 'Tap the WhatsApp button on any bill to send'
-                  : 'WhatsApp bills are paused'}
-              </Text>
-            </TouchableOpacity>
-            {/* Toggle switch */}
-            <TouchableOpacity onPress={onToggleWhatsApp} activeOpacity={0.8}>
-              <View style={{
-                width: 46, height: 26, borderRadius: 13,
-                backgroundColor: whatsappEnabled ? '#25D366' : '#D1D5DB',
-                justifyContent: 'center',
-                paddingHorizontal: 3,
-              }}>
-                <View style={{
-                  width: 20, height: 20, borderRadius: 10,
-                  backgroundColor: '#fff',
-                  alignSelf: whatsappEnabled ? 'flex-end' : 'flex-start',
-                  elevation: 2,
-                  shadowColor: '#000',
-                  shadowOpacity: 0.15,
-                  shadowRadius: 2,
-                  shadowOffset: { width: 0, height: 1 },
-                }} />
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {/* WhatsApp Info Modal */}
-          <Modal
-            visible={waRulesVisible}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setWaRulesVisible(false)}
-          >
-            <TouchableWithoutFeedback onPress={() => setWaRulesVisible(false)}>
-              <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
-                <TouchableWithoutFeedback>
-                  <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 380 }}>
-                    {/* Header */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 10 }}>
-                      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#F0FDF4', alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="logo-whatsapp" size={22} color="#25D366" />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: '900', color: '#111' }}>WhatsApp Bill Notifications</Text>
-                        <Text style={{ fontSize: 12, color: '#9CA3AF', fontWeight: '500', marginTop: 1 }}>How it works</Text>
-                      </View>
-                      <TouchableOpacity onPress={() => setWaRulesVisible(false)} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="close" size={18} color="#6B7280" />
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Status card */}
-                    <View style={{ backgroundColor: whatsappEnabled ? '#F0FDF4' : '#FFF7ED', borderRadius: 12, padding: 12, marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Ionicons name={whatsappEnabled ? 'checkmark-circle' : 'pause-circle'} size={20} color={whatsappEnabled ? '#25D366' : '#F59E0B'} />
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: whatsappEnabled ? '#14532D' : '#92400E', flex: 1 }}>
-                        {whatsappEnabled ? 'WhatsApp bill button is ON' : 'WhatsApp bills are paused'}
-                      </Text>
-                    </View>
-
-                    {/* How it works */}
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 10 }}>How It Works</Text>
-                    {[
-                      {
-                        icon: 'document-text-outline',
-                        color: '#2563EB',
-                        bg: '#EFF6FF',
-                        title: 'Open any saved bill',
-                        desc: 'Tap on a bill from your sales list to open the bill detail screen.',
-                      },
-                      {
-                        icon: 'logo-whatsapp',
-                        color: '#25D366',
-                        bg: '#F0FDF4',
-                        title: 'Tap the WhatsApp button',
-                        desc: 'The green WhatsApp button appears when the customer has a phone number.',
-                      },
-                      {
-                        icon: 'send-outline',
-                        color: '#7C3AED',
-                        bg: '#F5F3FF',
-                        title: 'Tap Send once in WhatsApp',
-                        desc: 'WhatsApp opens with the bill pre-filled. Tap Send and come back. Your inbox stays clean.',
-                      },
-                    ].map((rule, i) => (
-                      <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, gap: 10 }}>
-                        <View style={{ width: 32, height: 32, borderRadius: 9, backgroundColor: rule.bg, alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0 }}>
-                          <Ionicons name={rule.icon as any} size={16} color={rule.color} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#111' }}>{rule.title}</Text>
-                          <Text style={{ fontSize: 12, color: '#6B7280', fontWeight: '500', marginTop: 2, lineHeight: 17 }}>{rule.desc}</Text>
-                        </View>
-                      </View>
-                    ))}
-
-                    <TouchableOpacity
-                      onPress={() => setWaRulesVisible(false)}
-                      style={{ marginTop: 8, backgroundColor: '#25D366', borderRadius: 12, paddingVertical: 13, alignItems: 'center' }}
-                    >
-                      <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>Got it</Text>
-                    </TouchableOpacity>
-                  </View>
-                </TouchableWithoutFeedback>
-              </View>
-            </TouchableWithoutFeedback>
-          </Modal>
 
           <TouchableOpacity style={styles.menuItem} onPress={onPendingPayments}>
             <View style={[styles.menuItemIcon, { backgroundColor: '#FFF7ED' }]}>
@@ -2411,7 +2402,7 @@ const ViewAllBillsModal = memo(({
   visible, onClose, insetTop, activeSessions, filteredBills, filteredTotal,
   billsDateFilter, setBillsDateFilter,
   billsSearchQuery, setBillsSearchQuery,
-  openSession, openBillDetail,
+  openSession, openBillDetail, markedBillIds,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -2425,6 +2416,7 @@ const ViewAllBillsModal = memo(({
   setBillsSearchQuery: (q: string) => void;
   openSession: (s: Session) => void;
   openBillDetail: (b: SaleLog, n: number) => void;
+  markedBillIds: Set<number>;
 }) => {
   const [showCalendar, setShowCalendar] = useState(false);
   const { theme } = useThemeStore();
@@ -2543,15 +2535,17 @@ const ViewAllBillsModal = memo(({
               <Ionicons name="document-outline" size={48} color="#D1D5DB" />
               <Text style={{ marginTop: 12, fontSize: 14, color: '#9CA3AF', fontWeight: '600' }}>No bills {billsDateFilter !== 'All' ? `on ${billsDateFilter}` : 'yet'}</Text>
             </View>
-          ) : filteredBills.map((bill, index) => (
+          ) : filteredBills.map((bill, index) => {
+            const isMarked = markedBillIds.has(bill.id);
+            return (
             <TouchableOpacity
               key={`filtered-bill-${bill.id}-${index}`}
-              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#E5E7EB' }}
+              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isMarked ? '#FFFBEB' : '#fff', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, padding: 14, borderWidth: isMarked ? 1.5 : 1, borderColor: isMarked ? '#FCD34D' : '#E5E7EB' }}
               onPress={() => openBillDetail(bill, filteredBills.length - index)}
             >
               <View style={{ alignItems: 'center', gap: 6 }}>
-                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ fontSize: 14, fontWeight: '800', color: theme.colors.primary }}>
+                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isMarked ? '#FEF3C7' : '#EEF2FF', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ fontSize: 14, fontWeight: '800', color: isMarked ? '#F59E0B' : theme.colors.primary }}>
                     {(bill.customerName || 'W').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
                   </Text>
                 </View>
@@ -2563,7 +2557,10 @@ const ViewAllBillsModal = memo(({
                 ) : null}
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>{bill.customerName || 'Walk-in Customer'}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>{bill.customerName || 'Walk-in Customer'}</Text>
+                  {isMarked && <Ionicons name="bookmark" size={13} color="#F59E0B" />}
+                </View>
                 <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '500', marginTop: 2 }}>{bill.time} · {bill.date}</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
@@ -2571,7 +2568,8 @@ const ViewAllBillsModal = memo(({
                 <Ionicons name="chevron-forward" size={14} color="#D1D5DB" style={{ marginTop: 4 }} />
               </View>
             </TouchableOpacity>
-          ))}
+            );
+          })}
           <View style={{ height: 30 }} />
         </ScrollView>
       </View>
@@ -2637,8 +2635,22 @@ const [currentDateTime, setCurrentDateTime] = useState('');
   const [billReviewVisible, setBillReviewVisible] = useState(false);
   const [viewAllBillsVisible, setViewAllBillsVisible] = useState(false);
   const [reviewData, setReviewData] = useState<{
-    customerName: string; customerPhone: string; items: BillItem[]; total: number; sessionId: number | null;
-  }>({ customerName: '', customerPhone: '', items: [], total: 0, sessionId: null });
+  customerName: string; 
+  customerPhone: string; 
+  items: BillItem[]; 
+  total: number; 
+  sessionId: number | null;
+  extraCharges?: { amount: number; note: string }[];
+  extraChargeTotal?: number;
+}>({ 
+  customerName: '', 
+  customerPhone: '', 
+  items: [], 
+  total: 0, 
+  sessionId: null,
+  extraCharges: [],
+  extraChargeTotal: 0 
+});
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('error');
@@ -2650,6 +2662,7 @@ const [currentDateTime, setCurrentDateTime] = useState('');
   const [pendingTotal, setPendingTotal] = useState(0);
   const [aiModalVisible, setAiModalVisible] = useState(false);
   const [whatsappEnabled, setWhatsappEnabled] = useState(true);
+  const [markedBillIds, setMarkedBillIds] = useState<Set<number>>(new Set());
   const { 
   isSubscribed, 
   refreshAccess,
@@ -2669,6 +2682,19 @@ const [currentDateTime, setCurrentDateTime] = useState('');
     setWhatsappEnabled(prev => {
       const next = !prev;
       AsyncStorage.setItem('whatsappEnabled', next.toString());
+      return next;
+    });
+  }, []);
+
+  const handleToggleMarkBill = useCallback((billId: number) => {
+    setMarkedBillIds(prev => {
+      const next = new Set(prev);
+      if (next.has(billId)) {
+        next.delete(billId);
+      } else {
+        next.add(billId);
+      }
+      AsyncStorage.setItem('markedBillIds', JSON.stringify([...next]));
       return next;
     });
   }, []);
@@ -2869,6 +2895,14 @@ const loadData = useCallback(async () => {
       setWhatsappEnabled(storedWhatsappEnabled === 'true');
     }
 
+    const storedMarkedIds = await AsyncStorage.getItem('markedBillIds');
+    if (storedMarkedIds) {
+      try {
+        const ids: number[] = JSON.parse(storedMarkedIds);
+        setMarkedBillIds(new Set(ids));
+      } catch { /* ignore */ }
+    }
+
     // ── Subscription check: RevenueCat first, Supabase as fallback ─────────
     // AsyncStorage is intentionally NOT used — it can be stale or cleared.
     
@@ -3066,26 +3100,45 @@ useEffect(() => {
     showSuccess('Order saved! Tap the card to continue.');
   }, [editingSession, showSuccess, showError]);
 
-  const handleComplete = useCallback((customerName: string, phone: string, items: BillItem[]) => {
-    if (phone.trim().length > 0 && phone.trim().length !== 10) {
-      showError('Phone number must be exactly 10 digits');
-      return;
-    }
-    const total = items.reduce((s, i) => s + i.price * i.qty, 0);
-    setReviewData({ customerName, customerPhone: phone, items, total, sessionId: editingSession?.id ?? null });
-    setLiveBillingVisible(false);
-    setBillReviewVisible(true);
-  }, [editingSession?.id, showError]);
+const handleComplete = useCallback((customerName: string, phone: string, items: BillItem[]) => {
+  if (phone.trim().length > 0 && phone.trim().length !== 10) {
+    showError('Phone number must be exactly 10 digits');
+    return;
+  }
+  const total = items.reduce((s, i) => s + i.price * i.qty, 0);
+  setReviewData({ 
+    customerName, 
+    customerPhone: phone, 
+    items, 
+    total, 
+    sessionId: editingSession?.id ?? null,
+    extraCharges: [],
+    extraChargeTotal: 0 
+  });
+  setLiveBillingVisible(false);
+  setBillReviewVisible(true);
+}, [editingSession?.id, showError]);
 
-  const handleConfirmBill = useCallback(async (paymentMode: 'cash' | 'upi') => {
+  const handleConfirmBill = useCallback(async (paymentMode: 'cash' | 'upi', extraChargesAmount: number, extraChargeNote: string) => {
   const now = new Date();
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  
+  // Create items array with extra charge as an additional item if present
+  const allItems = [...reviewData.items];
+  if (extraChargesAmount > 0) {
+    allItems.push({
+      name: extraChargeNote || 'Extra Charges',
+      price: extraChargesAmount,
+      qty: 1
+    });
+  }
+  
   const newBill: SaleLog = {
     id: Date.now() + Math.floor(Math.random() * 10000),
-    total: reviewData.total,
+    total: reviewData.total + extraChargesAmount,
     time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
     date: `${now.getDate()} ${months[now.getMonth()]}`,
-    items: reviewData.items,
+    items: allItems,
     customerName: reviewData.customerName,
     phone: reviewData.customerPhone || '',
     paymentMode,
@@ -3105,7 +3158,7 @@ useEffect(() => {
       setTodaysBills(prev => [newBill, ...prev]);
     }
 
-    setTodayTotal(prev => prev + reviewData.total);
+    setTodayTotal(prev => prev + newBill.total);
 
     if (reviewData.sessionId) {
       RAM_SESSIONS = RAM_SESSIONS.filter(s => s.id !== reviewData.sessionId);
@@ -3121,7 +3174,7 @@ useEffect(() => {
     console.error('Failed to save bill:', error);
     showError('Failed to save bill. Please try again.');
   }
-}, [reviewData, salesLog, bizName, showSuccess, showError]);
+}, [reviewData, salesLog, showSuccess, showError]);
 
   const handleSendBillWhatsApp = useCallback(async (bill: SaleLog) => {
     if (!bill.phone || !bill.phone.trim()) {
@@ -3378,6 +3431,8 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
         onClose={() => setBillDetailVisible(false)}
         onDelete={handleDeleteBill}
         onSendWhatsApp={handleSendBillWhatsApp}
+        isMarked={selectedBill ? markedBillIds.has(selectedBill.id) : false}
+        onToggleMark={handleToggleMarkBill}
         theme={theme}
       />
       <PendingPaymentsModal
@@ -3463,6 +3518,7 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
         setBillsSearchQuery={setBillsSearchQuery}
         openSession={openSession}
         openBillDetail={openBillDetail}
+        markedBillIds={markedBillIds}
       />
 
       {/* Header - Redesigned with compact collection card */}
@@ -3619,15 +3675,17 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
               />
             ))}
 
-            {todaysBills.map((bill, index) => (
+            {todaysBills.map((bill, index) => {
+              const isMarked = markedBillIds.has(bill.id);
+              return (
             <TouchableOpacity
               key={`bill-${bill.id}-${index}`}
-                style={[styles.billCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                style={[styles.billCard, { backgroundColor: isMarked ? '#FFFBEB' : theme.colors.surface, borderColor: isMarked ? '#FCD34D' : theme.colors.border, borderWidth: isMarked ? 1.5 : 1 }]}
                 onPress={() => openBillDetail(bill, salesLog.length - index)}
               >
                 <View style={{ alignItems: 'center', gap: 6 }}>
-                  <View style={[styles.billAvatarBox, { backgroundColor: `${theme.colors.primary}20` }]}>
-                    <Text style={[styles.billAvatarText, { color: theme.colors.primary }]}>
+                  <View style={[styles.billAvatarBox, { backgroundColor: isMarked ? '#FEF3C7' : `${theme.colors.primary}20` }]}>
+                    <Text style={[styles.billAvatarText, { color: isMarked ? '#F59E0B' : theme.colors.primary }]}>
                       {bill.customerName.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)}
                     </Text>
                   </View>
@@ -3639,7 +3697,10 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
                   )}
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={[styles.billCustomer, { color: theme.colors.textPrimary }]}>{bill.customerName}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <Text style={[styles.billCustomer, { color: theme.colors.textPrimary }]}>{bill.customerName}</Text>
+                    {isMarked && <Ionicons name="bookmark" size={12} color="#F59E0B" />}
+                  </View>
                   <Text style={[styles.billTime, { marginTop: 4 }]}>{bill.time} · {bill.date}</Text>
                 </View>
                 <View style={styles.billRight}>
@@ -3647,7 +3708,8 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#bbb" style={{ marginLeft: 6 }} />
               </TouchableOpacity>
-            ))}
+              );
+            })}
           </>
         )}
         <View style={{ height: 30 }} />

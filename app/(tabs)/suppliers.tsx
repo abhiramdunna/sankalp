@@ -1034,34 +1034,14 @@ const SupplierDetailScreen = ({
       <Modal visible={payBillModalVisible} transparent animationType="slide" onRequestClose={() => setPayBillModalVisible(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setPayBillModalVisible(false)} />
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16, maxHeight: '90%' }]}>
-            <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>Pay Bill</Text>
+          <View style={[styles.sheet, { paddingBottom: 0, maxHeight: '90%', flexDirection: 'column' }]}>
+            {/* Fixed header */}
+            <View style={{ paddingHorizontal: 0, paddingTop: 0 }}>
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>Pay Bill</Text>
+            </View>
 
-            {/* Bill selector — only shown when there are multiple pending bills */}
-            {pendingBills.length > 1 && (
-              <>
-                <Text style={styles.fieldLabel}>Select Bill</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-                  {[...pendingBills].sort((a, b) => b.id - a.id).map((bill) => {
-                    const due = bill.amount - bill.paid;
-                    const selected = payBillSelectedId === bill.id;
-                    return (
-                      <TouchableOpacity
-                        key={bill.id}
-                        onPress={() => { setPayBillSelectedId(bill.id); setPayBillAmountStr(''); }}
-                        style={[styles.billChip, selected && styles.billChipSelected]}
-                      >
-                        <Text style={[styles.billChipName, selected && { color: theme.colors.primary }]}>{bill.name}</Text>
-                        <Text style={styles.billChipAmt}>{fmt(due)} due</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </>
-            )}
-
-            {/* Selected bill summary */}
+            {/* Scrollable content */}
             {(() => {
               const selBill = pendingBills.find(b => b.id === payBillSelectedId);
               const maxPay = selBill ? selBill.amount - selBill.paid : 0;
@@ -1070,76 +1050,119 @@ const SupplierDetailScreen = ({
 
               return (
                 <>
-                  {selBill && (
-                    <View style={styles.payBillInfo}>
-                      <Text style={styles.payBillInfoText}>
-                        {selBill.name} · Due: {fmt(maxPay)}
-                        {selBill.paid > 0 ? ` (Paid so far: ${fmt(selBill.paid)})` : ''}
-                      </Text>
-                    </View>
-                  )}
-
-                  <Text style={styles.fieldLabel}>Amount ₹</Text>
-                  <TextInput
-                    style={[
-                      styles.fieldInput,
-                      payBillAmountStr !== '' && !valid && { borderColor: '#EF4444' },
-                      payBillAmountStr !== '' && valid && { borderColor: '#16A34A' },
-                    ]}
-                    placeholder="₹ 0"
-                    placeholderTextColor="#CBD5E1"
-                    value={payBillAmountStr}
-                    onChangeText={setPayBillAmountStr}
-                    keyboardType="numeric"
-                    autoFocus={pendingBills.length === 1}
-                  />
-
-                  {selBill && (
-                    <TouchableOpacity
-                      onPress={() => setPayBillAmountStr(String(maxPay))}
-                      style={{ alignSelf: 'flex-start', marginTop: -8, marginBottom: 16, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: theme.colors.primaryLight, borderWidth: 1, borderColor: theme.colors.border }}
-                    >
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.primary }}>Pay full {fmt(maxPay)}</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {payBillAmountStr !== '' && !valid && selBill && (
-                    <Text style={{ fontSize: 12, color: '#EF4444', fontWeight: '600', marginTop: -8, marginBottom: 12 }}>
-                      {parsed > maxPay ? `Max payable: ${fmt(maxPay)}` : 'Enter a valid amount'}
-                    </Text>
-                  )}
-
-                  <TouchableOpacity
-                    style={[styles.sheetPrimaryBtn, (!valid || !selBill) && { opacity: 0.4 }]}
-                    onPress={() => {
-                      if (!valid || !selBill) return;
-                      const newTx: Transaction = {
-                        id: uniqueId(),
-                        date: todayStr(),
-                        type: 'payment',
-                        billId: selBill.id,
-                        billName: selBill.name,
-                        amount: parsed,
-                      };
-                      const updatedBills = supplier.bills.map((b) =>
-                        b.id === selBill.id ? { ...b, paid: b.paid + parsed } : b
-                      );
-                      onUpdate({ ...supplier, bills: updatedBills, transactions: [...supplier.transactions, newTx] });
-                      setPayBillModalVisible(false);
-                      setPayBillAmountStr('');
-                      setPayBillSelectedId(null);
-                      setToastMessage(`${fmt(parsed)} paid towards "${selBill.name}"`);
-                      setToastType('success');
-                      setToastVisible(true);
-                    }}
+                  <ScrollView
+                    style={{ flexShrink: 1 }}
+                    contentContainerStyle={{ paddingBottom: 8 }}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
                   >
-                    <Text style={styles.sheetPrimaryBtnText}>
-                      {valid ? `Confirm  ${fmt(parsed)}` : 'Confirm Payment'}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setPayBillModalVisible(false)}>
-                    <Text style={styles.sheetCancelText}>Cancel</Text>
-                  </TouchableOpacity>
+                    {/* Bill selector — only shown when there are multiple pending bills */}
+                    {pendingBills.length > 1 && (
+                      <>
+                        <Text style={styles.fieldLabel}>Select Bill</Text>
+                        <View style={{ marginBottom: 16 }}>
+                          {[...pendingBills].sort((a, b) => b.id - a.id).map((bill) => {
+                            const due = bill.amount - bill.paid;
+                            const selected = payBillSelectedId === bill.id;
+                            return (
+                              <TouchableOpacity
+                                key={bill.id}
+                                onPress={() => { setPayBillSelectedId(bill.id); setPayBillAmountStr(''); }}
+                                style={[
+                                  styles.billChip,
+                                  selected && styles.billChipSelected,
+                                  { marginRight: 0, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+                                ]}
+                              >
+                                <View style={{ flex: 1 }}>
+                                  <Text style={[styles.billChipName, selected && { color: theme.colors.primary }]}>{bill.name}</Text>
+                                  <Text style={styles.billChipAmt}>{fmt(due)} due</Text>
+                                </View>
+                                {selected && (
+                                  <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} style={{ marginLeft: 8 }} />
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </>
+                    )}
+
+                    {/* Selected bill summary */}
+                    {selBill && (
+                      <View style={styles.payBillInfo}>
+                        <Text style={styles.payBillInfoText}>
+                          {selBill.name} · Due: {fmt(maxPay)}
+                          {selBill.paid > 0 ? ` (Paid so far: ${fmt(selBill.paid)})` : ''}
+                        </Text>
+                      </View>
+                    )}
+
+                    <Text style={styles.fieldLabel}>Amount ₹</Text>
+                    <TextInput
+                      style={[
+                        styles.fieldInput,
+                        payBillAmountStr !== '' && !valid && { borderColor: '#EF4444' },
+                        payBillAmountStr !== '' && valid && { borderColor: '#16A34A' },
+                      ]}
+                      placeholder="₹ 0"
+                      placeholderTextColor="#CBD5E1"
+                      value={payBillAmountStr}
+                      onChangeText={setPayBillAmountStr}
+                      keyboardType="numeric"
+                      autoFocus={pendingBills.length === 1}
+                    />
+
+                    {selBill && (
+                      <TouchableOpacity
+                        onPress={() => setPayBillAmountStr(String(maxPay))}
+                        style={{ alignSelf: 'flex-start', marginTop: -8, marginBottom: 16, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: theme.colors.primaryLight, borderWidth: 1, borderColor: theme.colors.border }}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.primary }}>Pay full {fmt(maxPay)}</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {payBillAmountStr !== '' && !valid && selBill && (
+                      <Text style={{ fontSize: 12, color: '#EF4444', fontWeight: '600', marginTop: -8, marginBottom: 12 }}>
+                        {parsed > maxPay ? `Max payable: ${fmt(maxPay)}` : 'Enter a valid amount'}
+                      </Text>
+                    )}
+                  </ScrollView>
+
+                  {/* Pinned action buttons — always visible */}
+                  <View style={{ paddingTop: 12, paddingBottom: insets.bottom + 16, borderTopWidth: 1, borderTopColor: '#F1F5F9' }}>
+                    <TouchableOpacity
+                      style={[styles.sheetPrimaryBtn, (!valid || !selBill) && { opacity: 0.4 }]}
+                      onPress={() => {
+                        if (!valid || !selBill) return;
+                        const newTx: Transaction = {
+                          id: uniqueId(),
+                          date: todayStr(),
+                          type: 'payment',
+                          billId: selBill.id,
+                          billName: selBill.name,
+                          amount: parsed,
+                        };
+                        const updatedBills = supplier.bills.map((b) =>
+                          b.id === selBill.id ? { ...b, paid: b.paid + parsed } : b
+                        );
+                        onUpdate({ ...supplier, bills: updatedBills, transactions: [...supplier.transactions, newTx] });
+                        setPayBillModalVisible(false);
+                        setPayBillAmountStr('');
+                        setPayBillSelectedId(null);
+                        setToastMessage(`${fmt(parsed)} paid towards "${selBill.name}"`);
+                        setToastType('success');
+                        setToastVisible(true);
+                      }}
+                    >
+                      <Text style={styles.sheetPrimaryBtnText}>
+                        {valid ? `Confirm  ${fmt(parsed)}` : 'Confirm Payment'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setPayBillModalVisible(false)}>
+                      <Text style={styles.sheetCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
                 </>
               );
             })()}
