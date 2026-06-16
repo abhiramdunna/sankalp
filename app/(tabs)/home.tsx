@@ -10,8 +10,9 @@ import { db as DatabaseService } from '@/lib/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { LinearGradient } from 'expo-linear-gradient';
-import { checkEntitlement, presentPaywall, syncActiveSubscriptionToDatabase, getDatabaseSubscriptionStatus, ENTITLEMENT_ID } from '@/lib/revenuecat';
+import { checkEntitlement, presentPaywall, syncActiveSubscriptionToDatabase, getDatabaseSubscriptionStatus, ENTITLEMENT_ID, logoutRevenueCat } from '@/lib/revenuecat';
 import { sendBillWhatsApp } from '@/lib/whatsapp';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 import { useRouter, useFocusEffect } from 'expo-router';
 import { CommonActions, useNavigation } from '@react-navigation/native';
@@ -49,7 +50,7 @@ let RAM_SESSIONS: Session[] = [];
 // Types
 interface BillItem { name: string; price: number; qty: number; }
 interface Session { id: number; customerName: string; phone: string; items: BillItem[]; npVal?: string; }
-interface SaleLog { id: number; total: number; time: string; date: string; items: BillItem[]; customerName: string; phone: string; paymentMode?: 'cash' | 'upi'; }
+interface SaleLog { id: number; total: number; time: string; date: string; items: BillItem[]; customerName: string; phone: string; paymentMode?: 'cash' | 'upi'; isQuickBill?: boolean; note?: string; }
 
 // Toast Component
 const Toast = memo(({
@@ -165,6 +166,9 @@ const LiveBillingModal = memo(({
   const [searchQuery, setSearchQuery] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+  const [qtyModalVisible, setQtyModalVisible] = useState(false);
+  const [qtyModalProduct, setQtyModalProduct] = useState<{ name: string; price: number } | null>(null);
+  const [qtyModalVal, setQtyModalVal] = useState('');
   const modalOpacity = useRef(new Animated.Value(1)).current;
   
 
@@ -202,6 +206,19 @@ const LiveBillingModal = memo(({
       if (ex && ex.qty > 1) return prev.map(i => i.name === name ? { ...i, qty: i.qty - 1 } : i);
       return prev.filter(i => i.name !== name);
     });
+  }, []);
+
+  const setQty = useCallback((name: string, qty: number, price?: number) => {
+    const rounded = Math.round(qty * 1000) / 1000; // keep up to 3 decimal places
+    if (rounded <= 0) {
+      setItems(prev => prev.filter(i => i.name !== name));
+    } else {
+      setItems(prev => {
+        const ex = prev.find(i => i.name === name);
+        if (ex) return prev.map(i => i.name === name ? { ...i, qty: rounded } : i);
+        return [...prev, { name, price: price ?? 0, qty: rounded }];
+      });
+    }
   }, []);
 
   const activeItems = items.filter(i => i.qty > 0);
@@ -345,14 +362,19 @@ const LiveBillingModal = memo(({
               <View style={styles.addItemsSection}>
                 <Text style={styles.addItemsTitle}>Add Items</Text>
                 <View style={styles.searchBox}>
-                  <Ionicons name="search" size={18} color="#bbb" style={{ marginRight: 8 }} />
+                  <Ionicons name="search" size={18} color="#9CA3AF" style={{ marginRight: 8 }} />
                   <TextInput
                     style={styles.searchInput}
-                    placeholder="Search items..."
+                    placeholder="Search products"
                     value={searchQuery}
                     onChangeText={setSearchQuery}
-                    placeholderTextColor="#ccc"
+                    placeholderTextColor="#9CA3AF"
                   />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <Ionicons name="close-circle" size={18} color="#bbb" />
+                    </TouchableOpacity>
+                  )}
                 </View>
                 {productsToUse.length === 0 ? (
                   <View style={{ alignItems: 'center', paddingVertical: 60, paddingHorizontal: 20 }}>
@@ -367,20 +389,36 @@ const LiveBillingModal = memo(({
                   const qty = cur?.qty || 0;
                   return (
                     <View key={product.name} style={styles.productRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.productName}>{product.name}</Text>
+                      {/* Product icon */}
+                      <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: qty > 0 ? `${theme.colors.primary}18` : '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginRight: 10, flexShrink: 0 }}>
+                        <Ionicons name="shirt-outline" size={18} color={qty > 0 ? theme.colors.primary : '#9CA3AF'} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.productName} numberOfLines={1} ellipsizeMode="tail">{product.name}</Text>
                         <Text style={[styles.productPrice, { color: theme.colors.primary }]}>₹ {product.price.toFixed(2)}</Text>
                       </View>
-                      <View style={styles.qtyControl}>
+                      <View style={[styles.qtyControl, { flexShrink: 0 }]}>
                         <TouchableOpacity style={styles.qtyBtn} onPress={() => removeItem(product.name)}>
                           <Ionicons name="remove" size={16} color={theme.colors.primary} />
                         </TouchableOpacity>
-                        <Text style={styles.qtyText}>{qty}</Text>
+                        <TouchableOpacity
+                          style={[styles.qtyPill, qty > 0 && { backgroundColor: `${theme.colors.primary}18`, borderColor: theme.colors.primary }]}
+                          onPress={() => {
+                            setQtyModalProduct(product);
+                            setQtyModalVal(qty > 0 ? String(qty) : '');
+                            setQtyModalVisible(true);
+                          }}
+                        >
+                          <Text style={[styles.qtyPillText, qty > 0 && { color: theme.colors.primary }]}>
+                            {qty > 0 ? qty : '0'}
+                          </Text>
+                          <Ionicons name="create-outline" size={10} color={qty > 0 ? theme.colors.primary : '#9CA3AF'} style={{ marginLeft: 2 }} />
+                        </TouchableOpacity>
                         <TouchableOpacity style={styles.qtyBtn} onPress={() => addItem(product)}>
                           <Ionicons name="add" size={16} color={theme.colors.primary} />
                         </TouchableOpacity>
                       </View>
-                      <Text style={[styles.lineTotal, { color: theme.colors.primary }]}>₹ {(qty * product.price).toFixed(2)}</Text>
+                      <Text style={[styles.lineTotal, { color: qty > 0 ? theme.colors.primary : '#ccc' }]}>₹ {(qty * product.price).toFixed(2)}</Text>
                     </View>
                   );
                 })}
@@ -414,6 +452,102 @@ const LiveBillingModal = memo(({
             </View>
           </KeyboardAvoidingView>
         </Animated.View>
+
+        {/* Qty Direct Entry Modal */}
+        <Modal
+          visible={qtyModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setQtyModalVisible(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setQtyModalVisible(false)}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+              <TouchableWithoutFeedback>
+                <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 34 }}>
+                  {/* Handle */}
+                  <View style={{ width: 40, height: 4, backgroundColor: '#E5E7EB', borderRadius: 4, alignSelf: 'center', marginBottom: 16 }} />
+                  
+                  {/* Header */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="cube-outline" size={18} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#111', flex: 1 }} numberOfLines={1}>
+                      {qtyModalProduct?.name}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 12, color: '#9CA3AF', fontWeight: '600', marginBottom: 16, marginLeft: 26 }}>
+                    ₹ {qtyModalProduct?.price.toFixed(2)} per unit — supports decimals (e.g. 0.5, 1.25)
+                  </Text>
+
+                  {/* Big input */}
+                  <View style={{ borderWidth: 2, borderColor: theme.colors.primary, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: `${theme.colors.primary}08`, marginBottom: 8 }}>
+                    <TextInput
+                      style={{ flex: 1, fontSize: 28, fontWeight: '900', color: theme.colors.primary, textAlign: 'center' }}
+                      value={qtyModalVal}
+                      onChangeText={setQtyModalVal}
+                      keyboardType="decimal-pad"
+                      autoFocus
+                      selectTextOnFocus
+                      placeholder="0"
+                      placeholderTextColor="#D1D5DB"
+                    />
+                  </View>
+
+                  {/* Live amount preview */}
+                  {qtyModalProduct && qtyModalVal.length > 0 && !isNaN(parseFloat(qtyModalVal)) && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 16, gap: 4 }}>
+                      <Text style={{ fontSize: 13, color: '#6B7280', fontWeight: '600' }}>Amount:</Text>
+                      <Text style={{ fontSize: 18, fontWeight: '900', color: '#10B981' }}>
+                        ₹ {(parseFloat(qtyModalVal) * (qtyModalProduct?.price ?? 0)).toFixed(2)}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Quick presets */}
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                    {['0.25', '0.5', '0.75', '1', '1.5', '2', '5', '10'].map(preset => (
+                      <TouchableOpacity
+                        key={preset}
+                        onPress={() => setQtyModalVal(preset)}
+                        style={{ paddingHorizontal: 12, paddingVertical: 7, backgroundColor: qtyModalVal === preset ? theme.colors.primary : '#F3F4F6', borderRadius: 20, borderWidth: 1.5, borderColor: qtyModalVal === preset ? theme.colors.primary : '#E5E7EB' }}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: qtyModalVal === preset ? '#fff' : '#374151' }}>{preset}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {/* Action buttons */}
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <TouchableOpacity
+                      style={{ flex: 1, paddingVertical: 13, borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E7EB', alignItems: 'center' }}
+                      onPress={() => {
+                        if (qtyModalProduct) setQty(qtyModalProduct.name, 0);
+                        setQtyModalVisible(false);
+                      }}
+                    >
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#EF4444' }}>Remove</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={{ flex: 2, paddingVertical: 13, borderRadius: 12, backgroundColor: theme.colors.primary, alignItems: 'center' }}
+                      onPress={() => {
+                        if (qtyModalProduct) {
+                          const parsed = parseFloat(qtyModalVal);
+                          if (!isNaN(parsed) && parsed > 0) {
+                            setQty(qtyModalProduct.name, parsed, qtyModalProduct.price);
+                          } else {
+                            setQty(qtyModalProduct.name, 0);
+                          }
+                        }
+                        setQtyModalVisible(false);
+                      }}
+                    >
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: '#fff' }}>Set Quantity</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
       </Modal>
     </>
   );
@@ -962,6 +1096,7 @@ const BillDetailModal = memo(({
   isMarked,
   onToggleMark,
   theme,
+  insets,
 }: {
   visible: boolean;
   bill: SaleLog | null;
@@ -972,11 +1107,15 @@ const BillDetailModal = memo(({
   isMarked?: boolean;
   onToggleMark?: (billId: number) => void;
   theme: AppTheme;
+  insets: { top: number; bottom: number; left: number; right: number };
 }) => {
   if (!visible || !bill) return null;
   const initials = (bill.customerName || 'W').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
   const itemCount = bill.items.reduce((s, i) => s + i.qty, 0);
   const payMode = bill.paymentMode;
+  const isQuickBill = bill.isQuickBill === true;
+  // Detect note: from explicit field, or from the single item name if it's not 'Quick Bill'
+  const billNote = bill.note || (isQuickBill && bill.items[0]?.name !== 'Quick Bill' ? bill.items[0]?.name : '') || '';
 
   return (
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
@@ -995,7 +1134,9 @@ const BillDetailModal = memo(({
             {/* Top row: bill number + close */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
               <View style={{ backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 }}>
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>BILL #{billNumber}</Text>
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>
+                  {isQuickBill ? 'QUICK BILL' : `BILL #${billNumber}`}
+                </Text>
               </View>
               <TouchableOpacity
                 onPress={onClose}
@@ -1050,39 +1191,79 @@ const BillDetailModal = memo(({
             </View>
           </LinearGradient>
 
-          {/* Items list */}
+          {/* Items list / Quick Bill summary */}
           <ScrollView
             style={{ maxHeight: SCREEN_HEIGHT * 0.32, backgroundColor: '#fff', marginHorizontal: 16, marginTop: -12, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB' }}
             showsVerticalScrollIndicator={false}
           >
-            <View style={{ paddingHorizontal: 14, paddingTop: 14, paddingBottom: 6 }}>
-              <Text style={{ fontSize: 11, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 10 }}>Items Breakdown</Text>
-            </View>
-            {bill.items.map((item, idx) => (
-              <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 11, borderTopWidth: idx === 0 ? 0 : 1, borderTopColor: '#F3F4F6' }}>
-                <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: `${theme.colors.primary}15`, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
-                  <Text style={{ fontSize: 11, fontWeight: '800', color: theme.colors.primary }}>{String(idx + 1).padStart(2, '0')}</Text>
+            {isQuickBill ? (
+              // Quick bill view: show amount + note, not items table
+              <View style={{ padding: 16 }}>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 12 }}>Bill Summary</Text>
+                {/* Amount row */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: `${theme.colors.primary}15`, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="flash-outline" size={16} color={theme.colors.primary} />
+                    </View>
+                    <View>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>Quick Payment</Text>
+                      <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600', marginTop: 1 }}>Single amount entry</Text>
+                    </View>
+                  </View>
+                  <Text style={{ fontSize: 15, fontWeight: '900', color: theme.colors.primary }}>₹{bill.total.toLocaleString('en-IN')}</Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>{item.name}</Text>
-                  <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600', marginTop: 2 }}>
-                    {item.qty} × ₹{item.price.toLocaleString('en-IN')}
-                  </Text>
+                {/* Note row */}
+                {billNote ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingTop: 12 }}>
+                    <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Ionicons name="document-text-outline" size={16} color="#6B7280" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 }}>Note</Text>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#374151' }}>{billNote}</Text>
+                    </View>
+                  </View>
+                ) : null}
+                {/* Dashed divider + total */}
+                <View style={{ marginTop: 12, borderTopWidth: 1.5, borderTopColor: '#E5E7EB', borderStyle: 'dashed' }} />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: '#6B7280' }}>Total</Text>
+                  <Text style={{ fontSize: 18, fontWeight: '900', color: theme.colors.primary }}>₹{bill.total.toLocaleString('en-IN')}</Text>
                 </View>
-                <Text style={{ fontSize: 15, fontWeight: '900', color: theme.colors.primary }}>₹{(item.price * item.qty).toLocaleString('en-IN')}</Text>
               </View>
-            ))}
-
-            {/* Dashed divider + total */}
-            <View style={{ marginHorizontal: 14, marginTop: 8, marginBottom: 4, borderTopWidth: 1.5, borderTopColor: '#E5E7EB', borderStyle: 'dashed' }} />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12 }}>
-              <Text style={{ fontSize: 13, fontWeight: '800', color: '#6B7280' }}>Grand Total</Text>
-              <Text style={{ fontSize: 18, fontWeight: '900', color: theme.colors.primary }}>₹{bill.total.toLocaleString('en-IN')}</Text>
-            </View>
+            ) : (
+              // Regular bill: show items breakdown
+              <>
+                <View style={{ paddingHorizontal: 14, paddingTop: 14, paddingBottom: 6 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 10 }}>Items Breakdown</Text>
+                </View>
+                {bill.items.map((item, idx) => (
+                  <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 11, borderTopWidth: idx === 0 ? 0 : 1, borderTopColor: '#F3F4F6' }}>
+                    <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: `${theme.colors.primary}15`, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                      <Text style={{ fontSize: 11, fontWeight: '800', color: theme.colors.primary }}>{String(idx + 1).padStart(2, '0')}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#111' }}>{item.name}</Text>
+                      <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600', marginTop: 2 }}>
+                        {item.qty} × ₹{item.price.toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 15, fontWeight: '900', color: theme.colors.primary }}>₹{(item.price * item.qty).toLocaleString('en-IN')}</Text>
+                  </View>
+                ))}
+                {/* Dashed divider + total */}
+                <View style={{ marginHorizontal: 14, marginTop: 8, marginBottom: 4, borderTopWidth: 1.5, borderTopColor: '#E5E7EB', borderStyle: 'dashed' }} />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: '#6B7280' }}>Grand Total</Text>
+                  <Text style={{ fontSize: 18, fontWeight: '900', color: theme.colors.primary }}>₹{bill.total.toLocaleString('en-IN')}</Text>
+                </View>
+              </>
+            )}
           </ScrollView>
 
           {/* Action buttons */}
-          <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 24, gap: 10 }}>
+          <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingTop: 14, paddingBottom: insets.bottom + 16, gap: 10 }}>
             {onDelete && (
               <TouchableOpacity
                 onPress={() => onDelete(bill)}
@@ -1113,6 +1294,114 @@ const BillDetailModal = memo(({
             >
               <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
               <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Done</Text>
+            </TouchableOpacity>
+          </View>
+
+        </View>
+      </View>
+    </Modal>
+  );
+});
+
+// Quick Bill Review Modal — shown before saving a quick bill
+const QuickBillReviewModal = memo(({
+  visible, onClose, onConfirm, data, theme,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  data: { name: string; phone: string; amount: number; note: string; paymentMode: 'cash' | 'upi' } | null;
+  theme: AppTheme;
+}) => {
+  const insets = useSafeAreaInsets();
+  if (!visible || !data) return null;
+  const initials = (data.name || 'W').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
+  const isUpi = data.paymentMode === 'upi';
+
+  return (
+    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: '#F9FAFB', borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}>
+
+          {/* Gradient header */}
+          <LinearGradient
+            colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={{ paddingTop: 20, paddingBottom: 28, paddingHorizontal: 20 }}
+          >
+            <View style={{ width: 36, height: 4, backgroundColor: 'rgba(255,255,255,0.35)', borderRadius: 4, alignSelf: 'center', marginBottom: 18 }} />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <View style={{ backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 }}>QUICK BILL</Text>
+              </View>
+              <TouchableOpacity onPress={onClose} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="close" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Customer row */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+              <View style={{ width: 46, height: 46, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontSize: 17, fontWeight: '900', color: '#fff' }}>{initials}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 17, fontWeight: '900', color: '#fff' }}>{data.name || 'Walk-in Customer'}</Text>
+                {data.phone ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                    <Ionicons name="call-outline" size={11} color="rgba(255,255,255,0.75)" />
+                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>{data.phone}</Text>
+                  </View>
+                ) : null}
+              </View>
+              {/* Payment badge */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: isUpi ? 'rgba(139,92,246,0.35)' : 'rgba(16,185,129,0.35)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                <Ionicons name={isUpi ? 'phone-portrait-outline' : 'cash-outline'} size={12} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' }}>{data.paymentMode}</Text>
+              </View>
+            </View>
+
+            {/* Big amount */}
+            <View style={{ backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 16, padding: 16, alignItems: 'center' }}>
+              <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 6 }}>Amount</Text>
+              <Text style={{ fontSize: 38, fontWeight: '900', color: '#fff', letterSpacing: -1 }}>₹{data.amount.toLocaleString('en-IN')}</Text>
+            </View>
+          </LinearGradient>
+
+          {/* Note section */}
+          <View style={{ backgroundColor: '#fff', marginHorizontal: 16, marginTop: -12, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', padding: 16 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 10 }}>Bill Note</Text>
+            {data.note ? (
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: `${theme.colors.primary}15`, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Ionicons name="document-text-outline" size={16} color={theme.colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#111' }}>{data.note}</Text>
+                  <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600', marginTop: 2 }}>Payment note / reason</Text>
+                </View>
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="document-outline" size={16} color="#D1D5DB" />
+                <Text style={{ fontSize: 14, color: '#D1D5DB', fontWeight: '600', fontStyle: 'italic' }}>No note added</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Action buttons */}
+          <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingTop: 14, paddingBottom: insets.bottom + 16, gap: 10 }}>
+            <TouchableOpacity
+              style={{ width: 52, height: 52, borderRadius: 14, borderWidth: 1.5, borderColor: theme.colors.primary + '50', backgroundColor: theme.colors.primary + '10', alignItems: 'center', justifyContent: 'center' }}
+              onPress={onClose}
+            >
+              <Ionicons name="pencil-outline" size={20} color={theme.colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ flex: 1, height: 52, borderRadius: 14, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, elevation: 4, shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}
+              onPress={onConfirm}
+            >
+              <Ionicons name="checkmark-circle" size={22} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '900' }}>Confirm & Save</Text>
             </TouchableOpacity>
           </View>
 
@@ -1347,9 +1636,10 @@ const ProfileModal = memo(({
                     flexDirection: 'row', alignItems: 'center', gap: 4,
                     backgroundColor: '#fff',
                     borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+                    marginRight: 2,
                   }}>
                     <Text style={{ fontSize: 13, fontWeight: '900', color: theme.colors.primary }}>₹95</Text>
-                    <Text style={{ fontSize: 10, fontWeight: '600', color: theme.colors.primary, opacity: 0.7 }}>/3mo</Text>
+                    <Text style={{ fontSize: 10, fontWeight: '600', color: theme.colors.primary, opacity: 0.7 }}>/3 months</Text>
                   </View>
                 </View>
                 {/* Divider */}
@@ -1471,6 +1761,91 @@ const ProfileModal = memo(({
           </View>
         </ScrollView>
       </Animated.View>
+    </Modal>
+  );
+});
+
+// Delete Bill Confirm Modal
+const DeleteBillConfirmModal = memo(({
+  visible, bill, onCancel, onConfirm, theme,
+}: {
+  visible: boolean;
+  bill: SaleLog | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+  theme: AppTheme;
+}) => {
+  const insets = useSafeAreaInsets();
+  if (!visible || !bill) return null;
+  const initials = (bill.customerName || 'W').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
+  return (
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={onCancel}>
+      <TouchableWithoutFeedback onPress={onCancel}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
+          <TouchableWithoutFeedback>
+            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 8, paddingBottom: insets.bottom + 20 }}>
+              {/* Handle */}
+              <View style={{ width: 40, height: 4, backgroundColor: '#E5E7EB', borderRadius: 4, alignSelf: 'center', marginBottom: 20 }} />
+
+              {/* Icon */}
+              <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                  <Ionicons name="trash-outline" size={30} color="#DC2626" />
+                </View>
+                <Text style={{ fontSize: 20, fontWeight: '900', color: '#111', marginBottom: 6 }}>Delete Bill?</Text>
+                <Text style={{ fontSize: 13, color: '#6B7280', fontWeight: '500', textAlign: 'center', lineHeight: 19 }}>
+                  This will permanently delete the bill for
+                </Text>
+              </View>
+
+              {/* Bill summary card */}
+              <View style={{ backgroundColor: '#F9FAFB', borderRadius: 16, borderWidth: 1.5, borderColor: '#F3F4F6', padding: 14, marginBottom: 20, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#FEE2E2', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ fontSize: 16, fontWeight: '900', color: '#DC2626' }}>{initials}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: '#111' }}>{bill.customerName || 'Walk-in Customer'}</Text>
+                  <Text style={{ fontSize: 12, color: '#9CA3AF', fontWeight: '500', marginTop: 2 }}>{bill.time} · {bill.date}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={{ fontSize: 17, fontWeight: '900', color: '#DC2626' }}>₹{bill.total.toLocaleString('en-IN')}</Text>
+                  {bill.paymentMode && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 }}>
+                      <Ionicons name={bill.paymentMode === 'cash' ? 'cash-outline' : 'phone-portrait-outline'} size={11} color="#9CA3AF" />
+                      <Text style={{ fontSize: 11, color: '#9CA3AF', fontWeight: '600', textTransform: 'uppercase' }}>{bill.paymentMode}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Warning note */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FEF2F2', borderRadius: 12, padding: 12, marginBottom: 20, borderWidth: 1, borderColor: '#FECACA' }}>
+                <Ionicons name="warning-outline" size={16} color="#DC2626" />
+                <Text style={{ fontSize: 12, color: '#DC2626', fontWeight: '600', flex: 1, lineHeight: 17 }}>
+                  This action cannot be undone. The bill will be removed permanently.
+                </Text>
+              </View>
+
+              {/* Buttons */}
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity
+                  onPress={onCancel}
+                  style={{ flex: 1, height: 52, borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: '#6B7280' }}>Keep Bill</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={onConfirm}
+                  style={{ flex: 1, height: 52, borderRadius: 14, backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, elevation: 3 }}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#fff" />
+                  <Text style={{ fontSize: 15, fontWeight: '900', color: '#fff' }}>Yes, Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 });
@@ -2632,6 +3007,8 @@ const [currentDateTime, setCurrentDateTime] = useState('');
   const [editingSession, setEditingSession] = useState<Session | null>(null);
   const [quickEntryVisible, setQuickEntryVisible] = useState(false);
   const [quickEntryPresetMode, setQuickEntryPresetMode] = useState<'cash' | 'upi' | null>(null);
+  const [quickReviewVisible, setQuickReviewVisible] = useState(false);
+  const [quickReviewData, setQuickReviewData] = useState<{ name: string; phone: string; amount: number; note: string; paymentMode: 'cash' | 'upi' } | null>(null);
   const [billReviewVisible, setBillReviewVisible] = useState(false);
   const [viewAllBillsVisible, setViewAllBillsVisible] = useState(false);
   const [reviewData, setReviewData] = useState<{
@@ -2657,6 +3034,8 @@ const [currentDateTime, setCurrentDateTime] = useState('');
   const [billDetailVisible, setBillDetailVisible] = useState(false);
   const [selectedBill, setSelectedBill] = useState<SaleLog | null>(null);
   const [selectedBillNumber, setSelectedBillNumber] = useState(0);
+  const [deleteBillConfirmVisible, setDeleteBillConfirmVisible] = useState(false);
+  const [billToDelete, setBillToDelete] = useState<SaleLog | null>(null);
   const [pendingPaymentsVisible, setPendingPaymentsVisible] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingTotal, setPendingTotal] = useState(0);
@@ -2741,38 +3120,8 @@ const getBillNumberForDate = useCallback((billDate: string, currentBillId: numbe
 
 
   const handleDeleteBill = useCallback((bill: SaleLog) => {
-    Alert.alert(
-      'Delete Bill',
-      `Delete bill for ${bill.customerName || 'Walk-in Customer'} (₹${bill.total})? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await DatabaseService.deleteSaleLog(bill.id);
-                setSalesLog(prev => prev.filter(b => b.id !== bill.id));
-
-                // Also remove from today's bills if it's today's bill
-                const now = new Date();
-                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                const todayStr = `${now.getDate()} ${months[now.getMonth()]}`;
-                if (bill.date === todayStr) {
-                  setTodaysBills(prev => prev.filter(b => b.id !== bill.id));
-                }
-
-                setTodayTotal(prev => prev - bill.total);
-              setBillDetailVisible(false);
-              setSelectedBill(null);
-              showSuccess('Bill deleted');
-            } catch (e) {
-              showError('Failed to delete bill');
-            }
-          },
-        },
-      ]
-    );
+    setBillToDelete(bill);
+    setDeleteBillConfirmVisible(true);
   }, []);
 
   const showSuccess = useCallback((msg: string) => {
@@ -2786,6 +3135,24 @@ const getBillNumberForDate = useCallback((billDate: string, currentBillId: numbe
     setToastType('error');
     setShowToast(true);
   }, []);
+
+  const confirmDeleteBill = useCallback(async () => {
+    if (!billToDelete) return;
+    const bill = billToDelete;
+    setDeleteBillConfirmVisible(false);
+    setBillToDelete(null);
+    try {
+      await DatabaseService.deleteSaleLog(bill.id);
+      setSalesLog(prev => prev.filter(b => b.id !== bill.id));
+      setTodaysBills(prev => prev.filter(b => b.id !== bill.id));
+      setTodayTotal(prev => prev - bill.total);
+      setBillDetailVisible(false);
+      setSelectedBill(null);
+      showSuccess('Bill deleted');
+    } catch (e) {
+      showError('Failed to delete bill');
+    }
+  }, [billToDelete, showSuccess, showError]);
 
   // Get sequential bill number for the day (resets to 1 each day)
 
@@ -2982,9 +3349,17 @@ const loadData = useCallback(async () => {
               setProfileVisible(false);
               RAM_SESSIONS = [];
               await AsyncStorage.multiRemove(['trialStart', 'isSubscribed', 'supabase_session', 'salesLog']);
+
+              // 1. Reset RevenueCat session before signing out
+              await logoutRevenueCat();
+
+              // 2. Sign out of Google fully so the account picker appears on next login
+              try { await GoogleSignin.revokeAccess(); } catch (_) {}
+              try { await GoogleSignin.signOut(); } catch (_) {}
+
+              // 3. Sign out of Supabase — fires SIGNED_OUT → _layout.tsx routes to /login
               const { error } = await supabase.auth.signOut();
               if (error) console.error('Supabase sign out error:', error);
-              // Don't manually navigate - let the auth state change trigger navigation
             } catch (error) {
               console.error('Logout error:', error);
             }
@@ -2992,7 +3367,7 @@ const loadData = useCallback(async () => {
         },
       ]
     );
-  }, [router, setUser, setSession]);
+  }, []);
 
   // Set today's date filter when View All modal opens
 useEffect(() => {
@@ -3147,7 +3522,8 @@ const handleComplete = useCallback((customerName: string, phone: string, items: 
   try {
     console.log('💰 Saving bill:', newBill);
     
-    await DatabaseService.addSaleLog(newBill, salesLog);
+    const dbId = await DatabaseService.addSaleLog(newBill, salesLog);
+    if (dbId !== null) newBill.id = dbId;
     
     const updatedBills = [newBill, ...salesLog];
     setSalesLog(updatedBills);
@@ -3201,6 +3577,14 @@ const handleComplete = useCallback((customerName: string, phone: string, items: 
   }, [bizPhone, bizName, showError, showSuccess]);
 
 const handleQuickEntrySave = useCallback(async (name: string, phone: string, amount: number, note: string, paymentMode: 'cash' | 'upi') => {
+  setQuickEntryVisible(false);
+  setQuickReviewData({ name, phone, amount, note, paymentMode });
+  setQuickReviewVisible(true);
+}, []);
+
+const handleQuickReviewConfirm = useCallback(async () => {
+  if (!quickReviewData) return;
+  const { name, phone, amount, note, paymentMode } = quickReviewData;
   const now = new Date();
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const newBill: SaleLog = {
@@ -3212,21 +3596,25 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
     customerName: name,
     phone,
     paymentMode,
+    isQuickBill: true,
+    note: note || '',
   };
   const updated = [newBill, ...salesLog];
   setSalesLog(updated);
-  await DatabaseService.addSaleLog(newBill, salesLog);
-
-  // Also update today's bills
+  const dbId = await DatabaseService.addSaleLog(newBill, salesLog);
+  if (dbId !== null) {
+    newBill.id = dbId;
+    setSalesLog([newBill, ...salesLog]);
+  }
   const todayStr = `${now.getDate()} ${months[now.getMonth()]}`;
   if (newBill.date === todayStr) {
     setTodaysBills(prev => [newBill, ...prev]);
   }
-
   setTodayTotal(prev => prev + amount);
-  setQuickEntryVisible(false);
+  setQuickReviewVisible(false);
+  setQuickReviewData(null);
   showSuccess(`₹${amount} saved!`);
-}, [salesLog, showSuccess, bizName]);
+}, [quickReviewData, salesLog, showSuccess]);
 
   const CARD_COLORS = useRef([
     { bg: '#EEF2FF', border: '#2563EB', badgeBg: '#2563EB', amtColor: '#2563EB' },
@@ -3434,6 +3822,14 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
         isMarked={selectedBill ? markedBillIds.has(selectedBill.id) : false}
         onToggleMark={handleToggleMarkBill}
         theme={theme}
+        insets={insets}
+      />
+      <DeleteBillConfirmModal
+        visible={deleteBillConfirmVisible}
+        bill={billToDelete}
+        onCancel={() => { setDeleteBillConfirmVisible(false); setBillToDelete(null); }}
+        onConfirm={confirmDeleteBill}
+        theme={theme}
       />
       <PendingPaymentsModal
         visible={pendingPaymentsVisible}
@@ -3472,6 +3868,17 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
         onSave={handleQuickEntrySave}
         theme={theme}
         presetMode={quickEntryPresetMode}
+      />
+
+      <QuickBillReviewModal
+        visible={quickReviewVisible}
+        onClose={() => {
+          setQuickReviewVisible(false);
+          setQuickEntryVisible(true); // go back to editing
+        }}
+        onConfirm={handleQuickReviewConfirm}
+        data={quickReviewData}
+        theme={theme}
       />
 
       <ReviewBillModal
@@ -3530,8 +3937,15 @@ const handleQuickEntrySave = useCallback(async (name: string, phone: string, amo
   style={[styles.header, { paddingTop: insets.top + 10, paddingBottom: 12 }]}
 >
   <View style={styles.headerTop}>
-    <View>
-      <Text style={[styles.shopName, { fontSize: (bizName?.length ?? 0) >= 16 ? 16 : 22 }]}>{bizName || 'Sankalp'}</Text>
+    <View style={styles.shopNameContainer}>
+      <Text
+        style={[styles.shopName, { fontSize: (bizName?.length ?? 0) >= 16 ? 16 : 22 }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+      >
+        {bizName || 'Sankalp'}
+      </Text>
       <Text style={styles.shopDateTime}>{currentDateTime}</Text>
     </View>
     <View style={styles.headerRightButtons}>
@@ -3726,6 +4140,7 @@ headerRightButtons: {
   flexDirection: 'row',
   alignItems: 'center',
   gap: 10,
+  flexShrink: 0,
 },
 aiHeaderBtn: {
   borderRadius: 24,
@@ -3749,8 +4164,9 @@ aiBtnText: {
   letterSpacing: 0.5,
 },
   header: { paddingHorizontal: 16, paddingBottom: 12 },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   shopName: { color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
+  shopNameContainer: { flex: 1, marginRight: 12 },
   shopDateTime: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '600', marginTop: 2 },
   profileBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   headerProfileLetter: { color: '#fff', fontSize: 16, fontWeight: '900' },
@@ -3807,10 +4223,12 @@ aiBtnText: {
   productRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' },
   productName: { fontSize: 14, fontWeight: '700', color: '#111' },
   productPrice: { fontSize: 12, fontWeight: '700', marginTop: 2 },
-  qtyControl: { flexDirection: 'row', alignItems: 'center', gap: 10, marginRight: 12 },
+  qtyControl: { flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: 10, flexShrink: 0 },
   qtyBtn: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
   qtyText: { fontSize: 14, fontWeight: '800', color: '#111', minWidth: 18, textAlign: 'center' },
-  lineTotal: { fontSize: 13, fontWeight: '800', minWidth: 55, textAlign: 'right' },
+  qtyPill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#F3F4F6', borderRadius: 8, borderWidth: 1.5, borderColor: '#E5E7EB', minWidth: 44 },
+  qtyPillText: { fontSize: 13, fontWeight: '800', color: '#9CA3AF' },
+  lineTotal: { fontSize: 13, fontWeight: '800', width: 68, textAlign: 'right' },
   billSummaryBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#EEF2FF', paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#D1D5DB' },
   summaryLeft: { flexDirection: 'row', alignItems: 'center' },
   summaryItemsLabel: { fontSize: 11, color: '#555', fontWeight: '600' },

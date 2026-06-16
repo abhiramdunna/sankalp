@@ -219,11 +219,11 @@ class DatabaseService {
     }
   }
 
-  async addSaleLog(saleRecord: SaleLog, existingSales?: SaleLog[]) {
+  async addSaleLog(saleRecord: SaleLog, existingSales?: SaleLog[]): Promise<number | null> {
     try {
       const userId = this.getCurrentUserId();
 
-      const { error } = await supabase.from('user_sales').insert({
+      const { data, error } = await supabase.from('user_sales').insert({
         user_id: userId,
         total: saleRecord.total,
         time: saleRecord.time,
@@ -232,11 +232,13 @@ class DatabaseService {
         customer_name: saleRecord.customerName,
         phone: saleRecord.phone,
         payment_mode: saleRecord.paymentMode || 'cash',
-      });
+      }).select('id').single();
 
       if (error) throw error;
+      return data?.id ?? null;
     } catch (error) {
       console.log('addSaleLog error:', error);
+      return null;
     }
   }
 

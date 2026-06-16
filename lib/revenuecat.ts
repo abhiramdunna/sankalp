@@ -8,9 +8,11 @@ export const ENTITLEMENT_ID = 'Sankalp Pro';
 
 // ── Ready gate ────────────────────────────────────────────────────────────────
 // Resolves to true once RC is configured, false if init failed.
-// Any caller that needs RC can await rcReady() instead of polling _revenueCatReady.
+// Re-created on each initRevenueCat() call so a second call (e.g. on
+// SIGNED_IN after a cold-start login) actually runs instead of returning
+// the stale result from the first call.
 let _rcReadyResolve: (value: boolean) => void;
-const _rcReadyPromise = new Promise<boolean>((resolve) => {
+let _rcReadyPromise: Promise<boolean> = new Promise<boolean>((resolve) => {
   _rcReadyResolve = resolve;
 });
 
@@ -19,6 +21,11 @@ export async function rcReady(): Promise<boolean> {
 }
 
 export async function initRevenueCat() {
+  // Reset the gate so this call produces a fresh result.
+  // Any in-flight awaiter on rcReady() will now await the new promise.
+  _rcReadyPromise = new Promise<boolean>((resolve) => {
+    _rcReadyResolve = resolve;
+  });
   Purchases.setLogLevel(LOG_LEVEL.VERBOSE);
 
   try {

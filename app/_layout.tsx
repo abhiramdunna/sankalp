@@ -88,9 +88,6 @@ export default function RootLayout() {
         } else if (session?.user) {
           console.log('✅ Found existing session:', session.user.email);
 
-          // ✅ Init RevenueCat NOW — session is ready, edge function will have auth token
-          await initRevenueCat();
-
           // Fetch profile to check completion status
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
@@ -121,6 +118,13 @@ export default function RootLayout() {
             access_token: session.access_token,
             refresh_token: session.refresh_token,
           });
+
+          // Init RevenueCat AFTER listener is registered (below), so we
+          // don't block listener setup on a cold network call.
+          // We kick it off here without awaiting — it resolves in background.
+          initRevenueCat().catch((e) =>
+            console.warn('⚠️ RC init on session restore failed:', e)
+          );
         } else {
           console.log('ℹ️ No active session');
           clearAuth();
@@ -128,6 +132,9 @@ export default function RootLayout() {
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, newSession) => {
+            // Read suppressAuthEvent here — after any awaits inside auth.ts's
+            // signInWithGoogle have completed — so we get the live value, not
+            // a closure-captured stale one.
             console.log('🔄 Auth event:', event, '| suppressed:', suppressAuthEvent);
 
             if (event === 'SIGNED_IN' && newSession?.user) {
@@ -138,7 +145,9 @@ export default function RootLayout() {
 
               console.log('✅ SIGNED_IN:', newSession.user.email);
 
-              // ✅ Init RevenueCat on fresh sign-in too
+              // Init RevenueCat on fresh sign-in (login.tsx path).
+              // auth.ts's unsuppressAuthEvent() already flushed the microtask
+              // queue so we are guaranteed suppressAuthEvent is false here.
               await initRevenueCat();
 
               const { data: profile } = await supabase

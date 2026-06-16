@@ -38,6 +38,20 @@ export function setSuppressAuthEvent(val: boolean) {
   suppressAuthEvent = val;
 }
 
+/**
+ * Unsuppresses auth events only after the current microtask/event queue
+ * has flushed. Supabase fires SIGNED_IN asynchronously; calling
+ * setSuppressAuthEvent(false) synchronously can race with that delivery.
+ * Awaiting this instead guarantees the event is consumed while still
+ * suppressed before the listener becomes active again.
+ */
+export async function unsuppressAuthEvent(): Promise<void> {
+  // One Promise tick is enough — Supabase's internal emitter uses
+  // Promise-based delivery, so this flush ensures it has fired.
+  await Promise.resolve();
+  suppressAuthEvent = false;
+}
+
 export async function getGoogleCredential(): Promise<{
   idToken: string;
   userInfo: { email: string; name: string; photo: string | null };
@@ -152,20 +166,24 @@ export async function signInWithGoogle(mode: AuthMode): Promise<AuthResult> {
     // ── LOGIN ──────────────────────────────────────────────────────────────
     if (mode === 'login') {
       if (!profileExists) {
-        // Unsuppress BEFORE signing out so _layout.tsx can process SIGNED_OUT event
-        setSuppressAuthEvent(false);
+        // Unsuppress BEFORE signing out so _layout.tsx can process SIGNED_OUT event.
+        // Use unsuppressAuthEvent() so the already-queued SIGNED_IN is consumed
+        // while still suppressed before we trigger SIGNED_OUT.
+        await unsuppressAuthEvent();
         await supabase.auth.signOut();
         throw new Error('NO_ACCOUNT_FOUND');
       }
       // Logout previous RC session then login with this account's userId
       await loginRevenueCat(userId);
-      // Valid login — unsuppress so _layout.tsx can now handle the session
-      setSuppressAuthEvent(false);
+      // Yield to flush the Supabase SIGNED_IN delivery, THEN unsuppress.
+      // _layout.tsx's listener will now see the event with suppressAuthEvent=false.
+      await unsuppressAuthEvent();
       return { user, session, isNewUser: false, hasCompleteProfile: isComplete };
     }
 
     // ── SIGNUP ─────────────────────────────────────────────────────────────
     if (profileExists && isComplete) {
+      await unsuppressAuthEvent();
       await supabase.auth.signOut();
       throw new Error('ACCOUNT_EXISTS');
     }
@@ -189,13 +207,14 @@ export async function signInWithGoogle(mode: AuthMode): Promise<AuthResult> {
     // Logout previous RC session then login with this account's userId
     await loginRevenueCat(userId);
 
-    // Unsuppress so _layout.tsx reacts to the session and routes to complete-profile
-    setSuppressAuthEvent(false);
+    // Flush the SIGNED_IN delivery, then unsuppress so _layout.tsx
+    // routes the user to complete-profile.
+    await unsuppressAuthEvent();
     return { user, session, isNewUser: !profileExists, hasCompleteProfile: false };
 
   } catch (err) {
     // Always unsuppress on any error path so the listener isn't stuck
-    setSuppressAuthEvent(false);
+    await unsuppressAuthEvent();
     throw err;
   }
 }

@@ -26,7 +26,6 @@ import { type AppTheme } from '@/constants/theme';
 
 import { signInWithGoogle, type AuthMode } from '@/lib/auth';
 import { useAuthStore } from '@/lib/store';
-import { supabase } from '@/lib/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -53,7 +52,7 @@ function getErrorMessage(err: any): string {
 
 export default function Login() {
   const { theme } = useThemeStore();
-  const { setIsNewSignup, setUser, setSession } = useAuthStore();
+  const { setIsNewSignup } = useAuthStore();
 
   const [isLoading, setIsLoading] = useState(false);
   const [loadingTitle, setLoadingTitle] = useState('');
@@ -105,29 +104,19 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const result = await signInWithGoogle(mode);
+      // signInWithGoogle handles all auth + RC login + unsuppression.
+      // After it resolves, _layout.tsx's onAuthStateChange listener is the
+      // sole writer of user/session into the store — DO NOT call setUser /
+      // setSession here. Keep isLoading=true so the spinner stays visible
+      // until _layout.tsx navigates us away from this screen.
+      await signInWithGoogle(mode);
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('business_name, city')
-        .eq('id', result.user.id)
-        .maybeSingle();
-
-      setUser({
-        id: result.user.id,
-        email: result.user.email || '',
-        user_metadata: result.user.user_metadata,
-        hasCompleteProfile: !!(profile?.business_name && profile?.city),
-      });
-      setSession({
-        access_token: result.session.access_token,
-        refresh_token: result.session.refresh_token,
-      });
-
-      setIsLoading(false);
+      // Navigation is driven entirely by useProtectedRoute in _layout.tsx
+      // reacting to the store update from onAuthStateChange. We intentionally
+      // do NOT call setIsLoading(false) on the happy path — the screen will
+      // unmount when the router replaces it, so the spinner never flashes.
     } catch (err) {
       const msg = getErrorMessage(err);
-      
 
       setIsNewSignup(false);
       setIsLoading(false);
