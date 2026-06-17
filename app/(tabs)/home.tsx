@@ -389,18 +389,11 @@ const LiveBillingModal = memo(({
                   const qty = cur?.qty || 0;
                   return (
                     <View key={product.name} style={styles.productRow}>
-                      {/* Product icon */}
-                      <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: qty > 0 ? `${theme.colors.primary}18` : '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginRight: 10, flexShrink: 0 }}>
-                        <Ionicons name="shirt-outline" size={18} color={qty > 0 ? theme.colors.primary : '#9CA3AF'} />
-                      </View>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.productName} numberOfLines={1} ellipsizeMode="tail">{product.name}</Text>
                         <Text style={[styles.productPrice, { color: theme.colors.primary }]}>₹ {product.price.toFixed(2)}</Text>
                       </View>
                       <View style={[styles.qtyControl, { flexShrink: 0 }]}>
-                        <TouchableOpacity style={styles.qtyBtn} onPress={() => removeItem(product.name)}>
-                          <Ionicons name="remove" size={16} color={theme.colors.primary} />
-                        </TouchableOpacity>
                         <TouchableOpacity
                           style={[styles.qtyPill, qty > 0 && { backgroundColor: `${theme.colors.primary}18`, borderColor: theme.colors.primary }]}
                           onPress={() => {
@@ -409,13 +402,17 @@ const LiveBillingModal = memo(({
                             setQtyModalVisible(true);
                           }}
                         >
-                          <Text style={[styles.qtyPillText, qty > 0 && { color: theme.colors.primary }]}>
-                            {qty > 0 ? qty : '0'}
-                          </Text>
-                          <Ionicons name="create-outline" size={10} color={qty > 0 ? theme.colors.primary : '#9CA3AF'} style={{ marginLeft: 2 }} />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.qtyBtn} onPress={() => addItem(product)}>
-                          <Ionicons name="add" size={16} color={theme.colors.primary} />
+                          {qty > 0 ? (
+                            <>
+                              <Text style={[styles.qtyPillText, { color: theme.colors.primary }]}>{qty}</Text>
+                              <Ionicons name="create-outline" size={12} color={theme.colors.primary} style={{ marginLeft: 4 }} />
+                            </>
+                          ) : (
+                            <>
+                              <Ionicons name="add" size={14} color={theme.colors.primary} />
+                              <Text style={[styles.qtyPillText, { color: theme.colors.primary, marginLeft: 2 }]}>Add</Text>
+                            </>
+                          )}
                         </TouchableOpacity>
                       </View>
                       <Text style={[styles.lineTotal, { color: qty > 0 ? theme.colors.primary : '#ccc' }]}>₹ {(qty * product.price).toFixed(2)}</Text>
@@ -460,6 +457,10 @@ const LiveBillingModal = memo(({
           animationType="fade"
           onRequestClose={() => setQtyModalVisible(false)}
         >
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
           <TouchableWithoutFeedback onPress={() => setQtyModalVisible(false)}>
             <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
               <TouchableWithoutFeedback>
@@ -547,6 +548,7 @@ const LiveBillingModal = memo(({
               </TouchableWithoutFeedback>
             </View>
           </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
         </Modal>
       </Modal>
     </>
@@ -596,13 +598,14 @@ const QuickEntrySlideWrapper = memo(({
 
 // Quick Bill Modal
 const QuickEntryModal = memo(({
-  visible, onClose, onSave, theme, presetMode, __onAnimatedClose,
+  visible, onClose, onSave, theme, presetMode, initialData, __onAnimatedClose,
 }: {
   visible: boolean;
   onClose: () => void;
   onSave: (name: string, phone: string, amount: number, note: string, paymentMode: 'cash' | 'upi') => void;
   theme: AppTheme;
   presetMode?: 'cash' | 'upi' | null;
+  initialData?: { name: string; phone: string; amount: string; note: string; paymentMode: 'cash' | 'upi' } | null;
   __onAnimatedClose?: () => void;
 }) => {
   const insets = useSafeAreaInsets();
@@ -619,13 +622,21 @@ const QuickEntryModal = memo(({
 
   useEffect(() => {
     if (visible) {
-      setName('');
-      setPhone('');
-      setAmount('');
-      setNote('');
-      setPaymentMode(presetMode || 'cash');
+      if (initialData) {
+        setName(initialData.name);
+        setPhone(initialData.phone);
+        setAmount(initialData.amount);
+        setNote(initialData.note);
+        setPaymentMode(initialData.paymentMode);
+      } else {
+        setName('');
+        setPhone('');
+        setAmount('');
+        setNote('');
+        setPaymentMode(presetMode || 'cash');
+      }
     }
-  }, [visible, presetMode]);
+  }, [visible, presetMode, initialData]);
 
   const warn = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -660,8 +671,8 @@ const QuickEntryModal = memo(({
           <Ionicons name="arrow-back" size={22} color="#333" />
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={styles.liveBillingTitle}>Quick Bill</Text>
-          <Text style={styles.liveBillingSub}>Add name and amount quickly</Text>
+          <Text style={styles.liveBillingTitle}>{initialData ? 'Edit Quick Bill' : 'Quick Bill'}</Text>
+          <Text style={styles.liveBillingSub}>{initialData ? 'Update the details and save' : 'Add name and amount quickly'}</Text>
         </View>
         <TouchableOpacity onPress={doClose} style={[styles.lbCloseBtn, { backgroundColor: `${theme.colors.primary}20` }]}>
           <Ionicons name="close" size={20} color={theme.colors.primary} />
@@ -685,24 +696,22 @@ const QuickEntryModal = memo(({
           </View>
         </View>
 
-        <Text style={styles.qeLabel}>Customer Name</Text>
         <View style={styles.lbInputBox}>
           <Ionicons name="person-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
           <TextInput 
             style={styles.lbInput} 
-            placeholder="" 
+            placeholder="Customer Name" 
             value={name} 
             onChangeText={setName} 
             placeholderTextColor="#ccc" 
           />
         </View>
 
-        <Text style={[styles.qeLabel, { marginTop: 16 }]}>Phone (Optional)</Text>
-        <View style={styles.lbInputBox}>
+        <View style={[styles.lbInputBox, { marginTop: 12 }]}>
           <Ionicons name="call-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
           <TextInput 
             style={styles.lbInput} 
-            placeholder="" 
+            placeholder="Phone (Optional)" 
             value={phone} 
             onChangeText={setPhone} 
             keyboardType="phone-pad" 
@@ -710,12 +719,11 @@ const QuickEntryModal = memo(({
           />
         </View>
 
-        <Text style={[styles.qeLabel, { marginTop: 16 }]}>Amount (₹)</Text>
-        <View style={styles.lbInputBox}>
+        <View style={[styles.lbInputBox, { marginTop: 12 }]}>
           <Ionicons name="cash-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
           <TextInput
             style={[styles.lbInput, { fontSize: 18, color: theme.colors.primary, fontWeight: '700' }]}
-            placeholder="0.00"
+            placeholder="Amount (₹)"
             value={amount}
             onChangeText={setAmount}
             keyboardType="decimal-pad"
@@ -723,15 +731,18 @@ const QuickEntryModal = memo(({
           />
         </View>
 
-        <Text style={[styles.qeLabel, { marginTop: 16 }]}>Payment Note (Optional)</Text>
-        <View style={styles.lbInputBox}>
-          <Ionicons name="document-text-outline" size={18} color="#bbb" style={{ marginRight: 8 }} />
+        {/* Payment Note — notepad style */}
+        <View style={[styles.lbInputBox, { marginTop: 12, alignItems: 'flex-start', paddingTop: 10, paddingBottom: 10, minHeight: 110, borderStyle: 'dashed', backgroundColor: '#FEFCE8', borderColor: '#FDE68A' }]}>
+          <Ionicons name="create-outline" size={18} color="#bbb" style={{ marginRight: 8, marginTop: 2 }} />
           <TextInput 
-            style={styles.lbInput} 
-            placeholder="" 
+            style={[styles.lbInput, { paddingVertical: 0, textAlignVertical: 'top', lineHeight: 22, minHeight: 88 }]} 
+            placeholder={"Add a payment note...\n\ne.g. Advance for order, Pending balance, etc."} 
             value={note} 
             onChangeText={setNote} 
-            placeholderTextColor="#ccc" 
+            placeholderTextColor="#D1D5DB"
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
           />
         </View>
 
@@ -758,8 +769,8 @@ const QuickEntryModal = memo(({
 
       <View style={[styles.qeBottomBar, { paddingBottom: insets.bottom || 14 }]}>
         <TouchableOpacity style={[styles.qeSaveBtn, { backgroundColor: theme.colors.primary }]} onPress={handleSave}>
-          <Ionicons name="wallet-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
-          <Text style={styles.qeSaveBtnText}>Save Payment</Text>
+          <Ionicons name={initialData ? 'checkmark-circle-outline' : 'wallet-outline'} size={20} color="#fff" style={{ marginRight: 8 }} />
+          <Text style={styles.qeSaveBtnText}>{initialData ? 'Update Payment' : 'Save Payment'}</Text>
         </TouchableOpacity>
       </View>
     </QuickEntrySlideWrapper>
@@ -1086,6 +1097,7 @@ const SwipeableOrderButton = memo(({
 });
 
 // Bill Detail Modal — modern receipt style
+
 const BillDetailModal = memo(({
   visible,
   bill,
@@ -1093,6 +1105,7 @@ const BillDetailModal = memo(({
   onClose,
   onDelete,
   onSendWhatsApp,
+  onEdit,
   isMarked,
   onToggleMark,
   theme,
@@ -1104,6 +1117,7 @@ const BillDetailModal = memo(({
   onClose: () => void;
   onDelete?: (bill: SaleLog) => void;
   onSendWhatsApp?: (bill: SaleLog) => void;
+  onEdit?: (bill: SaleLog) => void;
   isMarked?: boolean;
   onToggleMark?: (billId: number) => void;
   theme: AppTheme;
@@ -1288,6 +1302,14 @@ const BillDetailModal = memo(({
                 <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
               </TouchableOpacity>
             ) : null}
+            {onEdit && (
+              <TouchableOpacity
+                onPress={() => onEdit(bill)}
+                style={{ width: 48, height: 48, borderRadius: 14, borderWidth: 1.5, borderColor: `${theme.colors.primary}40`, backgroundColor: `${theme.colors.primary}10`, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Ionicons name="create-outline" size={20} color={theme.colors.primary} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={{ flex: 1, height: 48, borderRadius: 14, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, elevation: 3 }}
               onPress={onClose}
@@ -3036,6 +3058,8 @@ const [currentDateTime, setCurrentDateTime] = useState('');
   const [selectedBillNumber, setSelectedBillNumber] = useState(0);
   const [deleteBillConfirmVisible, setDeleteBillConfirmVisible] = useState(false);
   const [billToDelete, setBillToDelete] = useState<SaleLog | null>(null);
+  const [editingBillId, setEditingBillId] = useState<number | null>(null);
+  const [quickEntryInitialData, setQuickEntryInitialData] = useState<{ name: string; phone: string; amount: string; note: string; paymentMode: 'cash' | 'upi' } | null>(null);
   const [pendingPaymentsVisible, setPendingPaymentsVisible] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingTotal, setPendingTotal] = useState(0);
@@ -3124,6 +3148,35 @@ const getBillNumberForDate = useCallback((billDate: string, currentBillId: numbe
     setDeleteBillConfirmVisible(true);
   }, []);
 
+  const handleEditBill = useCallback((bill: SaleLog) => {
+    setBillDetailVisible(false);
+    setEditingBillId(bill.id);
+    // Use same detection as BillDetailModal — isQuickBill flag OR single-item bill with a note field
+    const isQuickBill = bill.isQuickBill === true || (bill.note !== undefined && bill.note !== null && bill.items.length === 1);
+    if (isQuickBill) {
+      // Route through QuickEntryModal → QuickBillReviewModal
+      const billNote = bill.note || (bill.items[0]?.name !== 'Quick Bill' ? bill.items[0]?.name : '') || '';
+      setQuickEntryInitialData({
+        name: bill.customerName || '',
+        phone: bill.phone || '',
+        amount: String(bill.total),
+        note: billNote,
+        paymentMode: bill.paymentMode || 'cash',
+      });
+      setQuickEntryVisible(true);
+    } else {
+      // Route through LiveBillingModal → ReviewBillModal
+      setEditingSession({
+        id: bill.id,
+        customerName: bill.customerName,
+        phone: bill.phone || '',
+        items: bill.items.map(i => ({ ...i })),
+        npVal: '0',
+      });
+      setLiveBillingVisible(true);
+    }
+  }, []);
+
   const showSuccess = useCallback((msg: string) => {
     setToastMessage(msg);
     setToastType('success');
@@ -3135,6 +3188,29 @@ const getBillNumberForDate = useCallback((billDate: string, currentBillId: numbe
     setToastType('error');
     setShowToast(true);
   }, []);
+
+  const handleUpdateBill = useCallback(async (updated: SaleLog) => {
+    try {
+      await DatabaseService.deleteSaleLog(updated.id);
+      const dbId = await DatabaseService.addSaleLog(updated, salesLog.filter(b => b.id !== updated.id));
+      if (dbId !== null) updated.id = dbId;
+
+      setSalesLog(prev => prev.map(b => b.id === updated.id ? updated : b));
+      setTodaysBills(prev => prev.map(b => b.id === updated.id ? updated : b));
+      setTodayTotal(prev => {
+        const oldBill = salesLog.find(b => b.id === updated.id);
+        return prev - (oldBill?.total ?? 0) + updated.total;
+      });
+
+      setEditingBillId(null);
+      setQuickEntryInitialData(null);
+      setSelectedBill(updated);
+      setBillDetailVisible(true);
+      showSuccess('Bill updated!');
+    } catch (e) {
+      showError('Failed to update bill');
+    }
+  }, [salesLog, showSuccess, showError]);
 
   const confirmDeleteBill = useCallback(async () => {
     if (!billToDelete) return;
@@ -3507,6 +3583,25 @@ const handleComplete = useCallback((customerName: string, phone: string, items: 
       qty: 1
     });
   }
+
+  // ── EDIT MODE: update existing bill ──────────────────────────────────────
+  if (editingBillId) {
+    const origBill = salesLog.find(b => b.id === editingBillId);
+    if (!origBill) return;
+    const updated: SaleLog = {
+      ...origBill,
+      customerName: reviewData.customerName,
+      phone: reviewData.customerPhone || '',
+      items: allItems,
+      total: reviewData.total + extraChargesAmount,
+      paymentMode,
+    };
+    setBillReviewVisible(false);
+    setEditingSession(null);
+    setReviewData({ customerName: '', customerPhone: '', items: [], total: 0, sessionId: null });
+    await handleUpdateBill(updated);
+    return;
+  }
   
   const newBill: SaleLog = {
     id: Date.now() + Math.floor(Math.random() * 10000),
@@ -3550,7 +3645,7 @@ const handleComplete = useCallback((customerName: string, phone: string, items: 
     console.error('Failed to save bill:', error);
     showError('Failed to save bill. Please try again.');
   }
-}, [reviewData, salesLog, showSuccess, showError]);
+}, [reviewData, salesLog, showSuccess, showError, editingBillId, handleUpdateBill]);
 
   const handleSendBillWhatsApp = useCallback(async (bill: SaleLog) => {
     if (!bill.phone || !bill.phone.trim()) {
@@ -3818,6 +3913,7 @@ const handleQuickReviewConfirm = useCallback(async () => {
         billNumber={selectedBillNumber}
         onClose={() => setBillDetailVisible(false)}
         onDelete={handleDeleteBill}
+        onEdit={handleEditBill}
         onSendWhatsApp={handleSendBillWhatsApp}
         isMarked={selectedBill ? markedBillIds.has(selectedBill.id) : false}
         onToggleMark={handleToggleMarkBill}
@@ -3854,7 +3950,14 @@ const handleQuickReviewConfirm = useCallback(async () => {
 
       <LiveBillingModal
         visible={liveBillingVisible}
-        onClose={() => { setLiveBillingVisible(false); }}
+        onClose={() => { 
+          setLiveBillingVisible(false); 
+          if (editingBillId) { 
+            setBillDetailVisible(true); 
+            setEditingBillId(null); 
+            setEditingSession(null);
+          }
+        }}
         onSaveAndBack={handleSaveAndBack}
         onComplete={handleComplete}
         session={editingSession}
@@ -3864,10 +3967,11 @@ const handleQuickReviewConfirm = useCallback(async () => {
 
       <QuickEntryModal
         visible={quickEntryVisible}
-        onClose={() => { setQuickEntryVisible(false); setQuickEntryPresetMode(null); }}
+        onClose={() => { setQuickEntryVisible(false); setQuickEntryPresetMode(null); setQuickEntryInitialData(null); if (editingBillId) { setBillDetailVisible(true); setEditingBillId(null); } }}
         onSave={handleQuickEntrySave}
         theme={theme}
         presetMode={quickEntryPresetMode}
+        initialData={quickEntryInitialData}
       />
 
       <QuickBillReviewModal
@@ -3876,7 +3980,25 @@ const handleQuickReviewConfirm = useCallback(async () => {
           setQuickReviewVisible(false);
           setQuickEntryVisible(true); // go back to editing
         }}
-        onConfirm={handleQuickReviewConfirm}
+        onConfirm={editingBillId ? async () => {
+          if (!quickReviewData || !editingBillId) return;
+          const { name, phone, amount, note, paymentMode } = quickReviewData;
+          const origBill = salesLog.find(b => b.id === editingBillId);
+          if (!origBill) return;
+          const updated: SaleLog = {
+            ...origBill,
+            customerName: name,
+            phone,
+            total: amount,
+            note: note || '',
+            paymentMode,
+            items: [{ name: note || 'Quick Bill', price: amount, qty: 1 }],
+          };
+          setQuickReviewVisible(false);
+          setQuickEntryVisible(false);
+          setQuickReviewData(null);
+          await handleUpdateBill(updated);
+        } : handleQuickReviewConfirm}
         data={quickReviewData}
         theme={theme}
       />
@@ -3884,25 +4006,31 @@ const handleQuickReviewConfirm = useCallback(async () => {
       <ReviewBillModal
         visible={billReviewVisible}
         onClose={() => { 
-          // Update editingSession with current reviewData before opening editor
-          if (editingSession) {
-            setEditingSession({ 
-              ...editingSession, 
-              customerName: reviewData.customerName, 
-              phone: reviewData.customerPhone, 
-              items: reviewData.items 
-            });
+          if (editingBillId) {
+            // In edit mode: back from review goes to live billing editor
+            setBillReviewVisible(false);
+            setLiveBillingVisible(true);
           } else {
-            setEditingSession({
-              id: Date.now(),
-              customerName: reviewData.customerName,
-              phone: reviewData.customerPhone,
-              items: reviewData.items,
-              npVal: '0'
-            });
+            // Normal mode: back to live billing with session restored
+            if (editingSession) {
+              setEditingSession({ 
+                ...editingSession, 
+                customerName: reviewData.customerName, 
+                phone: reviewData.customerPhone, 
+                items: reviewData.items 
+              });
+            } else {
+              setEditingSession({
+                id: Date.now(),
+                customerName: reviewData.customerName,
+                phone: reviewData.customerPhone,
+                items: reviewData.items,
+                npVal: '0'
+              });
+            }
+            setBillReviewVisible(false); 
+            setLiveBillingVisible(true); 
           }
-          setBillReviewVisible(false); 
-          setLiveBillingVisible(true); 
         }}
         onConfirm={handleConfirmBill}
         customerName={reviewData.customerName}
@@ -4226,7 +4354,7 @@ aiBtnText: {
   qtyControl: { flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: 10, flexShrink: 0 },
   qtyBtn: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
   qtyText: { fontSize: 14, fontWeight: '800', color: '#111', minWidth: 18, textAlign: 'center' },
-  qtyPill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#F3F4F6', borderRadius: 8, borderWidth: 1.5, borderColor: '#E5E7EB', minWidth: 44 },
+  qtyPill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#F3F4F6', borderRadius: 10, borderWidth: 1.5, borderColor: '#E5E7EB', minWidth: 64 },
   qtyPillText: { fontSize: 13, fontWeight: '800', color: '#9CA3AF' },
   lineTotal: { fontSize: 13, fontWeight: '800', width: 68, textAlign: 'right' },
   billSummaryBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#EEF2FF', paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#D1D5DB' },
