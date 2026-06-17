@@ -16,11 +16,22 @@ let _rcReadyPromise: Promise<boolean> = new Promise<boolean>((resolve) => {
   _rcReadyResolve = resolve;
 });
 
+// Tracks whether initRevenueCat() has been kicked off at least once this
+// app session. Without this, rcReady() can hang forever — e.g. during a
+// fresh sign-in on a cold start with no prior session, loginRevenueCat()
+// awaits rcReady() before anything has ever called initRevenueCat().
+let _rcInitStarted = false;
+
 export async function rcReady(): Promise<boolean> {
+  if (!_rcInitStarted) {
+    _rcInitStarted = true;
+    initRevenueCat().catch((e) => console.warn('⚠️ RC lazy-init failed:', e));
+  }
   return _rcReadyPromise;
 }
 
 export async function initRevenueCat() {
+  _rcInitStarted = true;
   // Reset the gate so this call produces a fresh result.
   // Any in-flight awaiter on rcReady() will now await the new promise.
   _rcReadyPromise = new Promise<boolean>((resolve) => {

@@ -52,7 +52,7 @@ function getErrorMessage(err: any): string {
 
 export default function Login() {
   const { theme } = useThemeStore();
-  const { setIsNewSignup } = useAuthStore();
+  const { setIsNewSignup, setUser, setSession } = useAuthStore();
 
   const [isLoading, setIsLoading] = useState(false);
   const [loadingTitle, setLoadingTitle] = useState('');
@@ -104,17 +104,30 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      // signInWithGoogle handles all auth + RC login + unsuppression.
-      // After it resolves, _layout.tsx's onAuthStateChange listener is the
-      // sole writer of user/session into the store — DO NOT call setUser /
-      // setSession here. Keep isLoading=true so the spinner stays visible
-      // until _layout.tsx navigates us away from this screen.
-      await signInWithGoogle(mode);
+      // signInWithGoogle() suppresses _layout.tsx's onAuthStateChange
+      // listener for its entire duration, and the one real SIGNED_IN event
+      // Supabase fires for this login happens WHILE it's suppressed —
+      // unsuppressing afterward does not replay it. So the listener is not
+      // a reliable writer of user/session for this flow. Write the store
+      // directly from the result instead. Keep isLoading=true so the
+      // spinner stays visible until _layout.tsx navigates us away.
+      const result = await signInWithGoogle(mode);
+
+      setUser({
+        id: result.user.id,
+        email: result.user.email || '',
+        user_metadata: result.user.user_metadata,
+        hasCompleteProfile: result.hasCompleteProfile,
+      });
+      setSession({
+        access_token: result.session.access_token,
+        refresh_token: result.session.refresh_token,
+      });
 
       // Navigation is driven entirely by useProtectedRoute in _layout.tsx
-      // reacting to the store update from onAuthStateChange. We intentionally
-      // do NOT call setIsLoading(false) on the happy path — the screen will
-      // unmount when the router replaces it, so the spinner never flashes.
+      // reacting to this store update. We intentionally do NOT call
+      // setIsLoading(false) on the happy path — the screen will unmount
+      // when the router replaces it, so the spinner never flashes.
     } catch (err) {
       const msg = getErrorMessage(err);
 
