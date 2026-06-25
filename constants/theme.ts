@@ -35,6 +35,7 @@ export interface AppTheme {
   };
 }
 
+
 export const THEMES: Record<ThemeId, AppTheme> = {
   default: {
     id: 'default',
@@ -144,7 +145,7 @@ export const THEMES: Record<ThemeId, AppTheme> = {
     id: 'rose',
     name: 'Rose',
     description: 'Elegant pinks & rose tones',
-    preview: ['#E11D48', '#BE185D'],
+    preview: ['#E11D48', 'theme.colors.prima#BE185D'],
     colors: {
       primary: '#E11D48',
       primaryLight: '#FFF1F2',

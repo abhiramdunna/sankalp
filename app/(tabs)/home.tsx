@@ -476,7 +476,7 @@ const LiveBillingModal = memo(({
                     </Text>
                   </View>
                   <Text style={{ fontSize: 12, color: '#9CA3AF', fontWeight: '600', marginBottom: 16, marginLeft: 26 }}>
-                    ₹ {qtyModalProduct?.price.toFixed(2)} per unit — supports decimals (e.g. 0.5, 1.25)
+                    ₹ {qtyModalProduct?.price.toFixed(2)} per unit 
                   </Text>
 
                   {/* Big input */}
@@ -505,7 +505,7 @@ const LiveBillingModal = memo(({
 
                   {/* Quick presets */}
                   <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-                    {['0.25', '0.5', '0.75', '1', '1.5', '2', '5', '10'].map(preset => (
+                    {['1', '5', '10', '20.5'].map(preset => (
                       <TouchableOpacity
                         key={preset}
                         onPress={() => setQtyModalVal(preset)}

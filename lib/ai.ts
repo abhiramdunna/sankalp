@@ -75,10 +75,14 @@ class AIService {
       // -------------------------
       // TODAY SALES ONLY
       // -------------------------
-      const today = new Date().toISOString().split('T')[0];
+      // Sales are stored as "18 Jun" format (DD MMM), so we build today's
+      // date in the same format for comparison.
+      const now = new Date();
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const todayFormatted = `${now.getDate()} ${months[now.getMonth()]}`;
 
       const todaySales = salesLog.filter(
-        (sale) => sale.date === today
+        (sale) => sale.date === todayFormatted
       );
 
       context += `TODAY SALES:\n`;
