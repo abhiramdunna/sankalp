@@ -410,19 +410,28 @@ const TransactionHistoryScreen = memo(({
               const bgColor = isBill ? '#FFF7ED' : '#F0FDF4';
               const iconColor = isBill ? '#F97316' : '#16A34A';
               const iconName = isBill ? 'document-text' : 'checkmark-circle';
-              const txLabel = isBill ? 'Bill Added' : 'Payment';
-              const amountColor = isBill ? '#0F172A' : '#16A34A';
+              const billNoteText = tx.billName && tx.billName !== 'Bill' ? tx.billName : '';
+              const dateParts = tx.date.split(' ');
+              const dateDisplay = dateParts.slice(0, 3).join(' ');
+              const timeDisplay = dateParts[3] || '';
+              const amountColor = isBill ? '#EF4444' : '#16A34A';
               
               return (
-                <View key={`${tx.id}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#E5E7EB' }}>
-                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: bgColor, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                    <Ionicons name={iconName} size={22} color={iconColor} />
+                <View key={`${tx.id}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 }}>
+                  <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: bgColor, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                    <Ionicons name={iconName as any} size={20} color={iconColor} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A' }}>{txLabel}</Text>
-                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#64748B', marginTop: 1 }}>{tx.billName}</Text>
+                    {isBill ? (
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A', marginBottom: 2 }}>
+                        {billNoteText || 'Bill'}
+                      </Text>
+                    ) : (
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A', marginBottom: 2 }}>Payment</Text>
+                    )}
+                    <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500' }}>{dateDisplay}{timeDisplay ? `  ·  ${timeDisplay}` : ''}</Text>
                   </View>
-                  <Text style={{ fontSize: 16, fontWeight: '900', color: amountColor }}>{fmt(tx.amount)}</Text>
+                  <Text style={{ fontSize: 15, fontWeight: '900', color: amountColor }}>{isBill ? `+${fmt(tx.amount)}` : `-${fmt(tx.amount)}`}</Text>
                 </View>
               );
             })}
@@ -597,130 +606,99 @@ const SupplierDetailScreen = ({
   const insets = useSafeAreaInsets();
   const { theme } = useThemeStore();
   const styles = makeStyles(theme);
-  const [billModal, setBillModal] = useState(false);
+
+  // Modal state
+  const [addBillModal, setAddBillModal] = useState(false);
   const [payModal, setPayModal] = useState(false);
-  const [clearedBillsModal, setClearedBillsModal] = useState(false);
-  const [historyModal, setHistoryModal] = useState(false);
-  const [transactionHistoryFullScreen, setTransactionHistoryFullScreen] = useState(false);
-  const [payBillModalVisible, setPayBillModalVisible] = useState(false);
-  const [payBillSelectedId, setPayBillSelectedId] = useState<number | null>(null);
-  const [payBillAmountStr, setPayBillAmountStr] = useState('');
-  const [billForm, setBillForm] = useState({ name: '', amount: '', items: '' });
-  const [payForm, setPayForm] = useState({ billId: 0, amount: '' });
+
+  // Add bill form
+  const [billAmount, setBillAmount] = useState('');
+  const [billNote, setBillNote] = useState('');
+
+  // Edit bill
+  const [editBillModal, setEditBillModal] = useState(false);
+  const [editingBill, setEditingBill] = useState<Bill | null>(null);
+  const [editBillAmount, setEditBillAmount] = useState('');
+  const [editBillNote, setEditBillNote] = useState('');
+
+  // Pay form
+  const [payAmount, setPayAmount] = useState('');
+
+  // Toast
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
 
-  // Handle Android hardware back button — go back to supplier list, not out of the app
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToastMessage(msg);
+    setToastType(type);
+    setToastVisible(true);
+  };
+
+  // Hardware back button
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        if (billModal) { setBillModal(false); return true; }
+        if (addBillModal) { setAddBillModal(false); return true; }
         if (payModal) { setPayModal(false); return true; }
-        if (clearedBillsModal) { setClearedBillsModal(false); return true; }
-        if (historyModal) { setHistoryModal(false); return true; }
-        if (transactionHistoryFullScreen) { setTransactionHistoryFullScreen(false); return true; }
-        if (payBillModalVisible) { setPayBillModalVisible(false); return true; }
+        if (editBillModal) { setEditBillModal(false); return true; }
         onBack();
         return true;
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
       return () => sub.remove();
-    }, [billModal, payModal, clearedBillsModal, historyModal, transactionHistoryFullScreen, payBillModalVisible, onBack])
+    }, [addBillModal, payModal, editBillModal, onBack])
   );
 
-  // If full-screen transaction history is open, show it
-  if (transactionHistoryFullScreen) {
-    return (
-      <TransactionHistoryScreen
-        supplier={supplier}
-        onBack={() => setTransactionHistoryFullScreen(false)}
-        insetTop={insets.top}
-      />
-    );
-  }
-
+  // Computed values
   const totalPending = getPending(supplier);
   const accentColor = getAvatarColor(supplier.id);
-  const pendingBills = supplier.bills.filter((b) => b.amount - b.paid > 0);
-  const clearedBills = supplier.bills.filter((b) => b.amount - b.paid <= 0);
-  
-  // Group cleared bills by date
-  const clearedBillsByDate = (() => {
-    const sorted = [...clearedBills].sort((a, b) => {
-      return parseDate(b.date).getTime() - parseDate(a.date).getTime();
-    });
-    const groups: Record<string, Bill[]> = {};
-    sorted.forEach((bill) => {
-      if (!groups[bill.date]) groups[bill.date] = [];
-      groups[bill.date].push(bill);
-    });
-    return Object.entries(groups).map(([title, data]) => ({ title, data }));
-  })();
+  const hasPending = totalPending > 0;
 
-  // History sections (date-grouped, ALL transactions — bills + payments)
-  // Falls back to building from supplier.bills if transactions table is empty
-  const historySections = (() => {
-    const allTxs = supplier.transactions;
-
-    // If no transactions exist (e.g. older records only saved in bills array),
-    // synthesize bill + payment entries from supplier.bills so history is never blank
-    const source: Transaction[] =
-      allTxs.length > 0
-        ? allTxs
-        : supplier.bills.flatMap((b) => {
-            const entries: Transaction[] = [{
-              id: b.id,
+  // Build ledger entries from transactions (newest first)
+  const ledgerEntries = useMemo(() => {
+    const allTxs = supplier.transactions.length > 0
+      ? supplier.transactions
+      : supplier.bills.flatMap((b): Transaction[] => {
+          const entries: Transaction[] = [{
+            id: b.id,
+            date: b.date,
+            type: 'bill',
+            billId: b.id,
+            billName: b.name,
+            amount: b.amount,
+          }];
+          if (b.paid > 0) {
+            entries.push({
+              id: b.id - 1,
               date: b.date,
-              type: 'bill' as const,
+              type: 'payment',
               billId: b.id,
               billName: b.name,
-              amount: b.amount,
-            }];
-            if (b.paid > 0) {
-              entries.push({
-                id: b.id - 1,
-                date: b.date,
-                type: 'payment' as const,
-                billId: b.id,
-                billName: b.name,
-                amount: b.paid,
-              });
-            }
-            return entries;
-          });
+              amount: b.paid,
+            });
+          }
+          return entries;
+        });
+    return [...allTxs].sort((a, b) => parseDate(b.date).getTime() - parseDate(a.date).getTime());
+  }, [supplier.transactions, supplier.bills]);
 
-    const sorted = [...source].sort((a, b) => b.id - a.id);
-    const groups: Record<string, Transaction[]> = {};
-    sorted.forEach((tx) => {
-      const dateOnly = tx.date.split(' ').slice(0, 3).join(' ');
-      if (!groups[dateOnly]) groups[dateOnly] = [];
-      groups[dateOnly].push(tx);
-    });
-    return Object.entries(groups).map(([title, data]) => ({ title, data }));
-  })();
-
-  const addBill = () => {
-    const amount = parseFloat(billForm.amount);
-    if (!billForm.name.trim() || isNaN(amount) || amount <= 0) {
-      Alert.alert('Error', 'Enter bill name and valid amount');
+  // Add bill handler
+  const handleAddBill = () => {
+    const amount = parseFloat(billAmount);
+    if (isNaN(amount) || amount <= 0) {
+      showToast('Enter a valid amount', 'error');
       return;
     }
 
-    // Parse items if provided
-    const items = billForm.items.trim() 
-      ? billForm.items.split('\n').map(item => item.trim()).filter(item => item.length > 0)
-      : [];
-
+    const note = billNote.trim() || 'Bill';
     const newBill: Bill = {
       id: uniqueId(),
-      name: billForm.name.trim(),
+      name: note,
       date: todayStr(),
       amount,
       paid: 0,
-      items: items.length > 0 ? items : undefined,
     };
-
     const newTx: Transaction = {
       id: uniqueId(),
       date: todayStr(),
@@ -730,57 +708,102 @@ const SupplierDetailScreen = ({
       amount,
     };
 
-    const updatedSupplier = {
+    onUpdate({
       ...supplier,
       bills: [...supplier.bills, newBill],
       transactions: [...supplier.transactions, newTx],
-    };
-    onUpdate(updatedSupplier);
-    setBillForm({ name: '', amount: '', items: '' });
-    setBillModal(false);
+    });
+
+    setBillAmount('');
+    setBillNote('');
+    setAddBillModal(false);
+    showToast(`${fmt(amount)} bill added`);
   };
 
-  const recordPayment = () => {
-    const amount = parseFloat(payForm.amount);
-    if (!payForm.billId || isNaN(amount) || amount <= 0) {
-      Alert.alert('Error', 'Select a bill and enter valid amount');
+  // Pay handler — distributes payment across oldest pending bills first
+  const handlePay = () => {
+    const amount = parseFloat(payAmount);
+    if (isNaN(amount) || amount <= 0) {
+      showToast('Enter a valid amount', 'error');
+      return;
+    }
+    if (amount > totalPending) {
+      showToast(`Max payable is ${fmt(totalPending)}`, 'error');
       return;
     }
 
-    const bill = supplier.bills.find((b) => b.id === payForm.billId);
-    if (!bill) return;
+    // Distribute payment: oldest pending bill first
+    let remaining = amount;
+    const updatedBills = [...supplier.bills].map(b => ({ ...b }));
+    const newTxs: Transaction[] = [];
 
-    const maxPay = bill.amount - bill.paid;
-    if (amount > maxPay) {
-      Alert.alert('Error', `Max payable for this bill: ${fmt(maxPay)}`);
-      return;
+    // Sort by id ascending (oldest first) for payment distribution
+    const pendingBills = [...updatedBills]
+      .filter(b => b.amount - b.paid > 0)
+      .sort((a, b) => a.id - b.id);
+
+    for (const bill of pendingBills) {
+      if (remaining <= 0) break;
+      const due = bill.amount - bill.paid;
+      const paying = Math.min(remaining, due);
+      remaining -= paying;
+
+      // Update the bill in the main array
+      const idx = updatedBills.findIndex(b => b.id === bill.id);
+      if (idx !== -1) updatedBills[idx].paid += paying;
+
+      newTxs.push({
+        id: uniqueId(),
+        date: todayStr(),
+        type: 'payment',
+        billId: bill.id,
+        billName: bill.name,
+        amount: paying,
+      });
     }
 
-    const newTx: Transaction = {
-      id: uniqueId(),
-      date: todayStr(),
-      type: 'payment',
-      billId: bill.id,
-      billName: bill.name,
-      amount,
-    };
-
-    const updatedBills = supplier.bills.map((b) =>
-      b.id === payForm.billId ? { ...b, paid: b.paid + amount } : b
-    );
-
-    const updatedSupplier = {
+    onUpdate({
       ...supplier,
       bills: updatedBills,
-      transactions: [...supplier.transactions, newTx],
-    };
-    onUpdate(updatedSupplier);
-    setPayForm({ billId: 0, amount: '' });
+      transactions: [...supplier.transactions, ...newTxs],
+    });
+
+    setPayAmount('');
     setPayModal(false);
-    setToastMessage(`${fmt(amount)} paid towards "${bill.name}"`);
-    setToastType('success');
-    setToastVisible(true);
+    showToast(`${fmt(amount)} paid — pending now ${fmt(Math.max(0, totalPending - amount))}`);
   };
+
+  const parsedPay = parseFloat(payAmount);
+  const payValid = !isNaN(parsedPay) && parsedPay > 0 && parsedPay <= totalPending;
+
+  const parsedBill = parseFloat(billAmount);
+  const billValid = !isNaN(parsedBill) && parsedBill > 0;
+
+  // Edit bill handler
+  const handleEditBill = () => {
+    if (!editingBill) return;
+    const amount = parseFloat(editBillAmount);
+    if (isNaN(amount) || amount <= 0) {
+      showToast('Enter a valid amount', 'error');
+      return;
+    }
+    const note = editBillNote.trim() || 'Bill';
+    const diff = amount - editingBill.amount;
+    const updatedBill: Bill = { ...editingBill, amount, name: note };
+    const updatedBills = supplier.bills.map(b => b.id === editingBill.id ? updatedBill : b);
+    const updatedTxs = supplier.transactions.map(tx =>
+      tx.billId === editingBill.id && tx.type === 'bill'
+        ? { ...tx, billName: note, amount }
+        : tx
+    );
+    onUpdate({ ...supplier, bills: updatedBills, transactions: updatedTxs });
+    setEditBillModal(false);
+    setEditingBill(null);
+    showToast('Bill updated', 'success');
+  };
+
+  const editBillParsed = parseFloat(editBillAmount);
+  const editBillValid = !isNaN(editBillParsed) && editBillParsed > 0;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -800,510 +823,386 @@ const SupplierDetailScreen = ({
             <Text style={styles.appBarCategory}>{supplier.category}</Text>
           </View>
         </View>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TouchableOpacity 
-            onPress={() => {
-              Alert.alert(
-                'Delete Supplier',
-                `Are you sure you want to delete ${supplier.name}?`,
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: () => {
-                      onDelete(supplier);
-                      onBack();
-                    }
-                  }
-                ]
-              );
-            }}
-            style={styles.deleteHeaderBtn}
-          >
-            <Ionicons name="trash-outline" size={22} color="#EF4444" />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={() => setTransactionHistoryFullScreen(true)}
-            style={styles.deleteHeaderBtn}
-          >
-            <Ionicons name="time-outline" size={22} color={theme.colors.primary} />
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          onPress={() => {
+            Alert.alert(
+              'Delete Supplier',
+              `Are you sure you want to delete ${supplier.name}? This cannot be undone.`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: () => {
+                    onDelete(supplier);
+                    onBack();
+                  },
+                },
+              ]
+            );
+          }}
+          style={styles.deleteHeaderBtn}
+        >
+          <Ionicons name="trash-outline" size={20} color="#EF4444" />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Summary Card */}
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>TOTAL PENDING</Text>
-          <Text style={[styles.summaryAmount, totalPending === 0 && { color: '#16A34A' }]}>
-            {totalPending === 0 ? 'All Clear ✅' : fmt(totalPending)}
+      <ScrollView
+        contentContainerStyle={styles.khataScroll}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Pending Amount Card */}
+        <View style={[
+          styles.khataHeroCard,
+          !hasPending && styles.khataHeroCardClear,
+        ]}>
+          <Text style={styles.khataHeroLabel}>TOTAL PENDING</Text>
+          <Text style={[
+            styles.khataHeroAmount,
+            !hasPending && { color: '#16A34A' },
+          ]}>
+            {fmt(totalPending)}
           </Text>
-          {totalPending > 0 && (
-            <Text style={styles.summaryNote}>
-              across {pendingBills.length} bill{pendingBills.length !== 1 ? 's' : ''}
-            </Text>
-          )}
+
         </View>
 
         {/* Action Buttons */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.colors.primary }]} onPress={() => setBillModal(true)}>
-            <Ionicons name="document-text-outline" size={17} color="#fff" style={{ marginRight: 6 }} />
-            <Text style={styles.primaryBtnText}>Add Bill</Text>
+        <View style={styles.khataActions}>
+          <TouchableOpacity
+            style={[styles.khataActionBtn, { backgroundColor: theme.colors.primary }]}
+            onPress={() => { setBillAmount(''); setBillNote(''); setAddBillModal(true); }}
+          >
+            <Ionicons name="add-circle-outline" size={20} color="#fff" style={{ marginRight: 6 }} />
+            <Text style={styles.khataActionBtnText}>Add Bill</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.outlineBtn, pendingBills.length === 0 && { opacity: 0.4 }]}
+            style={[
+              styles.khataActionBtnOutline,
+              { borderColor: hasPending ? '#16A34A' : '#CBD5E1' },
+              !hasPending && { opacity: 0.4 },
+            ]}
             onPress={() => {
-              if (pendingBills.length === 0) return;
-              setPayBillSelectedId(pendingBills.length === 1 ? pendingBills[0].id : null);
-              setPayBillAmountStr('');
-              setPayBillModalVisible(true);
+              if (!hasPending) return;
+              setPayAmount('');
+              setPayModal(true);
             }}
           >
-            <Ionicons name="cash-outline" size={17} color={theme.colors.primary} style={{ marginRight: 6 }} />
-            <Text style={[styles.outlineBtnText, { color: theme.colors.primary }]}>Pay Bill</Text>
+            <Ionicons name="cash-outline" size={20} color={hasPending ? '#16A34A' : '#94A3B8'} style={{ marginRight: 6 }} />
+            <Text style={[styles.khataActionBtnOutlineText, { color: hasPending ? '#16A34A' : '#94A3B8' }]}>
+              Pay Amount
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Bills Section */}
-        {supplier.bills.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.billsHeader}>
-              <Text style={styles.sectionTitle}>Bills</Text>
-              {clearedBills.length > 0 && (
-                <TouchableOpacity onPress={() => setClearedBillsModal(true)}>
-                  <Text style={[styles.seeAllBtn, { color: theme.colors.primary }]}>See All</Text>
-                </TouchableOpacity>
-              )}
+        {/* Ledger */}
+        <View style={styles.khataLedgerSection}>
+          <Text style={styles.khataLedgerTitle}>Transaction History</Text>
+
+          {ledgerEntries.length === 0 ? (
+            <View style={styles.khataEmpty}>
+              <Text style={styles.khataEmptyIcon}>🧾</Text>
+              <Text style={styles.khataEmptyTitle}>No transactions yet</Text>
+              <Text style={styles.khataEmptySub}>Tap "Add Bill" to start tracking</Text>
             </View>
-            {pendingBills.length > 0 ? (
-              [...pendingBills].sort((a, b) => b.id - a.id).map((bill) => {
-                const remaining = bill.amount - bill.paid;
-                const progress = bill.amount > 0 ? bill.paid / bill.amount : 0;
-                return (
-                  <View key={bill.id} style={styles.billCard}>
-                    <View style={styles.billHeader}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.billName}>{bill.name}</Text>
-                        <Text style={styles.billDate}>{bill.date}</Text>
-                      </View>
-                      <TouchableOpacity
-                        onPress={() => {
-                          Alert.alert(
-                            'Delete Bill',
-                            `Delete "${bill.name}"? This cannot be undone.`,
-                            [
-                              { text: 'Cancel', style: 'cancel' },
-                              {
-                                text: 'Delete',
-                                style: 'destructive',
-                                onPress: () => {
-                                  const updatedBills = supplier.bills.filter(b => b.id !== bill.id);
-                                  const updatedTx = supplier.transactions.filter(tx => tx.billId !== bill.id);
-                                  onUpdate({ ...supplier, bills: updatedBills, transactions: updatedTx });
-                                },
-                              },
-                            ]
-                          );
-                        }}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        style={{ padding: 4, marginLeft: 8 }}
-                      >
-                        <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                      </TouchableOpacity>
-                    </View>
+          ) : (
+            ledgerEntries.map((entry, index) => {
+              const isBill = entry.type === 'bill';
+              const dateParts = entry.date.split(' ');
+              const dateDisplay = dateParts.slice(0, 3).join(' ');
+              const timeDisplay = dateParts[3] || '';
+              const noteText = entry.billName && entry.billName !== 'Bill' ? entry.billName : '';
+              const bgColor = isBill ? '#FFF7ED' : '#F0FDF4';
+              const iconColor = isBill ? '#F97316' : '#16A34A';
+              const iconName = isBill ? 'document-text' : 'checkmark-circle';
+              return (
+                <TouchableOpacity
+                  key={`${entry.id}-${index}`}
+                  onPress={() => {
+                    if (isBill) {
+                      const bill = supplier.bills.find(b => b.id === entry.billId);
+                      if (bill) {
+                        setEditingBill(bill);
+                        setEditBillAmount(String(bill.amount));
+                        setEditBillNote(bill.name !== 'Bill' ? bill.name : '');
+                        setEditBillModal(true);
+                      }
+                    }
+                  }}
+                  activeOpacity={isBill ? 0.7 : 1}
+                  style={[
+                    styles.phonePeEntry,
+                    index < ledgerEntries.length - 1 && styles.khataEntryBorder,
+                  ]}
+                >
+                  {/* Icon */}
+                  <View style={[styles.phonePeIcon, { backgroundColor: bgColor }]}>
+                    <Ionicons name={iconName as any} size={20} color={iconColor} />
+                  </View>
 
-                    {progress > 0 && progress < 1 && (
-                      <View style={styles.progressTrack}>
-                        <View
-                          style={[
-                            styles.progressFill,
-                            {
-                              width: `${Math.round(progress * 100)}%` as any,
-                              backgroundColor: theme.colors.primary,
-                            },
-                          ]}
-                        />
-                      </View>
-                    )}
-
-                    <View style={styles.billMeta}>
-                      <View style={styles.billMetaCell}>
-                        <Text style={styles.billMetaValue}>{fmt(bill.amount)}</Text>
-                        <Text style={styles.billMetaName}>Total Bill</Text>
-                      </View>
-                      <View style={[styles.billMetaCell, { alignItems: 'flex-end' }]}>
-                        <Text
-                          style={[
-                            styles.billMetaValue,
-                            { color: '#EF4444' },
-                          ]}
-                        >
-                          {fmt(remaining)}
-                        </Text>
-                        <Text style={styles.billMetaName}>Pending</Text>
-                      </View>
-                    </View>
-
-                    {bill.items && bill.items.length > 0 && (
-                      <View style={styles.billItems}>
-                        <Text style={styles.billItemsTitle}>Items:</Text>
-                        {bill.items.map((item, idx) => (
-                          <Text key={idx} style={styles.billItem}>• {item}</Text>
-                        ))}
-                      </View>
+                  {/* Info */}
+                  <View style={{ flex: 1 }}>
+                    {isBill ? (
+                      <>
+                        {noteText ? (
+                          <Text style={styles.phonePeNote}>{noteText}</Text>
+                        ) : (
+                          <Text style={styles.phonePeTitle}>Bill</Text>
+                        )}
+                        <Text style={styles.phonePeDateTime}>{dateDisplay}{timeDisplay ? `  ·  ${timeDisplay}` : ''}</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.phonePeTitle}>Payment</Text>
+                        <Text style={styles.phonePeDateTime}>{dateDisplay}{timeDisplay ? `  ·  ${timeDisplay}` : ''}</Text>
+                      </>
                     )}
                   </View>
-                );
-              })
-            ) : (
-              <View style={styles.emptyActiveBills}>
-                <Text style={styles.emptyIcon}>✅</Text>
-                <Text style={styles.emptyText}>No pending bills</Text>
-              </View>
-            )}
-          </View>
-        )}
 
-        {supplier.bills.length === 0 && (
-          <View style={styles.emptyBills}>
-            <Text style={styles.emptyIcon}>🧾</Text>
-            <Text style={styles.emptyTitle}>No bills added</Text>
-            <Text style={styles.emptySub}>Tap "Add Bill" to start tracking</Text>
-          </View>
-        )}
+                  {/* Amount + edit hint */}
+                  <View style={{ alignItems: 'flex-end', marginTop: 1 }}>
+                    <Text style={[styles.khataEntryAmount, { color: isBill ? '#EF4444' : '#16A34A' }]}>
+                      {isBill ? `+${fmt(entry.amount)}` : `-${fmt(entry.amount)}`}
+                    </Text>
+                    {isBill && (
+                      <Ionicons name="pencil-outline" size={12} color="#CBD5E1" style={{ marginTop: 3 }} />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Add Bill Modal */}
-      <Modal visible={billModal} transparent animationType="slide" onRequestClose={() => setBillModal(false)}>
+      {/* Add Bill Bottom Sheet */}
+      <Modal
+        visible={addBillModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAddBillModal(false)}
+      >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setBillModal(false)} />
+          <TouchableOpacity
+            style={styles.overlay}
+            activeOpacity={1}
+            onPress={() => setAddBillModal(false)}
+          />
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Add Bill</Text>
 
-            <Text style={styles.fieldLabel}>Bill Name *</Text>
-            <TextInput
-              style={styles.fieldInput}
-              placeholder=""
-              placeholderTextColor="#CBD5E1"
-              value={billForm.name}
-              onChangeText={(v) => setBillForm((p) => ({ ...p, name: v }))}
-            />
-
-            <Text style={styles.fieldLabel}>Bill Amount *</Text>
+            <Text style={styles.fieldLabel}>Amount ₹ *</Text>
             <TextInput
               style={styles.fieldInput}
               placeholder="₹ 0"
               placeholderTextColor="#CBD5E1"
-              value={billForm.amount}
-              onChangeText={(v) => setBillForm((p) => ({ ...p, amount: v }))}
+              value={billAmount}
+              onChangeText={setBillAmount}
               keyboardType="numeric"
+              autoFocus
             />
 
-            <Text style={styles.fieldLabel}>Items (Optional)</Text>
+            <Text style={styles.fieldLabel}>Note (Optional)</Text>
             <TextInput
-              style={[styles.fieldInput, { height: 80, textAlignVertical: 'top' }]}
-              placeholder=""
-              placeholderTextColor="#CBD5E1"
-              value={billForm.items}
-              onChangeText={(v) => setBillForm((p) => ({ ...p, items: v }))}
+              style={styles.noteInput}
+              placeholder="e.g., Weekly vegetables, Grains etc."
+              placeholderTextColor="#CA8A04"
+              value={billNote}
+              onChangeText={setBillNote}
               multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              returnKeyType="done"
             />
+
+            {/* Bill Total Summary — shown when a valid amount is entered */}
+            {billValid && (
+              <View style={{
+                backgroundColor: '#F8FAFC',
+                borderRadius: 12,
+                padding: 14,
+                marginBottom: 16,
+                borderWidth: 1,
+                borderColor: '#E2E8F0',
+              }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+                  Bill Summary
+                </Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '500' }}>Note</Text>
+                  <Text style={{ fontSize: 13, color: '#0F172A', fontWeight: '700' }} numberOfLines={1}>
+                    {billNote.trim() || 'Bill'}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '500' }}>This Bill</Text>
+                  <Text style={{ fontSize: 13, color: '#EF4444', fontWeight: '700' }}>{fmt(parsedBill)}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '500' }}>Current Pending</Text>
+                  <Text style={{ fontSize: 13, color: '#F97316', fontWeight: '700' }}>{fmt(totalPending)}</Text>
+                </View>
+                <View style={{ height: 1, backgroundColor: '#E2E8F0', marginVertical: 6 }} />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 14, color: '#0F172A', fontWeight: '800' }}>New Total Pending</Text>
+                  <Text style={{ fontSize: 14, color: '#EF4444', fontWeight: '900' }}>{fmt(totalPending + parsedBill)}</Text>
+                </View>
+              </View>
+            )}
 
             <TouchableOpacity
-              style={[styles.sheetPrimaryBtn, (!billForm.name.trim() || !billForm.amount) && { opacity: 0.4 }]}
-              onPress={addBill}
+              style={[styles.sheetPrimaryBtn, !billValid && { opacity: 0.4 }]}
+              onPress={handleAddBill}
             >
-              <Text style={styles.sheetPrimaryBtnText}>Add Bill</Text>
+              <Text style={styles.sheetPrimaryBtnText}>
+                {billValid ? `Add Bill  ${fmt(parsedBill)}` : 'Add Bill'}
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setBillModal(false)}>
+            <TouchableOpacity onPress={() => setAddBillModal(false)}>
               <Text style={styles.sheetCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Pay Bill Modal — inline bottom sheet */}
-      <Modal visible={payBillModalVisible} transparent animationType="slide" onRequestClose={() => setPayBillModalVisible(false)}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setPayBillModalVisible(false)} />
-          <View style={[styles.sheet, { paddingBottom: 0, maxHeight: '90%', flexDirection: 'column' }]}>
-            {/* Fixed header */}
-            <View style={{ paddingHorizontal: 0, paddingTop: 0 }}>
-              <View style={styles.sheetHandle} />
-              <Text style={styles.sheetTitle}>Pay Bill</Text>
+      {/* Pay Modal */}
+      <Modal
+        visible={payModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPayModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableOpacity
+            style={styles.overlay}
+            activeOpacity={1}
+            onPress={() => setPayModal(false)}
+          />
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Pay Amount</Text>
+
+            {/* Pending summary */}
+            <View style={styles.khataPaySummary}>
+              <Text style={styles.khataPaySummaryLabel}>Total pending with {supplier.name}</Text>
+              <Text style={styles.khataPaySummaryAmount}>{fmt(totalPending)}</Text>
             </View>
 
-            {/* Scrollable content */}
-            {(() => {
-              const selBill = pendingBills.find(b => b.id === payBillSelectedId);
-              const maxPay = selBill ? selBill.amount - selBill.paid : 0;
-              const parsed = parseFloat(payBillAmountStr);
-              const valid = !isNaN(parsed) && parsed > 0 && parsed <= maxPay;
+            <Text style={styles.fieldLabel}>Amount Paid ₹</Text>
+            <TextInput
+              style={[
+                styles.fieldInput,
+                payAmount !== '' && !payValid && { borderColor: '#EF4444' },
+                payAmount !== '' && payValid && { borderColor: '#16A34A' },
+              ]}
+              placeholder="₹ 0"
+              placeholderTextColor="#CBD5E1"
+              value={payAmount}
+              onChangeText={setPayAmount}
+              keyboardType="numeric"
+              autoFocus
+            />
 
-              return (
-                <>
-                  <ScrollView
-                    style={{ flexShrink: 1 }}
-                    contentContainerStyle={{ paddingBottom: 8 }}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                  >
-                    {/* Bill selector — only shown when there are multiple pending bills */}
-                    {pendingBills.length > 1 && (
-                      <>
-                        <Text style={styles.fieldLabel}>Select Bill</Text>
-                        <View style={{ marginBottom: 16 }}>
-                          {[...pendingBills].sort((a, b) => b.id - a.id).map((bill) => {
-                            const due = bill.amount - bill.paid;
-                            const selected = payBillSelectedId === bill.id;
-                            return (
-                              <TouchableOpacity
-                                key={bill.id}
-                                onPress={() => { setPayBillSelectedId(bill.id); setPayBillAmountStr(''); }}
-                                style={[
-                                  styles.billChip,
-                                  selected && styles.billChipSelected,
-                                  { marginRight: 0, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-                                ]}
-                              >
-                                <View style={{ flex: 1 }}>
-                                  <Text style={[styles.billChipName, selected && { color: theme.colors.primary }]}>{bill.name}</Text>
-                                  <Text style={styles.billChipAmt}>{fmt(due)} due</Text>
-                                </View>
-                                {selected && (
-                                  <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} style={{ marginLeft: 8 }} />
-                                )}
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
-                      </>
-                    )}
+            {/* Pay full shortcut */}
+            <TouchableOpacity
+              onPress={() => setPayAmount(String(totalPending))}
+              style={styles.khataPayFullBtn}
+            >
+              <Text style={[styles.khataPayFullBtnText, { color: theme.colors.primary }]}>
+                Pay full {fmt(totalPending)}
+              </Text>
+            </TouchableOpacity>
 
-                    {/* Selected bill summary */}
-                    {selBill && (
-                      <View style={styles.payBillInfo}>
-                        <Text style={styles.payBillInfoText}>
-                          {selBill.name} · Due: {fmt(maxPay)}
-                          {selBill.paid > 0 ? ` (Paid so far: ${fmt(selBill.paid)})` : ''}
-                        </Text>
-                      </View>
-                    )}
+            {payAmount !== '' && !payValid && (
+              <Text style={{ fontSize: 12, color: '#EF4444', fontWeight: '600', marginTop: -8, marginBottom: 12 }}>
+                {parsedPay > totalPending ? `Max payable: ${fmt(totalPending)}` : 'Enter a valid amount'}
+              </Text>
+            )}
 
-                    <Text style={styles.fieldLabel}>Amount ₹</Text>
-                    <TextInput
-                      style={[
-                        styles.fieldInput,
-                        payBillAmountStr !== '' && !valid && { borderColor: '#EF4444' },
-                        payBillAmountStr !== '' && valid && { borderColor: '#16A34A' },
-                      ]}
-                      placeholder="₹ 0"
-                      placeholderTextColor="#CBD5E1"
-                      value={payBillAmountStr}
-                      onChangeText={setPayBillAmountStr}
-                      keyboardType="numeric"
-                      autoFocus={pendingBills.length === 1}
-                    />
-
-                    {selBill && (
-                      <TouchableOpacity
-                        onPress={() => setPayBillAmountStr(String(maxPay))}
-                        style={{ alignSelf: 'flex-start', marginTop: -8, marginBottom: 16, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: theme.colors.primaryLight, borderWidth: 1, borderColor: theme.colors.border }}
-                      >
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.primary }}>Pay full {fmt(maxPay)}</Text>
-                      </TouchableOpacity>
-                    )}
-
-                    {payBillAmountStr !== '' && !valid && selBill && (
-                      <Text style={{ fontSize: 12, color: '#EF4444', fontWeight: '600', marginTop: -8, marginBottom: 12 }}>
-                        {parsed > maxPay ? `Max payable: ${fmt(maxPay)}` : 'Enter a valid amount'}
-                      </Text>
-                    )}
-                  </ScrollView>
-
-                  {/* Pinned action buttons — always visible */}
-                  <View style={{ paddingTop: 12, paddingBottom: insets.bottom + 16, borderTopWidth: 1, borderTopColor: '#F1F5F9' }}>
-                    <TouchableOpacity
-                      style={[styles.sheetPrimaryBtn, (!valid || !selBill) && { opacity: 0.4 }]}
-                      onPress={() => {
-                        if (!valid || !selBill) return;
-                        const newTx: Transaction = {
-                          id: uniqueId(),
-                          date: todayStr(),
-                          type: 'payment',
-                          billId: selBill.id,
-                          billName: selBill.name,
-                          amount: parsed,
-                        };
-                        const updatedBills = supplier.bills.map((b) =>
-                          b.id === selBill.id ? { ...b, paid: b.paid + parsed } : b
-                        );
-                        onUpdate({ ...supplier, bills: updatedBills, transactions: [...supplier.transactions, newTx] });
-                        setPayBillModalVisible(false);
-                        setPayBillAmountStr('');
-                        setPayBillSelectedId(null);
-                        setToastMessage(`${fmt(parsed)} paid towards "${selBill.name}"`);
-                        setToastType('success');
-                        setToastVisible(true);
-                      }}
-                    >
-                      <Text style={styles.sheetPrimaryBtnText}>
-                        {valid ? `Confirm  ${fmt(parsed)}` : 'Confirm Payment'}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setPayBillModalVisible(false)}>
-                      <Text style={styles.sheetCancelText}>Cancel</Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              );
-            })()}
+            <TouchableOpacity
+              style={[styles.sheetPrimaryBtn, { backgroundColor: '#16A34A' }, !payValid && { opacity: 0.4 }]}
+              onPress={handlePay}
+            >
+              <Text style={styles.sheetPrimaryBtnText}>
+                {payValid ? `Confirm  ${fmt(parsedPay)}` : 'Confirm Payment'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setPayModal(false)}>
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Cleared Bills Modal */}
-      <Modal visible={clearedBillsModal} transparent animationType="slide" onRequestClose={() => setClearedBillsModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.clearedBillsSheet}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Cleared Bills</Text>
-              <TouchableOpacity onPress={() => setClearedBillsModal(false)}>
-                <Ionicons name="close" size={24} color="#0F172A" />
-              </TouchableOpacity>
-            </View>
+      {/* Edit Bill Modal */}
+      <Modal
+        visible={editBillModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditBillModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableOpacity
+            style={styles.overlay}
+            activeOpacity={1}
+            onPress={() => setEditBillModal(false)}
+          />
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Edit Bill</Text>
 
-            <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
-              <View style={styles.clearedBillsContainer}>
-                {clearedBillsByDate.length > 0 ? (
-                  clearedBillsByDate.map((section) => (
-                    <View key={section.title}>
-                      <Text style={styles.clearedBillsDateHeader}>{section.title}</Text>
-                      {section.data.map((bill) => {
-                        return (
-                          <View key={bill.id} style={styles.clearedBillItem}>
-                            <View style={{ flex: 1 }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                                <Text style={styles.clearedBillName}>{bill.name}</Text>
-                                <Ionicons name="checkmark-circle" size={18} color="#16A34A" style={{ marginLeft: 8 }} />
-                              </View>
-                              <Text style={styles.clearedBillAmount}>
-                                Bill: {fmt(bill.amount)} • Paid: {fmt(bill.paid)}
-                              </Text>
-                              {bill.items && bill.items.length > 0 && (
-                                <View style={{ marginTop: 8, backgroundColor: '#F1F5F9', borderRadius: 8, padding: 10 }}>
-                                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748B', marginBottom: 4 }}>Items:</Text>
-                                  {bill.items.map((item, idx) => (
-                                    <Text key={idx} style={{ fontSize: 11, color: '#0F172A', marginBottom: 2 }}>
-                                      • {item}
-                                    </Text>
-                                  ))}
-                                </View>
-                              )}
-                            </View>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  ))
-                ) : (
-                  <View style={styles.emptyCleared}>
-                    <Text style={styles.emptyIcon}>📋</Text>
-                    <Text style={styles.emptyText}>No cleared bills yet</Text>
-                  </View>
-                )}
-              </View>
-            </ScrollView>
+            <Text style={styles.fieldLabel}>Amount ₹ *</Text>
+            <TextInput
+              style={styles.fieldInput}
+              placeholder="₹ 0"
+              placeholderTextColor="#CBD5E1"
+              value={editBillAmount}
+              onChangeText={setEditBillAmount}
+              keyboardType="numeric"
+              autoFocus
+            />
 
-            <TouchableOpacity 
-              style={[styles.clearedBillsCloseBtn, { backgroundColor: theme.colors.primary }]}
-              onPress={() => setClearedBillsModal(false)}
+            <Text style={styles.fieldLabel}>Note (Optional)</Text>
+            <TextInput
+              style={styles.noteInput}
+              placeholder="e.g., Weekly vegetables, Grains etc."
+              placeholderTextColor="#CA8A04"
+              value={editBillNote}
+              onChangeText={setEditBillNote}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              returnKeyType="done"
+            />
+
+            <TouchableOpacity
+              style={[styles.sheetPrimaryBtn, !editBillValid && { opacity: 0.4 }]}
+              onPress={handleEditBill}
             >
-              <Text style={styles.clearedBillsCloseBtnText}>Close</Text>
+              <Text style={styles.sheetPrimaryBtnText}>
+                {editBillValid ? `Save  ${fmt(editBillParsed)}` : 'Save Changes'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setEditBillModal(false)}>
+              <Text style={styles.sheetCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* History Modal */}
-      <Modal visible={historyModal} transparent animationType="slide" onRequestClose={() => setHistoryModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.clearedBillsSheet}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Transaction History</Text>
-              <TouchableOpacity onPress={() => setHistoryModal(false)}>
-                <Ionicons name="close" size={24} color="#0F172A" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
-              <View style={styles.historyModalContainer}>
-                {historySections.length > 0 ? (
-                  historySections.map((section) => (
-                    <View key={section.title}>
-                      <Text style={styles.historyModalDate}>{section.title}</Text>
-                      {section.data.map((tx, index) => {
-                        const isBill = tx.type === 'bill';
-                        const bgColor = isBill ? '#FFF7ED' : '#F0FDF4';
-                        const iconColor = isBill ? '#F97316' : '#16A34A';
-                        const iconName = isBill ? 'document-text' : 'checkmark-circle';
-                        const txLabel = isBill ? 'Bill Added' : 'Payment';
-                        const amountColor = isBill ? '#0F172A' : '#16A34A';
-                        return (
-                          <View
-                            key={tx.id}
-                            style={[
-                              styles.historyModalItem,
-                              index < section.data.length - 1 && styles.historyModalItemBorder,
-                            ]}
-                          >
-                            <View style={[styles.historyModalIcon, { backgroundColor: bgColor }]}>
-                              <Ionicons name={iconName as any} size={20} color={iconColor} />
-                            </View>
-
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.historyModalItemTitle}>{txLabel}</Text>
-                              <Text style={styles.historyModalItemBillName}>{tx.billName}</Text>
-                            </View>
-
-                            <View style={{ alignItems: 'flex-end' }}>
-                              <Text style={[styles.historyModalAmount, { color: amountColor }]}>
-                                {isBill ? '' : '+'}{fmt(tx.amount)}
-                              </Text>
-                            </View>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  ))
-                ) : (
-                  <View style={styles.emptyCleared}>
-                    <Text style={styles.emptyIcon}>📋</Text>
-                    <Text style={styles.emptyText}>No transaction history yet</Text>
-                  </View>
-                )}
-              </View>
-            </ScrollView>
-
-            <TouchableOpacity 
-              style={[styles.clearedBillsCloseBtn, { backgroundColor: theme.colors.primary }]}
-              onPress={() => setHistoryModal(false)}
-            >
-              <Text style={styles.clearedBillsCloseBtnText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Toast Notification */}
+      {/* Toast */}
       <Toast
         visible={toastVisible}
         message={toastMessage}
@@ -1314,7 +1213,6 @@ const SupplierDetailScreen = ({
   );
 };
 
-// Paid Bills Full Screen
 const PaidBillsScreen = memo(({
   suppliers, txDateFilter, setTxDateFilter, insetTop, onClose,
 }: {
@@ -1897,7 +1795,7 @@ const loadSuppliers = async () => {
                 </View>
                 <Text style={styles.supplierName}>{supplier.name}</Text>
                 <Text style={[styles.pendingAmount, pending === 0 && { color: '#22C55E' }]}>
-                  {pending === 0 ? 'All Clear ✅' : fmt(pending)}
+                  {fmt(pending)}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -1933,6 +1831,218 @@ const loadSuppliers = async () => {
 
 const makeStyles = (theme: AppTheme) => StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F8FAFC' },
+
+  // ── Khata (Ledger) Detail Screen ─────────────────────────────────────
+  khataScroll: { paddingHorizontal: 20, paddingTop: 20 },
+
+  khataHeroCard: {
+    backgroundColor: '#FFF1F2',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+  },
+  khataHeroCardClear: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+  },
+  khataHeroLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94A3B8',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  khataHeroAmount: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#EF4444',
+    letterSpacing: -0.5,
+  },
+  khataHeroSub: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '500',
+    marginTop: 3,
+  },
+
+  khataActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  khataActionBtn: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  khataActionBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  khataActionBtnOutline: {
+    flex: 1,
+    borderWidth: 2,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  khataActionBtnOutlineText: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+
+  khataLedgerSection: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  khataLedgerTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+
+  khataEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  khataEntryBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+  },
+
+  // PhonePe-style transaction entry
+  phonePeEntry: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  phonePeIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    marginTop: 1,
+  },
+  phonePeNote: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  phonePeTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  phonePeDateTime: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
+  khataEntryType: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  khataEntryNoteHighlight: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#78350F',
+    backgroundColor: '#FEF9C3',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginBottom: 3,
+  },
+  khataEntryTypeTag: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#94A3B8',
+  },
+  khataEntryDate: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  khataEntryAmount: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+
+  khataEmpty: {
+    alignItems: 'center',
+    paddingVertical: 48,
+  },
+  khataEmptyIcon: { fontSize: 40, marginBottom: 10 },
+  khataEmptyTitle: { fontSize: 15, fontWeight: '700', color: '#0F172A', marginBottom: 4 },
+  khataEmptySub: { fontSize: 12, color: '#94A3B8', fontWeight: '500' },
+
+  khataPaySummary: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  khataPaySummaryLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400E',
+    marginBottom: 4,
+  },
+  khataPaySummaryAmount: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#EF4444',
+  },
+  khataPayFullBtn: {
+    alignSelf: 'flex-start',
+    marginTop: -8,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  khataPayFullBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  // ── end Khata styles ──────────────────────────────────────────────────
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -2499,6 +2609,21 @@ const makeStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#0F172A',
+    marginBottom: 16,
+  },
+  noteInput: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1.5,
+    borderColor: '#FDE68A',
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
+    borderRadius: 10,
+    padding: 13,
+    fontSize: 14,
+    fontWeight: '500',
+    fontStyle: 'italic',
+    color: '#78350F',
+    minHeight: 72,
     marginBottom: 16,
   },
   sheetPrimaryBtn: {

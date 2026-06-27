@@ -1,149 +1,156 @@
 // hooks/useSubscriptionAccess.ts
-import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  rcReady,
-  checkEntitlement,
-  getDatabaseSubscriptionStatus,
-  syncActiveSubscriptionToDatabase,
-  ENTITLEMENT_ID,
-} from '@/lib/revenuecat';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+//
+// FIX: This hook now uses a module-level reactive store instead of isolated
+// per-component state. Previously, each screen (HomeScreen, AnalyticsScreen,
+// SankalpAIModal) had its own independent hook instance. When forceGrantAccess()
+// was called inside SankalpAIModal after upgrading, only that component's
+// canAccessPremium flipped to true. HomeScreen's profile banner and
+// AnalyticsScreen's overlay stayed locked until app restart because their
+// instances never heard about the change.
+//
+// Now: a single module-level subscription status object is shared across all
+// hook instances via a lightweight pub-sub (Set of listeners). Calling
+// forceGrantAccess() or refreshAccess() anywhere triggers all mounted
+// useSubscriptionAccess hooks to re-render simultaneously.
 
-interface SubscriptionAccess {
-  canAccessPremium: boolean;
+import { useCallback, useEffect, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { checkEntitlement, getDatabaseSubscriptionStatus, ENTITLEMENT_ID, syncActiveSubscriptionToDatabase } from '@/lib/revenuecat';
+
+// ── Module-level shared state ────────────────────────────────────────────────
+// This object is shared in memory across the entire JS runtime. All hook
+// instances read from and write to the same snapshot.
+
+interface SubscriptionSnapshot {
   isSubscribed: boolean;
-  isTrialActive: boolean;
-  trialDaysLeft: number;
+  canAccessPremium: boolean;
   isLoading: boolean;
-  refreshAccess: () => Promise<void>;
-  /**
-   * Call this immediately after a successful purchase / restore to unlock
-   * premium features right away — without waiting for another RC round-trip.
-   *
-   * WHY THIS EXISTS:
-   * After Purchases.purchasePackage() or Purchases.restorePurchases() resolves,
-   * RevenueCat's customer-info cache is fresh for a few seconds, but calling
-   * Purchases.invalidateCustomerInfoCache() + getCustomerInfo() again (which
-   * checkEntitlement() does) sometimes returns the OLD value because the RC
-   * SDK processes the receipt asynchronously. This creates a window where
-   * refreshAccess() → checkEntitlement() → false, so the screen stays locked
-   * even though the purchase succeeded.
-   *
-   * forceGrantAccess() bypasses the re-query and sets canAccessPremium = true
-   * immediately. The AsyncStorage write also makes the state survive a cold
-   * restart until the next proper RC check.
-   */
-  forceGrantAccess: () => Promise<void>;
 }
 
-export function useSubscriptionAccess(userId: string | undefined): SubscriptionAccess {
-  const [canAccessPremium, setCanAccessPremium] = useState(false);
-  const [isSubscribed, setIsSubscribed] = useState(false);
-  const [isTrialActive] = useState(false);
-  const [trialDaysLeft, setTrialDaysLeft] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const isCheckingRef = useRef(false);
+let _snapshot: SubscriptionSnapshot = {
+  isSubscribed: false,
+  canAccessPremium: false,
+  isLoading: true,
+};
 
-  // ── Instant grant (no RC re-query) ─────────────────────────────────────────
-  // Used by SubscriptionModal.onSuccess so the screen unlocks the moment the
-  // purchase completes — not after a second slow RC check.
-  const forceGrantAccess = useCallback(async () => {
-    if (!userId) return;
-    console.log('⚡ forceGrantAccess — unlocking premium immediately for:', userId);
-    setIsSubscribed(true);
-    setCanAccessPremium(true);
-    setTrialDaysLeft(0);
-    // Persist so a cold-restart within the next few seconds also shows unlocked.
-    await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true').catch(() => {});
-  }, [userId]);
+// Listener registry — every mounted hook instance registers here.
+const _listeners = new Set<() => void>();
 
-  const refreshAccess = useCallback(async () => {
-    if (!userId) {
-      setCanAccessPremium(false);
-      setIsSubscribed(false);
-      setIsLoading(false);
+function _notifyAll() {
+  _listeners.forEach(fn => fn());
+}
+
+function _setSnapshot(patch: Partial<SubscriptionSnapshot>) {
+  _snapshot = { ..._snapshot, ...patch };
+  _notifyAll();
+}
+
+// Tracks whether an initial check is already in flight (avoids duplicate
+// network calls when multiple hooks mount at the same time on cold start).
+let _initPromise: Promise<void> | null = null;
+
+// ── Core access-check logic (runs once, shared result) ───────────────────────
+
+async function _runAccessCheck(userId: string): Promise<void> {
+  _setSnapshot({ isLoading: true });
+
+  try {
+    // Check AsyncStorage cache first for instant UI response
+    const cached = await AsyncStorage.getItem(`isSubscribed_${userId}`);
+    if (cached === 'true') {
+      _setSnapshot({ isSubscribed: true, canAccessPremium: true, isLoading: false });
+      // Don't return early — re-verify in background to keep cache honest
+    }
+
+    // Primary: RevenueCat (source of truth)
+    const hasRC = await checkEntitlement(ENTITLEMENT_ID);
+
+    if (hasRC) {
+      await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
+      _setSnapshot({ isSubscribed: true, canAccessPremium: true, isLoading: false });
       return;
     }
 
-    if (isCheckingRef.current) return;
-    isCheckingRef.current = true;
-    setIsLoading(true);
+    // Fallback: Supabase subscription table (handles RC outage / Android edge cases)
+    const hasDB = await getDatabaseSubscriptionStatus(userId);
+    if (hasDB) {
+      await AsyncStorage.setItem(`isSubscribed_${userId}`, 'true');
+      _setSnapshot({ isSubscribed: true, canAccessPremium: true, isLoading: false });
+      return;
+    }
 
-    try {
-      console.log('🔄 Checking subscription for user:', userId);
+    // No access — clear any stale cache
+    await AsyncStorage.removeItem(`isSubscribed_${userId}`);
+    _setSnapshot({ isSubscribed: false, canAccessPremium: false, isLoading: false });
+  } catch (e) {
+    console.warn('useSubscriptionAccess: access check failed', e);
+    // On error, keep whatever the current snapshot says — don't flash locked UI
+    _setSnapshot({ isLoading: false });
+  }
+}
 
-      // ── Step 1: Wait for RevenueCat to be configured ────────────────────
-      // rcReady() resolves as soon as initRevenueCat() finishes (or fails).
-      // This eliminates the "no singleton instance" crash from the race
-      // between app init and the first subscription check.
-      const rcIsReady = await rcReady();
+// ── Public hook ──────────────────────────────────────────────────────────────
 
-      if (rcIsReady) {
-        // ── Step 2: RevenueCat live check (cache-busted) ──────────────────
-        const hasRC = await checkEntitlement(ENTITLEMENT_ID);
+export function useSubscriptionAccess(userId?: string) {
+  // Local state is just a version counter — triggers re-render when the
+  // shared snapshot changes, without duplicating the snapshot data.
+  const [, setTick] = useState(0);
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
 
-        if (hasRC) {
-          console.log('✅ Active subscription via RevenueCat');
-          setIsSubscribed(true);
-          setCanAccessPremium(true);
-          setTrialDaysLeft(0);
-          // Keep DB + offline cache in sync (non-blocking)
-          AsyncStorage.setItem(`isSubscribed_${userId}`, 'true').catch(() => {});
-          syncActiveSubscriptionToDatabase(userId).catch((e) =>
-            console.warn('Background DB sync failed:', e)
-          );
-          return;
-        }
-      } else {
-        console.warn('⚠️ RevenueCat not ready — skipping RC check, falling to DB');
-      }
+  // Register this instance as a listener on mount; unregister on unmount.
+  useEffect(() => {
+    const listener = () => setTick(t => t + 1);
+    _listeners.add(listener);
+    return () => {
+      _listeners.delete(listener);
+    };
+  }, []);
 
-      // ── Step 3: Supabase DB fallback ─────────────────────────────────────
-      // Covers: RC init failed, RC timeout, webhook-only flows
-      const hasDB = await getDatabaseSubscriptionStatus(userId);
-      console.log(`📊 Database subscription: ${hasDB ? 'active' : 'inactive'}`);
+  // On mount (or when userId becomes available), run the access check once.
+  // Multiple hooks mounting simultaneously share a single in-flight promise.
+  useEffect(() => {
+    if (!userId) return;
 
-      if (hasDB) {
-        setIsSubscribed(true);
-        setCanAccessPremium(true);
-        AsyncStorage.setItem(`isSubscribed_${userId}`, 'true').catch(() => {});
-      } else {
-        setIsSubscribed(false);
-        setCanAccessPremium(false);
-        AsyncStorage.removeItem(`isSubscribed_${userId}`).catch(() => {});
-        AsyncStorage.removeItem(`subscriptionDate_${userId}`).catch(() => {});
-      }
-      setTrialDaysLeft(0);
-    } catch (error) {
-      // ── Step 4: Full network failure — offline cache as last resort ───────
-      console.error('useSubscriptionAccess: network error, using offline cache', error);
-      try {
-        const cached = await AsyncStorage.getItem(`isSubscribed_${userId}`);
-        const hasCached = cached === 'true';
-        console.log(`⚠️ Offline fallback — cached: ${hasCached}`);
-        setCanAccessPremium(hasCached);
-        setIsSubscribed(hasCached);
-      } catch {
-        setCanAccessPremium(false);
-        setIsSubscribed(false);
-      }
-      setTrialDaysLeft(0);
-    } finally {
-      isCheckingRef.current = false;
-      setIsLoading(false);
+    if (!_initPromise) {
+      _initPromise = _runAccessCheck(userId).finally(() => {
+        _initPromise = null;
+      });
     }
   }, [userId]);
 
-  useEffect(() => {
-    refreshAccess();
-  }, [refreshAccess]);
+  // ── refreshAccess: re-verify with RC + DB ────────────────────────────────
+  // Call this after a purchase completes to update all screens simultaneously.
+  const refreshAccess = useCallback(async () => {
+    const uid = userIdRef.current;
+    if (!uid) return;
+    await _runAccessCheck(uid);
+  }, []);
+
+  // ── forceGrantAccess: instant optimistic unlock ──────────────────────────
+  // Skips the RC round-trip entirely; sets canAccessPremium = true right now
+  // across ALL hook instances so every screen unlocks simultaneously.
+  // The caller should follow up with refreshAccess() in the background to
+  // persist the state properly.
+  const forceGrantAccess = useCallback(async () => {
+    const uid = userIdRef.current;
+    // Optimistically update shared snapshot — all screens re-render immediately
+    _setSnapshot({ isSubscribed: true, canAccessPremium: true, isLoading: false });
+
+    // Persist to AsyncStorage and sync to DB in parallel (non-blocking)
+    if (uid) {
+      await AsyncStorage.setItem(`isSubscribed_${uid}`, 'true');
+      await AsyncStorage.setItem(`subscriptionDate_${uid}`, new Date().toISOString());
+      syncActiveSubscriptionToDatabase(uid).catch(e =>
+        console.warn('forceGrantAccess: DB sync failed (non-blocking)', e)
+      );
+    }
+  }, []);
 
   return {
-    canAccessPremium,
-    isSubscribed,
-    isTrialActive,
-    trialDaysLeft,
-    isLoading,
+    isSubscribed: _snapshot.isSubscribed,
+    canAccessPremium: _snapshot.canAccessPremium,
+    isLoading: _snapshot.isLoading,
     refreshAccess,
     forceGrantAccess,
   };
