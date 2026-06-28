@@ -88,12 +88,23 @@ class AIService {
       // -------------------------
       // TODAY SALES ONLY
       // -------------------------
+<<<<<<< HEAD
       // FIX: Sales are stored as "28 Jun" (D Mon), not ISO "2026-06-28".
       // Using the same format here so the filter actually finds today's bills.
       const todayLabel = getTodayLabel();
 
       const todaySales = salesLog.filter(
         (sale) => sale.date === todayLabel
+=======
+      // Sales are stored as "18 Jun" format (DD MMM), so we build today's
+      // date in the same format for comparison.
+      const now = new Date();
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const todayFormatted = `${now.getDate()} ${months[now.getMonth()]}`;
+
+      const todaySales = salesLog.filter(
+        (sale) => sale.date === todayFormatted
+>>>>>>> 268d90fe4bf3f0cbf1a4728ce8c21eb3aebcb09c
       );
 
       context += `TODAY SALES (${todayLabel}):\n`;

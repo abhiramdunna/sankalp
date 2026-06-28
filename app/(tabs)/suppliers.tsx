@@ -1009,6 +1009,7 @@ const SupplierDetailScreen = ({
             />
 
             <Text style={styles.fieldLabel}>Note (Optional)</Text>
+<<<<<<< HEAD
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1.5, borderColor: '#FDE68A', borderStyle: 'dashed', backgroundColor: '#FEFCE8', borderRadius: 12, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10, minHeight: 100, marginBottom: 16 }}>
               <Ionicons name="create-outline" size={18} color="#D97706" style={{ marginRight: 8, marginTop: 2 }} />
               <TextInput
@@ -1022,6 +1023,54 @@ const SupplierDetailScreen = ({
                 textAlignVertical="top"
               />
             </View>
+
+            {/* Bill Total Summary — shown when a valid amount is entered */}
+            {billValid && (
+              <View style={{
+                backgroundColor: '#F8FAFC',
+                borderRadius: 12,
+                padding: 14,
+                marginBottom: 16,
+                borderWidth: 1,
+                borderColor: '#E2E8F0',
+              }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+                  Bill Summary
+                </Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '500' }}>Note</Text>
+                  <Text style={{ fontSize: 13, color: '#0F172A', fontWeight: '700' }} numberOfLines={1}>
+                    {billNote.trim() || 'Bill'}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '500' }}>This Bill</Text>
+                  <Text style={{ fontSize: 13, color: '#EF4444', fontWeight: '700' }}>{fmt(parsedBill)}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '500' }}>Current Pending</Text>
+                  <Text style={{ fontSize: 13, color: '#F97316', fontWeight: '700' }}>{fmt(totalPending)}</Text>
+                </View>
+                <View style={{ height: 1, backgroundColor: '#E2E8F0', marginVertical: 6 }} />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 14, color: '#0F172A', fontWeight: '800' }}>New Total Pending</Text>
+                  <Text style={{ fontSize: 14, color: '#EF4444', fontWeight: '900' }}>{fmt(totalPending + parsedBill)}</Text>
+                </View>
+              </View>
+            )}
+=======
+            <TextInput
+              style={styles.noteInput}
+              placeholder="e.g., Weekly vegetables, Grains etc."
+              placeholderTextColor="#CA8A04"
+              value={billNote}
+              onChangeText={setBillNote}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              returnKeyType="done"
+            />
+>>>>>>> 268d90fe4bf3f0cbf1a4728ce8c21eb3aebcb09c
 
             {/* Bill Total Summary — shown when a valid amount is entered */}
             {billValid && (
@@ -1164,6 +1213,7 @@ const SupplierDetailScreen = ({
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Edit Bill</Text>
+<<<<<<< HEAD
 
             <Text style={styles.fieldLabel}>Amount ₹ *</Text>
             <TextInput
@@ -1191,6 +1241,33 @@ const SupplierDetailScreen = ({
               />
             </View>
 
+=======
+
+            <Text style={styles.fieldLabel}>Amount ₹ *</Text>
+            <TextInput
+              style={styles.fieldInput}
+              placeholder="₹ 0"
+              placeholderTextColor="#CBD5E1"
+              value={editBillAmount}
+              onChangeText={setEditBillAmount}
+              keyboardType="numeric"
+              autoFocus
+            />
+
+            <Text style={styles.fieldLabel}>Note (Optional)</Text>
+            <TextInput
+              style={styles.noteInput}
+              placeholder="e.g., Weekly vegetables, Grains etc."
+              placeholderTextColor="#CA8A04"
+              value={editBillNote}
+              onChangeText={setEditBillNote}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              returnKeyType="done"
+            />
+
+>>>>>>> 268d90fe4bf3f0cbf1a4728ce8c21eb3aebcb09c
             <TouchableOpacity
               style={[styles.sheetPrimaryBtn, !editBillValid && { opacity: 0.4 }]}
               onPress={handleEditBill}

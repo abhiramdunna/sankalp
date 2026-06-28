@@ -1,124 +1,226 @@
-// app/(tabs)/_layout.tsx
-import { Tabs } from 'expo-router';
+// _layout.tsx
+import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useThemeStore } from '@/lib/store';
-import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { useEffect, useState, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import 'react-native-reanimated';
+
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { configureGoogleSignIn, suppressAuthEvent } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/lib/store';
+import { initRevenueCat } from '@/lib/revenuecat';
+
+SplashScreen.preventAutoHideAsync();
+
+export const unstable_settings = {
+  initialRouteName: 'login',
+};
+
+function useProtectedRoute(user: any, isReady: boolean) {
+  const segments = useSegments();
+  const router = useRouter();
+  const { isNewSignup } = useAuthStore();
+
+  useEffect(() => {
+    if (!isReady) return;
+
+    const firstSegment = segments[0] as string | undefined;
+    const onCompleteProfile = firstSegment === 'complete-profile';
+    const onLoginOrIndex = firstSegment === 'login' || firstSegment === undefined;
+
+    console.log('🔐 Route check:', {
+      user: !!user,
+      hasCompleteProfile: user?.hasCompleteProfile,
+      isNewSignup,
+      segments,
+    });
+
+    if (!user) {
+      if (!onLoginOrIndex) {
+        console.log('➡️ No user → /login');
+        router.replace('/login');
+      }
+      return;
+    }
+
+    if (!user.hasCompleteProfile) {
+      if (!onCompleteProfile) {
+        console.log('➡️ Incomplete profile → /complete-profile');
+        router.replace('/complete-profile');
+      }
+    } else {
+      if (onLoginOrIndex || onCompleteProfile) {
+        console.log('➡️ → /(tabs)/home');
+        router.replace('/(tabs)/home');
+      }
+    }
+  }, [user, isReady, segments, isNewSignup]);
+}
 
 export default function RootLayout() {
-  const { theme } = useThemeStore();
-  const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const { user, isLoading, setUser, setSession, setLoading, clearAuth } = useAuthStore();
+  const [appReady, setAppReady] = useState(false);
+  const [isSessionRestored, setIsSessionRestored] = useState(false);
+  const initDone = useRef(false);
+
   useEffect(() => {
-  if (Platform.OS !== 'android') return;
+    if (initDone.current) return;
+    initDone.current = true;
 
-  let updateSub: any;
-  let errorSub: any;
+    async function initializeApp() {
+      try {
+        console.log('🔍 Initializing app - restoring session...');
+        configureGoogleSignIn();
+        setLoading(true);
 
-  const setup = async () => {
-    try {
-      const RNIap = require('react-native-iap');
-      await RNIap.initConnection();
+        const { data: { session }, error } = await supabase.auth.getSession();
 
-      updateSub = RNIap.purchaseUpdatedListener(async (purchase: any) => {
-        if (purchase?.purchaseToken) {
-          try {
-            await RNIap.finishTransaction({ purchase, isConsumable: false });
-          } catch (e) {
-            console.warn('IAP finishTransaction error:', e);
+        if (error) {
+          console.error('❌ Session check error:', error);
+          clearAuth();
+        } else if (session?.user) {
+          console.log('✅ Found existing session:', session.user.email);
+
+          // Fetch profile to check completion status
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('business_name, business_category, city, state, phone')
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+          if (profileError) {
+            console.log('⚠️ Could not fetch profile:', profileError);
           }
+
+          const hasComplete = !!(
+            profile?.business_name &&
+            profile?.business_category &&
+            profile?.city &&
+            profile?.state &&
+            profile?.phone
+          );
+          console.log('📋 Profile status:', { exists: !!profile, isComplete: hasComplete });
+
+          setUser({
+            id: session.user.id,
+            email: session.user.email || '',
+            user_metadata: session.user.user_metadata,
+            hasCompleteProfile: hasComplete,
+          });
+          setSession({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          });
+
+          // Init RevenueCat AFTER listener is registered (below), so we
+          // don't block listener setup on a cold network call.
+          // We kick it off here without awaiting — it resolves in background.
+          initRevenueCat().catch((e) =>
+            console.warn('⚠️ RC init on session restore failed:', e)
+          );
+        } else {
+          console.log('ℹ️ No active session');
+          clearAuth();
         }
-      });
 
-      errorSub = RNIap.purchaseErrorListener((err: any) => {
-        console.warn('IAP background error:', err);
-      });
-    } catch (e) {
-      console.warn('IAP setup error:', e);
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+          async (event, newSession) => {
+            // Read suppressAuthEvent here — after any awaits inside auth.ts's
+            // signInWithGoogle have completed — so we get the live value, not
+            // a closure-captured stale one.
+            console.log('🔄 Auth event:', event, '| suppressed:', suppressAuthEvent);
+
+            if (event === 'SIGNED_IN' && newSession?.user) {
+              if (suppressAuthEvent) {
+                console.log('⏸️ SIGNED_IN suppressed — auth checks still running');
+                return;
+              }
+
+              console.log('✅ SIGNED_IN:', newSession.user.email);
+
+              // Init RevenueCat on fresh sign-in (login.tsx path).
+              // auth.ts's unsuppressAuthEvent() already flushed the microtask
+              // queue so we are guaranteed suppressAuthEvent is false here.
+              await initRevenueCat();
+
+              // CRITICAL FIX: Wait a moment for RevenueCat to initialize
+              await new Promise(resolve => setTimeout(resolve, 300));
+
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('business_name, business_category, city, state, phone')
+                .eq('id', newSession.user.id)
+                .maybeSingle();
+
+              setUser({
+                id: newSession.user.id,
+                email: newSession.user.email || '',
+                user_metadata: newSession.user.user_metadata,
+                hasCompleteProfile: !!(
+                  profile?.business_name &&
+                  profile?.business_category &&
+                  profile?.city &&
+                  profile?.state &&
+                  profile?.phone
+                ),
+              });
+              setSession({
+                access_token: newSession.access_token,
+                refresh_token: newSession.refresh_token,
+              });
+
+            } else if (event === 'TOKEN_REFRESHED' && newSession) {
+              setSession({
+                access_token: newSession.access_token,
+                refresh_token: newSession.refresh_token,
+              });
+            } else if (event === 'SIGNED_OUT') {
+              console.log('👋 SIGNED_OUT');
+              clearAuth();
+              await AsyncStorage.removeItem('auth-storage');
+            }
+          }
+        );
+
+        setIsSessionRestored(true);
+        return () => subscription?.unsubscribe();
+      } catch (error) {
+        console.error('❌ Init error:', error);
+        clearAuth();
+        setIsSessionRestored(true);
+      } finally {
+        setAppReady(true);
+        setLoading(false);
+        await SplashScreen.hideAsync();
+      }
     }
-  };
 
-  setup();
+    initializeApp();
+  }, []);
 
-  return () => {
-    updateSub?.remove();
-    errorSub?.remove();
-  };
-}, []);
+  useProtectedRoute(user, appReady && !isLoading && isSessionRestored);
+
+  // ✅ Now this conditional return is AFTER all hooks
+  if (!appReady || isLoading || !isSessionRestored) {
+    return null;
+  }
 
   return (
-    <>
-      <StatusBar style="dark" />
-      <Tabs
-        screenOptions={({ route }) => ({
-          animationEnabled: false,
-          headerStyle: {
-            backgroundColor: theme.colors.primary,
-          },
-          headerTintColor: theme.colors.primaryText,
-          headerTitleStyle: {
-            fontWeight: 'bold',
-          },
-          headerTitleAlign: 'center',
-          tabBarActiveTintColor: theme.colors.tabActive,
-          tabBarInactiveTintColor: theme.colors.tabInactive,
-          tabBarStyle: {
-            backgroundColor: theme.colors.tabBar,
-            borderTopWidth: 0.5,
-            borderTopColor: theme.colors.tabBarBorder,
-            height: 78 + insets.bottom,
-            paddingBottom: 8 + insets.bottom,
-            paddingTop: 8,
-          },
-          tabBarLabelStyle: {
-            fontSize: 11,
-            fontWeight: '600',
-            marginTop: 2,
-          },
-        })}
-      >
-        <Tabs.Screen
-          name="home"
-          options={{
-            title: 'Home',
-            headerShown: false,
-            tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="analytics"
-          options={{
-            title: 'Analytics',
-            headerShown: false,
-            tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="products"
-          options={{
-            title: 'Products',
-            headerShown: false,
-            tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons name={focused ? 'pricetag' : 'pricetag-outline'} size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="suppliers"
-          options={{
-            title: 'Suppliers',
-            headerShown: false,
-            tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons name={focused ? 'people' : 'people-outline'} size={size} color={color} />
-            ),
-          }}
-        />
-      </Tabs>
-    </>
+    <SafeAreaProvider>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="login" />
+          <Stack.Screen name="complete-profile" />
+          <Stack.Screen name="(tabs)" />
+        </Stack>
+        <StatusBar style="light" />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

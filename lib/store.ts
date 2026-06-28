@@ -29,6 +29,17 @@ interface AuthState {
   clearAuth: () => void;
 }
 
+interface SubscriptionState {
+  canAccessPremium: boolean;
+  isSubscribed: boolean;
+  isCheckingSubscription: boolean;
+  setCanAccessPremium: (val: boolean) => void;
+  setIsSubscribed: (val: boolean) => void;
+  setIsCheckingSubscription: (val: boolean) => void;
+  grantPremiumAccess: () => void;
+  revokePremiumAccess: () => void;
+}
+
 interface ThemeState {
   themeId: ThemeId;
   theme: AppTheme;
@@ -62,6 +73,17 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+export const useSubscriptionStore = create<SubscriptionState>()((set) => ({
+  canAccessPremium: false,
+  isSubscribed: false,
+  isCheckingSubscription: true,
+  setCanAccessPremium: (val) => set({ canAccessPremium: val }),
+  setIsSubscribed: (val) => set({ isSubscribed: val }),
+  setIsCheckingSubscription: (val) => set({ isCheckingSubscription: val }),
+  grantPremiumAccess: () => set({ canAccessPremium: true, isSubscribed: true, isCheckingSubscription: false }),
+  revokePremiumAccess: () => set({ canAccessPremium: false, isSubscribed: false, isCheckingSubscription: false }),
+}));
 
 export const useThemeStore = create<ThemeState>()(
   persist(

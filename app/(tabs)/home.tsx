@@ -477,7 +477,22 @@ const LiveBillingModal = memo(({
               <TouchableWithoutFeedback>
                 <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }}>
                   {/* Handle */}
+<<<<<<< HEAD
                   <View style={{ width: 36, height: 4, backgroundColor: '#E5E7EB', borderRadius: 4, alignSelf: 'center', marginBottom: 20 }} />
+=======
+                  <View style={{ width: 40, height: 4, backgroundColor: '#E5E7EB', borderRadius: 4, alignSelf: 'center', marginBottom: 16 }} />
+                  
+                  {/* Header */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="cube-outline" size={18} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#111', flex: 1 }} numberOfLines={1}>
+                      {qtyModalProduct?.name}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 12, color: '#9CA3AF', fontWeight: '600', marginBottom: 16, marginLeft: 26 }}>
+                    ₹ {qtyModalProduct?.price.toFixed(2)} per unit 
+                  </Text>
+>>>>>>> 268d90fe4bf3f0cbf1a4728ce8c21eb3aebcb09c
 
                   {/* Product info row */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: `${theme.colors.primary}0D`, borderRadius: 14, padding: 12, marginBottom: 20 }}>
@@ -518,8 +533,13 @@ const LiveBillingModal = memo(({
                   </View>
 
                   {/* Quick presets */}
+<<<<<<< HEAD
                   <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
                     {[].map(preset => (
+=======
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                    {['1', '5', '10', '20.5'].map(preset => (
+>>>>>>> 268d90fe4bf3f0cbf1a4728ce8c21eb3aebcb09c
                       <TouchableOpacity
                         key={preset}
                         onPress={() => setQtyModalVal(preset)}
