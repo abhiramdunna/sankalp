@@ -1,5 +1,6 @@
 // home.tsx — Complete working version with session persistence, business details, and profile fixes
 
+import { FastPress } from '@/hooks/useSinglePress'; 
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { useSubscriptionAccess } from '@/hooks/useSubscriptionAccess';
@@ -519,7 +520,7 @@ const LiveBillingModal = memo(({
 
                   {/* Quick presets */}
                   <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-                    {[].map(preset => (
+                    {['0.25', '0.5', '1', '2', '5', '10', '25', '50'].map(preset => (
                       <TouchableOpacity
                         key={preset}
                         onPress={() => setQtyModalVal(preset)}

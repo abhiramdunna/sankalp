@@ -1009,17 +1009,19 @@ const SupplierDetailScreen = ({
             />
 
             <Text style={styles.fieldLabel}>Note (Optional)</Text>
-            <TextInput
-              style={styles.noteInput}
-              placeholder="e.g., Weekly vegetables, Grains etc."
-              placeholderTextColor="#CA8A04"
-              value={billNote}
-              onChangeText={setBillNote}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-              returnKeyType="done"
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1.5, borderColor: '#FDE68A', borderStyle: 'dashed', backgroundColor: '#FEFCE8', borderRadius: 12, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10, minHeight: 100, marginBottom: 16 }}>
+              <Ionicons name="create-outline" size={18} color="#D97706" style={{ marginRight: 8, marginTop: 2 }} />
+              <TextInput
+                style={{ flex: 1, fontSize: 14, fontWeight: '500', color: '#78350F', paddingVertical: 0, textAlignVertical: 'top', lineHeight: 22, minHeight: 80 }}
+                placeholder={"Add a bill note...\n\ne.g., Weekly vegetables, Grains etc."}
+                placeholderTextColor="#D1B483"
+                value={billNote}
+                onChangeText={setBillNote}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+            </View>
 
             {/* Bill Total Summary — shown when a valid amount is entered */}
             {billValid && (
@@ -1175,17 +1177,19 @@ const SupplierDetailScreen = ({
             />
 
             <Text style={styles.fieldLabel}>Note (Optional)</Text>
-            <TextInput
-              style={styles.noteInput}
-              placeholder="e.g., Weekly vegetables, Grains etc."
-              placeholderTextColor="#CA8A04"
-              value={editBillNote}
-              onChangeText={setEditBillNote}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-              returnKeyType="done"
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1.5, borderColor: '#FDE68A', borderStyle: 'dashed', backgroundColor: '#FEFCE8', borderRadius: 12, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10, minHeight: 100, marginBottom: 16 }}>
+              <Ionicons name="create-outline" size={18} color="#D97706" style={{ marginRight: 8, marginTop: 2 }} />
+              <TextInput
+                style={{ flex: 1, fontSize: 14, fontWeight: '500', color: '#78350F', paddingVertical: 0, textAlignVertical: 'top', lineHeight: 22, minHeight: 80 }}
+                placeholder={"Add a bill note...\n\ne.g., Weekly vegetables, Grains etc."}
+                placeholderTextColor="#D1B483"
+                value={editBillNote}
+                onChangeText={setEditBillNote}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+            </View>
 
             <TouchableOpacity
               style={[styles.sheetPrimaryBtn, !editBillValid && { opacity: 0.4 }]}

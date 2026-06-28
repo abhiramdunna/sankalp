@@ -10,6 +10,19 @@ export interface Message {
   timestamp: Date;
 }
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * Returns today's date in the same "D Mon" format used by the sales log,
+ * e.g. "28 Jun". This must match how bills are saved in database.ts so that
+ * the AI context correctly identifies today's sales instead of always showing
+ * "No sales recorded today".
+ */
+function getTodayLabel(): string {
+  const now = new Date();
+  return `${now.getDate()} ${MONTH_NAMES[now.getMonth()]}`;
+}
+
 class AIService {
   private static instance: AIService;
 
@@ -75,13 +88,15 @@ class AIService {
       // -------------------------
       // TODAY SALES ONLY
       // -------------------------
-      const today = new Date().toISOString().split('T')[0];
+      // FIX: Sales are stored as "28 Jun" (D Mon), not ISO "2026-06-28".
+      // Using the same format here so the filter actually finds today's bills.
+      const todayLabel = getTodayLabel();
 
       const todaySales = salesLog.filter(
-        (sale) => sale.date === today
+        (sale) => sale.date === todayLabel
       );
 
-      context += `TODAY SALES:\n`;
+      context += `TODAY SALES (${todayLabel}):\n`;
 
       if (todaySales.length > 0) {
         const todayRevenue = todaySales.reduce(
@@ -205,9 +220,15 @@ class AIService {
   }
 
   /**
-   * Generate AI response via Supabase Edge Function
+   * Generate AI response via Supabase Edge Function.
    * Gemini API key is securely stored as an edge function secret —
    * it is NOT exposed in the app bundle.
+   *
+   * FIX: conversationHistory roles are mapped so 'assistant' → 'model'
+   * before being sent to the edge function. Gemini's API requires the
+   * role to be exactly "model" for AI turns; sending "assistant" causes
+   * the edge function to return a 400 which surfaces here as a non-2xx
+   * FunctionsHttpError.
    */
   async getResponse(
     userMessage: string,
@@ -226,7 +247,8 @@ class AIService {
           userMessage,
           userContext,
           conversationHistory: conversationHistory.slice(-5).map((msg) => ({
-            role: msg.role,
+            // Gemini requires "model" for assistant turns, not "assistant"
+            role: msg.role === 'assistant' ? 'model' : 'user',
             content: msg.content,
           })),
         },
